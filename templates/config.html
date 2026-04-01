@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Config</p>
+  <h2>Cau hinh he thong</h2>
+  <p class="page-copy">
+    Trang nay hien chua co form ghi cau hinh dong. Cac tham so chinh dang duoc doc tu bien moi truong hoac file <code>.env</code>.
+  </p>
+</section>
+
+<div class="card">
+  <p>Bien quan trong:</p>
+  <p><code>OLLAMA_URL</code> va <code>OLLAMA_MODEL</code> cho mo hinh sinh cau tra loi.</p>
+  <p><code>EMBEDDINGS_MODEL</code> cho embeddings.</p>
+  <p><code>RAW_DATA_DIR</code>, <code>CLEAN_MD_DIR</code>, <code>RAG_MD_DIR</code>, <code>VECTOR_DB_DIR</code> cho du lieu.</p>
+  <p><code>CHAT_DB_NAME</code> cho SQLite history.</p>
+</div>
+{% endblock %}

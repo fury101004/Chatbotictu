@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Vector</p>
+  <h2>Quan ly vector store</h2>
+  <p class="page-copy">
+    He thong uu tien route-based vector stores trong <code>vector_db/handbook</code>,
+    <code>vector_db/policy</code> va <code>vector_db/faq</code>. Neu chua co, app se fallback ve FAISS legacy trong <code>vector_db/</code>.
+  </p>
+</section>
+
+<div class="card">
+  <p>Cac lenh huu ich:</p>
+  <p><code>python data_pipeline.py prepare</code> de chia lai du lieu theo 3 route.</p>
+  <p><code>python data_pipeline.py build</code> de build multi vector stores.</p>
+  <p><code>python data_pipeline.py rebuild</code> de lam moi toan bo corpora va vector stores.</p>
+  <p><code>python data_pipeline.py stats</code> de xem thong ke trong <code>data/manifest.json</code>.</p>
+</div>
+{% endblock %}

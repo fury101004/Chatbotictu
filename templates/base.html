@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title or "ICTU Student Assistant" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo">ICTU Student Assistant</div>
+
+    <nav class="menu">
+      <a href="/" class="{% if active == 'home' %}active{% endif %}">Home</a>
+      <a href="/chat-ui" class="{% if active == 'chat' %}active{% endif %}">Chat</a>
+      <a href="/upload" class="{% if active == 'upload' %}active{% endif %}">Upload</a>
+      <a href="/vector" class="{% if active == 'vector' %}active{% endif %}">Vector</a>
+      <a href="/config" class="{% if active == 'config' %}active{% endif %}">Config</a>
+      <a href="/history" class="{% if active == 'history' %}active{% endif %}">History</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script defer src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

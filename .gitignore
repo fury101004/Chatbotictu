@@ -1,0 +1,56 @@
+# Python virtual environments
+/.venv/
+/venv/
+/env/
+
+# Local environment files
+/.env
+/.env.*
+!/.env.example
+
+# Python cache and build outputs
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# IDE / editor settings
+/.cursor/
+/.vscode/
+/.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local runtime files
+/chat.db
+/chat.db-*
+*.log
+*.pid
+
+# Generated project data (root only)
+# Keep app/data tracked because it contains source code.
+/datadoan/
+/clean_md/
+/rag_md/
+/data/
+/vector_db/
+/vector.db
+
+# Flask / app temp folders (root only)
+/instance/
+/tmp/
+/temp/

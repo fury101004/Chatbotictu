@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Chat</p>
+  <h2>Hoi dap hoc vu va quy dinh</h2>
+  <p class="page-copy">Dat cau hoi tu nhien, he thong se route sang handbook, policy hoac faq.</p>
+</section>
+
+<div class="card chat-box" id="chatBox">
+  <div class="bubble bot">Xin chao! Ban can minh tra cuu quy dinh hay thong bao nao?</div>
+</div>
+
+<div class="input-bar">
+  <input id="messageInput" placeholder="Nhap tin nhan..." autocomplete="off">
+  <button class="primary" id="sendButton" type="button" onclick="sendMessage()">Send</button>
+</div>
+{% endblock %}

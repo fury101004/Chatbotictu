@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">History</p>
+  <h2>Lich su hoi thoai</h2>
+  <p class="page-copy">Du lieu duoc luu theo session hien tai.</p>
+</section>
+
+<div class="toolbar">
+  <button type="button" onclick="clearHistory()">Xoa lich su</button>
+  <button type="button" onclick="window.location='/api/history/export/txt'">Export TXT</button>
+  <button type="button" onclick="window.location='/api/history/export/pdf'">Export PDF</button>
+</div>
+
+<div class="card" id="historyBox">
+  Dang tai lich su...
+</div>
+
+<script>
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+async function loadHistory() {
+  const res = await fetch("/api/history");
+  const data = await res.json();
+  const box = document.getElementById("historyBox");
+
+  if (!data.length) {
+    box.innerHTML = "<p>Chua co cuoc hoi thoai nao.</p>";
+    return;
+  }
+
+  box.innerHTML = data.map((item) => `
+    <div class="history-item">
+      <div class="history-time">${escapeHtml(item.timestamp)}</div>
+      <div class="bubble user">${escapeHtml(item.question)}</div>
+      <div class="bubble bot">${escapeHtml(item.answer)}</div>
+    </div>
+  `).join("");
+}
+
+async function clearHistory() {
+  if (!confirm("Xoa toan bo lich su cua session hien tai?")) {
+    return;
+  }
+
+  await fetch("/api/history/clear", { method: "POST" });
+  await loadHistory();
+}
+
+loadHistory();
+</script>
+{% endblock %}

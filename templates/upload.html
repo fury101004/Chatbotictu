@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Upload</p>
+  <h2>Nap du lieu moi cho RAG</h2>
+  <p class="page-copy">
+    Trang upload chua duoc noi backend. Hien tai du lieu nen duoc dua vao thu muc nguon va xu ly bang CLI.
+  </p>
+</section>
+
+<div class="card">
+  <p>Quy trinh khuyen nghi:</p>
+  <p>1. Them file PDF/DOCX vao <code>datadoan/</code>.</p>
+  <p>2. Chay <code>python clean_data_to_md.py</code>.</p>
+  <p>3. Chay <code>python prepare_rag_md.py</code>.</p>
+  <p>4. Chay <code>python data_pipeline.py build</code>.</p>
+</div>
+{% endblock %}
