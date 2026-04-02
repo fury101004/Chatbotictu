@@ -1,17 +1,86 @@
 {% extends "base.html" %}
+
 {% block content %}
-<section class="page-header">
-  <p class="eyebrow">Chat</p>
-  <h2>Hoi dap hoc vu va quy dinh</h2>
-  <p class="page-copy">Dat cau hoi tu nhien, he thong se route sang handbook, policy hoac faq.</p>
+<section class="page-banner">
+  <div>
+    <p class="eyebrow">Chat Workspace</p>
+    <h1>Hỏi đáp học vụ với route thông minh</h1>
+    <p class="section-copy">Nhập câu hỏi một cách tự nhiên. Hệ thống sẽ route sang <code>handbook</code>, <code>policy</code> hoặc <code>faq</code> và hiển thị câu trả lời kèm nguồn để bạn đọc lại dễ hơn.</p>
+    <div class="banner-pills">
+      <span class="pill">handbook</span>
+      <span class="pill">policy</span>
+      <span class="pill">faq</span>
+    </div>
+  </div>
+  <div class="banner-badge">
+    <span>LLM</span>
+    <strong>{{ current_provider|upper }}</strong>
+  </div>
 </section>
 
-<div class="card chat-box" id="chatBox">
-  <div class="bubble bot">Xin chao! Ban can minh tra cuu quy dinh hay thong bao nao?</div>
-</div>
+<section class="chat-layout">
+  <div class="chat-stage">
+    <div class="conversation-shell">
+      <div class="conversation-topbar">
+        <div>
+          <p class="mini-label">ICTU Assistant</p>
+          <h2>Hỏi đáp văn bản và quy định</h2>
+          <p class="conversation-note">Tập trung vào câu hỏi rõ ràng, câu trả lời dễ đọc và route để kiểm chứng.</p>
+        </div>
+        <span class="status-dot">Online</span>
+      </div>
 
-<div class="input-bar">
-  <input id="messageInput" placeholder="Nhap tin nhan..." autocomplete="off">
-  <button class="primary" id="sendButton" type="button" onclick="sendMessage()">Send</button>
-</div>
+      <div class="chat-box" id="chatBox">
+        <div class="message-row bot">
+          <div class="message-badge">Assistant</div>
+          <div class="bubble bot">
+            <div class="markdown-body">
+              <p>Xin chào. Bạn có thể hỏi về học phí, học bổng, BHYT, sổ tay sinh viên hoặc quyết định văn bản cụ thể.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer-shell">
+        <div class="quick-prompts">
+          {% for suggestion in suggestions %}
+          <button class="prompt-chip" type="button" data-prompt="{{ suggestion }}">{{ suggestion }}</button>
+          {% endfor %}
+        </div>
+
+        <div class="input-bar">
+          <textarea id="messageInput" rows="1" placeholder="Nhập câu hỏi của bạn..."></textarea>
+          <button class="primary" id="sendButton" type="button">Gửi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="chat-sidebar">
+    <article class="side-card accent-card">
+      <p class="mini-label">Tra cứu nhanh</p>
+      <h3>Đặt câu hỏi theo ngữ cảnh cần tìm</h3>
+      <p>Nếu câu hỏi là hướng dẫn thao tác, hãy nói rõ mục tiêu. Nếu câu hỏi là văn bản, hãy thêm năm học, số quyết định hoặc tên thông báo.</p>
+    </article>
+
+    <article class="side-card">
+      <p class="mini-label">3 route</p>
+      <h3>Route nào dùng trong trường hợp nào?</h3>
+      <ul class="clean-list">
+        <li><code>handbook</code> cho hướng dẫn học vụ, quy trình và sổ tay sinh viên.</li>
+        <li><code>policy</code> cho quyết định, công văn, thông báo và quy định chính thức.</li>
+        <li><code>faq</code> cho các câu hỏi lặp lại nhiều hoặc thông tin tổng hợp.</li>
+      </ul>
+    </article>
+
+    <article class="side-card">
+      <p class="mini-label">Mẹo đặt câu hỏi</p>
+      <ul class="clean-list">
+        <li>Thêm học kỳ, năm học hoặc đối tượng áp dụng nếu có.</li>
+        <li>Nếu cần đối chiếu, hỏi bằng tên thông báo hoặc số văn bản.</li>
+        <li>Nếu cần hướng dẫn thao tác, nói rõ bạn muốn làm gì và đang vướng ở bước nào.</li>
+      </ul>
+    </article>
+  </aside>
+</section>
 {% endblock %}

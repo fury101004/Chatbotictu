@@ -1,19 +1,98 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-header">
-  <p class="eyebrow">Upload</p>
-  <h2>Nap du lieu moi cho RAG</h2>
-  <p class="page-copy">
-    Trang upload chua duoc noi backend. Hien tai du lieu nen duoc dua vao thu muc nguon va xu ly bang CLI.
-  </p>
+<section class="page-banner">
+  <div>
+    <p class="eyebrow">Knowledge Upload</p>
+    <h1>Nạp tài liệu mới vào kho tri thức</h1>
+    <p class="section-copy">Upload file PDF, DOCX hoặc Markdown (.md), lưu vào đúng route và để hệ thống tự động rebuild pipeline để chatbot tra cứu ngay.</p>
+    <div class="banner-pills">
+      <span class="pill">PDF</span>
+      <span class="pill">DOCX</span>
+      <span class="pill">Markdown</span>
+    </div>
+  </div>
+  <div class="banner-badge">
+    <span>Giới hạn</span>
+    <strong>{{ max_upload_size_mb }} MB</strong>
+  </div>
 </section>
 
-<div class="card">
-  <p>Quy trinh khuyen nghi:</p>
-  <p>1. Them file PDF/DOCX vao <code>datadoan/</code>.</p>
-  <p>2. Chay <code>python clean_data_to_md.py</code>.</p>
-  <p>3. Chay <code>python prepare_rag_md.py</code>.</p>
-  <p>4. Chay <code>python data_pipeline.py build</code>.</p>
-</div>
+<section class="split-layout">
+  <div class="primary-column">
+    <div class="surface-card">
+      <div class="section-head compact">
+        <div>
+          <p class="eyebrow">Upload form</p>
+          <h2>Chọn route và file</h2>
+        </div>
+      </div>
+
+      <form id="uploadForm" class="stack" enctype="multipart/form-data">
+        <div class="form-grid">
+          <label class="field">
+            <span>Loại route</span>
+            <select id="uploadRoute" name="route">
+              <option value="policy">Policy / Văn bản</option>
+              <option value="handbook">Handbook / Sổ tay</option>
+            </select>
+            <small class="field-help">Chọn route đúng để hệ thống rebuild đúng kho dữ liệu bạn muốn cập nhật.</small>
+          </label>
+
+          <label class="field">
+            <span>Tập tin</span>
+            <input id="uploadFiles" name="files" type="file" accept=".pdf,.docx,.md" multiple>
+            <small class="field-help">Có thể chọn nhiều file nếu tất cả thuộc cùng một route.</small>
+          </label>
+        </div>
+
+        <div class="page-actions">
+          <button class="primary" id="uploadSubmit" type="submit">Upload và rebuild route</button>
+          <span class="muted-text" id="uploadBusyText">Hỗ trợ tối đa {{ max_upload_size_mb }} MB mỗi file. Định dạng: PDF, DOCX, Markdown (.md).</span>
+        </div>
+
+        <div id="uploadResult" class="stack"></div>
+      </form>
+    </div>
+
+    <div class="surface-card">
+      <div class="section-head compact">
+        <div>
+          <p class="eyebrow">Trạng thái</p>
+          <h2>Vector store sau upload</h2>
+        </div>
+      </div>
+      <div id="uploadStatus" class="stack">
+        <p class="muted-text">Đang tải trạng thái...</p>
+      </div>
+    </div>
+  </div>
+
+  <aside class="secondary-column">
+    <div class="surface-card accent-card">
+      <p class="mini-label">Tác vụ chính</p>
+      <h3>Upload dễ hiểu, dễ kiểm tra, dễ tin cậy</h3>
+      <p>Màn này được tối ưu cho một luồng ngắn: chọn route, chọn file, gửi lên và xem ngay kết quả rebuild trong cùng một trang.</p>
+    </div>
+
+    <div class="surface-card">
+      <p class="mini-label">Quy trình</p>
+      <h3>Upload sẽ làm gì?</h3>
+      <ul class="clean-list">
+        <li>Lưu file vào <code>RAW_DATA_DIR/{{ uploads_dir_name }}</code> theo route.</li>
+        <li>Làm sạch markdown và tối ưu chunk cho RAG.</li>
+        <li>Cập nhật corpora và rebuild vector store.</li>
+        <li>Làm mới trạng thái để giao diện hiển thị ngay.</li>
+      </ul>
+    </div>
+
+    <div class="surface-card">
+      <p class="mini-label">Gần đây</p>
+      <h3>File đã upload</h3>
+      <div id="uploadList" class="stack">
+        <p class="muted-text">Chưa có dữ liệu.</p>
+      </div>
+    </div>
+  </aside>
+</section>
 {% endblock %}

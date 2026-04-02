@@ -1,19 +1,70 @@
 {% extends "base.html" %}
+
 {% block content %}
-<section class="page-header">
-  <p class="eyebrow">Vector</p>
-  <h2>Quan ly vector store</h2>
-  <p class="page-copy">
-    He thong uu tien route-based vector stores trong <code>vector_db/handbook</code>,
-    <code>vector_db/policy</code> va <code>vector_db/faq</code>. Neu chua co, app se fallback ve FAISS legacy trong <code>vector_db/</code>.
-  </p>
+<section class="page-banner">
+  <div>
+    <p class="eyebrow">Vector Control</p>
+    <h1>Theo dõi và đồng bộ route-based vector store</h1>
+    <p class="section-copy">Màn này giúp bạn xem nhanh route nào đã sẵn sàng, route nào cần rebuild và lần đồng bộ gần nhất đang ở trạng thái nào.</p>
+    <div class="banner-pills">
+      <span class="pill">clean</span>
+      <span class="pill">rag</span>
+      <span class="pill">corpora</span>
+      <span class="pill">vector</span>
+    </div>
+  </div>
+  <div class="banner-badge">
+    <span>Kho vector</span>
+    <strong>3 route</strong>
+  </div>
 </section>
 
-<div class="card">
-  <p>Cac lenh huu ich:</p>
-  <p><code>python data_pipeline.py prepare</code> de chia lai du lieu theo 3 route.</p>
-  <p><code>python data_pipeline.py build</code> de build multi vector stores.</p>
-  <p><code>python data_pipeline.py rebuild</code> de lam moi toan bo corpora va vector stores.</p>
-  <p><code>python data_pipeline.py stats</code> de xem thong ke trong <code>data/manifest.json</code>.</p>
-</div>
+<section class="split-layout">
+  <div class="primary-column">
+    <div class="surface-card accent-card">
+      <div class="section-head compact">
+        <div>
+          <p class="eyebrow">Đồng bộ toàn bộ</p>
+          <h2>Rebuild khi cần cập nhật hàng loạt</h2>
+        </div>
+      </div>
+      <div class="page-actions">
+        <button class="primary" id="rebuildVectorButton" type="button">Rebuild toàn bộ kho dữ liệu</button>
+        <span class="muted-text" id="vectorBusyText">Lệnh này chạy lại clean, rag, corpora và vector store.</span>
+      </div>
+      <div id="vectorResult" class="stack"></div>
+    </div>
+
+    <div class="surface-card">
+      <div class="section-head compact">
+        <div>
+          <p class="eyebrow">Route status</p>
+          <h2>Trạng thái từng vector store</h2>
+        </div>
+      </div>
+      <div id="vectorStatus" class="status-grid">
+        <p class="muted-text">Đang tải trạng thái...</p>
+      </div>
+    </div>
+  </div>
+
+  <aside class="secondary-column">
+    <div class="surface-card">
+      <p class="mini-label">Khi nào nên rebuild?</p>
+      <ul class="clean-list">
+        <li>Sau khi vừa upload tài liệu mới.</li>
+        <li>Khi đổi logic ingest, chunking hoặc corpora.</li>
+        <li>Khi nghi ngờ vector store đã lỗi thời so với dữ liệu nguồn.</li>
+      </ul>
+    </div>
+
+    <div class="surface-card">
+      <p class="mini-label">Đồng bộ gần nhất</p>
+      <h3>Manifest và report</h3>
+      <div id="vectorReports" class="stack">
+        <p class="muted-text">Chưa có dữ liệu.</p>
+      </div>
+    </div>
+  </aside>
+</section>
 {% endblock %}

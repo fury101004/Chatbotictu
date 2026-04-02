@@ -8,14 +8,23 @@ import math
 import re
 import shutil
 import sys
+import threading
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+try:
+    from langchain_core.documents import Document
+except Exception:  # pragma: no cover - compatibility fallback
+    from langchain.schema import Document  # type: ignore[no-redef]
+
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except Exception:  # pragma: no cover - compatibility fallback
+    from langchain.text_splitter import RecursiveCharacterTextSplitter  # type: ignore[no-redef]
 from langchain_community.vectorstores import FAISS
 
 try:
@@ -25,11 +34,11 @@ except Exception:  # pragma: no cover - compatibility fallback
         pass
 
 try:
-    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from sentence_transformers import SentenceTransformer
 except Exception:  # pragma: no cover - optional runtime dependency
-    HuggingFaceEmbeddings = None  # type: ignore[assignment]
+    SentenceTransformer = None  # type: ignore[assignment]
 
-from config import EMBEDDINGS_MODEL, RAG_MD_DIR, TXT_DATA_DIR, VECTOR_DB_DIR
+from app.core.config import EMBEDDINGS_MODEL, RAG_MD_DIR, TXT_DATA_DIR, VECTOR_DB_DIR
 
 
 ROUTES: Tuple[str, ...] = ("handbook", "policy", "faq")
@@ -384,6 +393,11 @@ SPLITTER = RecursiveCharacterTextSplitter(
     separators=["\n## ", "\n# ", "\n\n", "\n", ". ", " ", ""],
 )
 
+_VECTOR_RUNTIME_LOCK = threading.RLock()
+_VECTOR_DB_CACHE: Optional[Dict[str, FAISS]] = None
+_VECTOR_DB_SIGNATURE: Optional[Tuple[Tuple[str, bool, int, int], ...]] = None
+_RETRIEVER_CACHE: Dict[int, Dict[str, Any]] = {}
+
 
 class LocalHashEmbeddings(Embeddings):
     """Deterministic local fallback when sentence-transformers is unavailable."""
@@ -420,6 +434,34 @@ class LocalHashEmbeddings(Embeddings):
 
     def embed_query(self, text: str) -> List[float]:
         return self._embed(text)
+
+
+class SentenceTransformerEmbeddings(Embeddings):
+    """Local sentence-transformers wrapper without LangChain deprecation warnings."""
+
+    def __init__(self, model_name: str):
+        if SentenceTransformer is None:
+            raise RuntimeError("sentence-transformers is unavailable.")
+
+        self._model = SentenceTransformer(model_name)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        vectors = self._model.encode(
+            texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return vectors.tolist()
+
+    def embed_query(self, text: str) -> List[float]:
+        vector = self._model.encode(
+            [text],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return vector[0].tolist()
 
 
 def _read_text(path: Path) -> str:
@@ -752,7 +794,7 @@ def _create_faq_documents(topic_sources: DefaultDict[str, List[Dict[str, str]]])
 
 def prepare_agent_corpora() -> Dict[str, int]:
     if not RAG_MD_DIR.exists():
-        raise FileNotFoundError(f"Khong tim thay thu muc RAG_MD_DIR: {RAG_MD_DIR}")
+        raise FileNotFoundError(f"Không tìm thấy thư mục RAG_MD_DIR: {RAG_MD_DIR}")
 
     _clear_generated_route_dirs()
 
@@ -863,18 +905,56 @@ def chunk_docs(documents: Sequence[Document]) -> List[Document]:
     return SPLITTER.split_documents(list(documents))
 
 
+def _vector_store_signature() -> Tuple[Tuple[str, bool, int, int], ...]:
+    signature: List[Tuple[str, bool, int, int]] = []
+
+    for route in ROUTES:
+        route_dir = VECTOR_DB_DIR / route
+        index_path = route_dir / "index.faiss"
+        exists = index_path.exists()
+        stat_target = index_path if exists else route_dir
+        if stat_target.exists():
+            stat = stat_target.stat()
+            signature.append((route, True, stat.st_mtime_ns, stat.st_size))
+        else:
+            signature.append((route, False, 0, 0))
+
+    legacy_index = VECTOR_DB_DIR / "index.faiss"
+    legacy_meta = VECTOR_DB_DIR / "index.pkl"
+    for legacy_name, legacy_path in (("legacy_faiss", legacy_index), ("legacy_meta", legacy_meta)):
+        if legacy_path.exists():
+            stat = legacy_path.stat()
+            signature.append((legacy_name, True, stat.st_mtime_ns, stat.st_size))
+        else:
+            signature.append((legacy_name, False, 0, 0))
+
+    return tuple(signature)
+
+
+def invalidate_vector_runtime_cache() -> None:
+    global _VECTOR_DB_CACHE, _VECTOR_DB_SIGNATURE
+
+    with _VECTOR_RUNTIME_LOCK:
+        _VECTOR_DB_CACHE = None
+        _VECTOR_DB_SIGNATURE = None
+        _RETRIEVER_CACHE.clear()
+
+
+@lru_cache(maxsize=1)
 def _ensure_embeddings() -> Embeddings:
-    if HuggingFaceEmbeddings is not None:
+    if SentenceTransformer is not None:
         try:
-            return HuggingFaceEmbeddings(model_name=EMBEDDINGS_MODEL)
+            return SentenceTransformerEmbeddings(model_name=EMBEDDINGS_MODEL)
         except Exception:
             pass
 
-    print("Canh bao: fallback sang LocalHashEmbeddings vi khong khoi tao duoc HuggingFaceEmbeddings.")
+    print(
+        "Cảnh báo: fallback sang LocalHashEmbeddings vì không khởi tạo được SentenceTransformerEmbeddings."
+    )
     return LocalHashEmbeddings()
 
 
-def build_multi_vector_db() -> Dict[str, int]:
+def build_multi_vector_db(*, invalidate_cache: bool = True) -> Dict[str, int]:
     embeddings = _ensure_embeddings()
     counts: Dict[str, int] = {}
 
@@ -895,40 +975,58 @@ def build_multi_vector_db() -> Dict[str, int]:
         db.save_local(str(save_path))
         counts[route] = len(chunks)
 
+    if invalidate_cache:
+        invalidate_vector_runtime_cache()
     return counts
 
 
 def load_multi_vector_db() -> Dict[str, FAISS]:
-    embeddings = _ensure_embeddings()
-    databases: Dict[str, FAISS] = {}
+    global _VECTOR_DB_CACHE, _VECTOR_DB_SIGNATURE
 
-    for route in ROUTES:
-        path = VECTOR_DB_DIR / route
-        if not path.exists():
-            continue
-        databases[route] = FAISS.load_local(
-            str(path),
-            embeddings,
-            allow_dangerous_deserialization=True,
-        )
+    signature = _vector_store_signature()
+    with _VECTOR_RUNTIME_LOCK:
+        if _VECTOR_DB_CACHE is not None and _VECTOR_DB_SIGNATURE == signature:
+            return _VECTOR_DB_CACHE
 
-    legacy_index = VECTOR_DB_DIR / "index.faiss"
-    legacy_meta = VECTOR_DB_DIR / "index.pkl"
-    if not databases and legacy_index.exists() and legacy_meta.exists():
-        databases["policy"] = FAISS.load_local(
-            str(VECTOR_DB_DIR),
-            embeddings,
-            allow_dangerous_deserialization=True,
-        )
+        embeddings = _ensure_embeddings()
+        databases: Dict[str, FAISS] = {}
 
-    return databases
+        for route in ROUTES:
+            path = VECTOR_DB_DIR / route
+            if not path.exists():
+                continue
+            databases[route] = FAISS.load_local(
+                str(path),
+                embeddings,
+                allow_dangerous_deserialization=True,
+            )
+
+        legacy_index = VECTOR_DB_DIR / "index.faiss"
+        legacy_meta = VECTOR_DB_DIR / "index.pkl"
+        if not databases and legacy_index.exists() and legacy_meta.exists():
+            databases["policy"] = FAISS.load_local(
+                str(VECTOR_DB_DIR),
+                embeddings,
+                allow_dangerous_deserialization=True,
+            )
+
+        _VECTOR_DB_CACHE = databases
+        _VECTOR_DB_SIGNATURE = signature
+        _RETRIEVER_CACHE.clear()
+        return databases
 
 
 def get_multi_retriever(search_k: int = 10) -> Dict[str, Any]:
-    return {
-        route: database.as_retriever(search_kwargs={"k": search_k})
-        for route, database in load_multi_vector_db().items()
-    }
+    with _VECTOR_RUNTIME_LOCK:
+        if search_k in _RETRIEVER_CACHE:
+            return _RETRIEVER_CACHE[search_k]
+
+        retrievers = {
+            route: database.as_retriever(search_kwargs={"k": search_k})
+            for route, database in load_multi_vector_db().items()
+        }
+        _RETRIEVER_CACHE[search_k] = retrievers
+        return retrievers
 
 
 def _format_counts(title: str, counts: Dict[str, int]) -> str:
@@ -942,22 +1040,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if command == "prepare":
         counts = prepare_agent_corpora()
-        print(_format_counts("Da chia du lieu cho 3 agent", counts))
+        print(_format_counts("Đã chia dữ liệu cho 3 agent", counts))
         return 0
 
     if command == "build":
         if not any((TXT_DATA_DIR / route).exists() for route in ROUTES):
             prepare_counts = prepare_agent_corpora()
-            print(_format_counts("Da chia du lieu cho 3 agent", prepare_counts))
+            print(_format_counts("Đã chia dữ liệu cho 3 agent", prepare_counts))
         build_counts = build_multi_vector_db()
-        print(_format_counts("Da build vector stores", build_counts))
+        print(_format_counts("Đã build vector stores", build_counts))
         return 0
 
     if command in {"rebuild", "all"}:
         prepare_counts = prepare_agent_corpora()
         build_counts = build_multi_vector_db()
-        print(_format_counts("Da chia du lieu cho 3 agent", prepare_counts))
-        print(_format_counts("Da build vector stores", build_counts))
+        print(_format_counts("Đã chia dữ liệu cho 3 agent", prepare_counts))
+        print(_format_counts("Đã build vector stores", build_counts))
         return 0
 
     if command == "stats":
@@ -965,10 +1063,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if manifest_path.exists():
             print(manifest_path.read_text(encoding="utf-8"))
             return 0
-        print("Chua co manifest. Hay chay `python data_pipeline.py prepare` hoac `build`.")
+        print("Chưa có manifest. Hãy chạy `python -m app.data.pipeline prepare` hoặc `build`.")
         return 1
 
-    print("Lenh khong hop le. Dung: prepare | build | rebuild | stats")
+    print("Lệnh không hợp lệ. Dùng: prepare | build | rebuild | stats")
     return 1
 
 

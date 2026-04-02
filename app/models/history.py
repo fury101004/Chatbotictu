@@ -7,12 +7,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, Iterator, List
 
-from config import DB_NAME
+from app.core.config import DB_NAME
 
 
 @contextmanager
 def _connect() -> Iterator[sqlite3.Connection]:
-    connection = sqlite3.connect(DB_NAME)
+    DB_NAME.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(DB_NAME, timeout=30)
     try:
         yield connection
     finally:

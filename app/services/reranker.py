@@ -7,7 +7,7 @@ import re
 from typing import Any, List, Sequence
 import unicodedata
 
-from config import ENABLE_NEURAL_RERANKER, NEURAL_RERANKER_MODEL
+from app.core.config import ENABLE_NEURAL_RERANKER, NEURAL_RERANKER_MODEL
 
 STOPWORDS = {
     "va",
