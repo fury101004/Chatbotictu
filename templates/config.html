@@ -1,18 +1,34 @@
 {% extends "base.html" %}
+
 {% block content %}
-<section class="page-header">
-  <p class="eyebrow">Config</p>
-  <h2>Cau hinh he thong</h2>
-  <p class="page-copy">
-    Trang nay hien chua co form ghi cau hinh dong. Cac tham so chinh dang duoc doc tu bien moi truong hoac file <code>.env</code>.
-  </p>
+<section class="page-banner">
+  <div>
+    <p class="eyebrow">Configuration</p>
+    <h1>Các nhóm biến môi trường quan trọng</h1>
+    <p class="section-copy">Trang này đóng vai trò như bảng tham chiếu nhanh trong lúc vận hành và debug hệ thống, nên bố cục được giữ gọn và dễ scan theo nhóm.</p>
+  </div>
+  <div class="banner-badge">
+    <span>Provider hiện tại</span>
+    <strong>{{ current_provider|upper }}</strong>
+  </div>
 </section>
 
-<div class="card">
-  <p>Bien quan trong:</p>
-  <p><code>OLLAMA_URL</code> va <code>OLLAMA_MODEL</code> cho mo hinh sinh cau tra loi.</p>
-  <p><code>EMBEDDINGS_MODEL</code> cho embeddings.</p>
-  <p><code>RAW_DATA_DIR</code>, <code>CLEAN_MD_DIR</code>, <code>RAG_MD_DIR</code>, <code>VECTOR_DB_DIR</code> cho du lieu.</p>
-  <p><code>CHAT_DB_NAME</code> cho SQLite history.</p>
-</div>
+<section class="section-block">
+  <div class="config-grid">
+    {% for group in config_groups %}
+    <article class="surface-card">
+      <p class="mini-label">{{ group.title }}</p>
+      <h2>{{ group.title }}</h2>
+      <div class="config-list">
+        {% for key, desc in group.entries %}
+        <div class="config-item">
+          <code>{{ key }}</code>
+          <p>{{ desc }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
 {% endblock %}

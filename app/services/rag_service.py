@@ -2,20 +2,34 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+import logging
 import re
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
-from langchain.prompts import PromptTemplate
-from langchain.schema import Document
+try:
+    from langchain_core.documents import Document
+except Exception:  # pragma: no cover - compatibility fallback
+    from langchain.schema import Document  # type: ignore[no-redef]
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
+from app.core.config import ACTIVE_LLM_PROVIDER, APP_DEBUG
 from app.data.pipeline import ROUTE_LABELS, get_multi_retriever, infer_route_from_metadata
-from app.services.llm_service import invoke_llm
+from app.prompts import (
+    AGENT_INSTRUCTIONS,
+    ANSWER_PROMPT,
+    ROUTE_PROMPT,
+    build_empty_context_reply,
+    build_model_error_reply,
+)
+from app.services.llm_service import LLMInvocationError, invoke_llm
 from app.services.reranker import rerank
 
+
+logger = logging.getLogger(__name__)
 
 AVAILABLE_ROUTES = ("handbook", "policy", "faq")
 FAQ_HINTS = (
@@ -42,58 +56,6 @@ HANDBOOK_HINTS = (
     "lich thi",
     "chuong trinh dao tao",
     "dau moi lien he",
-)
-
-AGENT_INSTRUCTIONS = {
-    "handbook": (
-        "Ban la Agent So tay sinh vien. "
-        "Uu tien cach tra loi co tinh huong dan, tong hop, de sinh vien lam theo tung buoc."
-    ),
-    "policy": (
-        "Ban la Agent Chinh sach - Cong van - Quyet dinh. "
-        "Uu tien neu ro ten van ban, nam hoc, hoc ky, so hieu neu du lieu co."
-    ),
-    "faq": (
-        "Ban la Agent Cau hoi sinh vien thuong dung. "
-        "Tra loi ngan gon, de hieu, sau do neu can thi dinh huong sang van ban chinh thuc."
-    ),
-}
-
-ROUTE_PROMPT = PromptTemplate.from_template(
-    """
-Ban dang la bo dieu phoi 3 agent cho chatbot sinh vien.
-
-Hay chon DUY NHAT mot agent phu hop nhat:
-- handbook: dung khi cau hoi can tra cuu so tay sinh vien, huong dan tong quan, dau moi lien he, quy trinh hoc vu co ban.
-- policy: dung khi cau hoi can can cu cong van, thong bao, quyet dinh, quy dinh, chinh sach, van ban chinh thuc.
-- faq: dung khi cau hoi la van de sinh vien thuong hoi hang ngay nhu email, BHYT, hoc bong, hoc phi, tot nghiep, diem ren luyen, thu tuc.
-
-Chi tra ve duy nhat mot tu trong ba tu: handbook, policy, faq.
-
-Cau hoi: {question}
-"""
-)
-
-ANSWER_PROMPT = PromptTemplate.from_template(
-    """
-{agent_instruction}
-
-Nguyen tac tra loi:
-- Chi duoc dua tren NGU LIEU.
-- Neu tai lieu co nam hoc, hoc ky, so van ban, ten van ban thi uu tien neu ro.
-- Neu chua du du lieu thi noi ro phan chua chac va goi y nguoi dung bo sung thong tin.
-- Tra loi bang tieng Viet, ro rang, ngan gon, tranh doan van qua dai.
-- Neu can huong dan thao tac, viet thanh tung dong de sinh vien de lam theo.
-
-LICH SU GAN DAY:
-{memory}
-
-NGU LIEU:
-{context}
-
-CAU HOI:
-{question}
-"""
 )
 
 
@@ -135,7 +97,10 @@ def _heuristic_route(question: str) -> str:
     if any(keyword in normalized for keyword in FAQ_HINTS):
         return "faq"
 
-    if any(keyword in normalized for keyword in ("quyet dinh", "cong van", "thong bao", "quy dinh", "chinh sach")):
+    if any(
+        keyword in normalized
+        for keyword in ("quyet dinh", "cong van", "thong bao", "quy dinh", "chinh sach")
+    ):
         return "policy"
 
     if len(normalized.split()) <= 8 and any(
@@ -149,7 +114,7 @@ def _heuristic_route(question: str) -> str:
 
 def _build_memory(history: Sequence[Dict[str, Any]], limit: int = 5) -> str:
     if not history:
-        return "Khong co lich su truoc do."
+        return "Không có lịch sử trước đó."
 
     snippets: List[str] = []
     for item in history[-limit:]:
@@ -274,7 +239,7 @@ def _build_context(documents: Sequence[Document], limit: int = 5) -> Dict[str, A
 
         header = f"[{index}] {title}"
         if year:
-            header += f" | Nam: {year}"
+            header += f" | Năm: {year}"
         header += f" | Route: {route}"
         context_blocks.append(f"{header}\nSource: {source}\n{preview}")
         if source not in seen_sources:
@@ -296,8 +261,14 @@ def memory_node(state: ChatState) -> ChatState:
 
 def route_node(state: ChatState) -> ChatState:
     try:
-        route_response = invoke_llm(ROUTE_PROMPT.format(question=state["question"]))
-    except Exception:
+        route_response = invoke_llm(
+            ROUTE_PROMPT.format(
+                question=state["question"],
+                memory=state["memory"],
+            )
+        )
+    except LLMInvocationError as exc:
+        logger.warning("Route fallback to heuristic because LLM failed: %s", exc.debug_summary())
         route_response = ""
 
     route = _normalize_route(route_response) or _heuristic_route(state["question"])
@@ -331,10 +302,7 @@ def retrieve_node(state: ChatState) -> ChatState:
 
 def answer_node(state: ChatState) -> ChatState:
     if not state["context"]:
-        answer = (
-            "Minh chua tim thay tai lieu phu hop trong kho du lieu hien tai. "
-            "Ban co the noi ro hon nam hoc, hoc ky, so van ban hoac chu de can tra cuu khong?"
-        )
+        answer = build_empty_context_reply(state["route"])
         return {
             **state,
             "answer": answer,
@@ -349,10 +317,10 @@ def answer_node(state: ChatState) -> ChatState:
 
     try:
         answer = invoke_llm(prompt).strip()
-    except Exception:
-        answer = (
-            "Minh khong the goi mo hinh tra loi luc nay. "
-            "Ban thu lai sau hoac kiem tra ket noi Ollama giup minh."
+    except LLMInvocationError as exc:
+        answer = build_model_error_reply(
+            exc.provider,
+            detail=exc.debug_summary() if APP_DEBUG else None,
         )
 
     return {
@@ -377,7 +345,9 @@ def _build_graph():
     return builder.compile()
 
 
-chat_graph = _build_graph()
+@lru_cache(maxsize=1)
+def _get_chat_graph():
+    return _build_graph()
 
 
 def rag_chat(question: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -392,7 +362,7 @@ def rag_chat(question: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         "sources": [],
     }
 
-    result = chat_graph.invoke(state)
+    result = _get_chat_graph().invoke(state)
     route = result["route"]
     return {
         "answer": result["answer"],
@@ -400,4 +370,5 @@ def rag_chat(question: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         "agent": route,
         "agent_label": ROUTE_LABELS.get(route, route),
         "sources": result["sources"],
+        "provider": ACTIVE_LLM_PROVIDER,
     }

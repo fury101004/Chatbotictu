@@ -14,12 +14,12 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 from PyPDF2 import PdfReader
 from docx import Document
 
+from app.core.config import CLEAN_MD_DIR, RAW_DATA_DIR
 from app.data.source_routes import SOURCE_ROUTES, route_matches_relative_path
-from config import CLEAN_MD_DIR, RAW_DATA_DIR
 
 
 IGNORE_DIRS = {".venv", "__pycache__", ".git"}
-SUPPORTED_EXTENSIONS = {"pdf", "docx"}
+SUPPORTED_EXTENSIONS = {"pdf", "docx", "md"}
 TRACKED_UNSUPPORTED_EXTENSIONS = {"doc", "xls", "xlsx"}
 OCR_MODES = ("auto", "force", "off")
 MIN_PDF_TEXT_CHARS = 400
@@ -95,6 +95,13 @@ def build_frontmatter(
 def safe_title_from_name(path: Path) -> str:
     title = re.sub(r"[_\-]+", " ", path.stem)
     return re.sub(r"\s+", " ", title).strip()
+
+
+def _read_text_file(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-8", errors="ignore")
 
 
 def _relative_to_source_root(path: Path) -> Path:
@@ -213,6 +220,74 @@ def _choose_pdf_page_texts(src_path: Path, ocr_mode: str) -> Tuple[List[str], st
     return pypdf_pages, "pypdf"
 
 
+def _split_frontmatter(markdown: str) -> Tuple[str, str]:
+    if markdown.startswith("---"):
+        parts = markdown.split("---", 2)
+        if len(parts) >= 3:
+            frontmatter = "---" + parts[1] + "---\n\n"
+            body = parts[2].lstrip()
+            return frontmatter, body
+    return "", markdown
+
+
+def _frontmatter_has_key(frontmatter: str, key: str) -> bool:
+    return bool(re.search(rf"^\s*{re.escape(key)}\s*:", frontmatter, flags=re.MULTILINE))
+
+
+def _frontmatter_value(frontmatter: str, key: str) -> str:
+    match = re.search(rf"^\s*{re.escape(key)}\s*:\s*(.+?)\s*$", frontmatter, flags=re.MULTILINE)
+    if not match:
+        return ""
+
+    return match.group(1).strip().strip('"').strip("'")
+
+
+def _inject_frontmatter_key(frontmatter: str, key: str, value: str) -> str:
+    if not frontmatter.startswith("---") or _frontmatter_has_key(frontmatter, key):
+        return frontmatter
+
+    parts = frontmatter.split("---", 2)
+    if len(parts) < 3:
+        return frontmatter
+
+    meta = parts[1].strip("\n")
+    meta = meta + f'\n{key}: "{value}"\n'
+    return "---\n" + meta.strip("\n") + "\n---\n\n"
+
+
+def normalize_markdown_text(text: str) -> str:
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.rstrip() for line in text.split("\n")]
+
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    cleaned_lines: List[str] = []
+    blank_count = 0
+    in_code_block = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            blank_count = 0
+            cleaned_lines.append(line)
+            continue
+
+        if not stripped and not in_code_block:
+            blank_count += 1
+            if blank_count > 1:
+                continue
+        else:
+            blank_count = 0
+
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines).strip()
+
+
 def _build_pdf_markdown(page_texts: Sequence[str], title: str, frontmatter: str) -> str:
     parts: List[str] = [frontmatter, f"# {title}\n"]
     for page_number, text in enumerate(page_texts, start=1):
@@ -274,8 +349,53 @@ def convert_docx_to_md(src_path: Path, dst_path: Path) -> None:
     print(f"[DOCX] {rel_src} -> {dst_path.relative_to(Path(CLEAN_MD_DIR))}")
 
 
+def convert_markdown_to_clean_md(src_path: Path, dst_path: Path) -> None:
+    rel_src = _relative_to_source_root(src_path)
+    category = rel_src.parent.name
+    raw_text = _read_text_file(src_path)
+    frontmatter, body = _split_frontmatter(raw_text)
+
+    title = _frontmatter_value(frontmatter, "title") or safe_title_from_name(src_path)
+    doc_id = str(rel_src).replace(os.sep, "_").rsplit(".", 1)[0]
+
+    if frontmatter:
+        for key, value in (
+            ("doc_id", doc_id),
+            ("title", title),
+            ("category", category),
+            ("source_file", str(rel_src)),
+            ("source_type", "md"),
+            ("language", "vi"),
+            ("created_at", dt.date.today().isoformat()),
+        ):
+            frontmatter = _inject_frontmatter_key(frontmatter, key, value)
+    else:
+        frontmatter = build_frontmatter(
+            doc_id=doc_id,
+            title=title,
+            source_file=str(rel_src),
+            category=category,
+            source_type="md",
+        )
+
+    normalized_body = normalize_markdown_text(body)
+    if not re.search(r"^\s*#{1,6}\s+\S", normalized_body, flags=re.MULTILINE):
+        normalized_body = f"# {title}\n\n{normalized_body}".strip()
+
+    content = f"{frontmatter}{normalized_body.strip()}\n"
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    dst_path.write_text(content, encoding="utf-8")
+    print(f"[MD] {rel_src} -> {dst_path.relative_to(Path(CLEAN_MD_DIR))}")
+
+
 def _build_report_path(route: str) -> Path:
     return Path(CLEAN_MD_DIR) / "_reports" / f"{route}_source_report.json"
+
+
+def _prune_empty_dirs(root: Path) -> None:
+    for directory in sorted(root.rglob("*"), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
 
 
 def _clear_matching_output(route: str) -> None:
@@ -283,11 +403,18 @@ def _clear_matching_output(route: str) -> None:
     if not out_root.exists():
         return
 
-    for child in out_root.iterdir():
-        if not child.is_dir():
-            continue
-        if route_matches_relative_path(child.relative_to(out_root), route):
-            shutil.rmtree(child)
+    if route == "all":
+        for child in out_root.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+        return
+
+    for path in sorted(out_root.rglob("*.md")):
+        rel_path = path.relative_to(out_root)
+        if route_matches_relative_path(rel_path, route):
+            path.unlink()
+
+    _prune_empty_dirs(out_root)
 
 
 def build_clean_markdown(route: str = "all", ocr_mode: str = "auto") -> Dict[str, object]:
@@ -315,6 +442,7 @@ def build_clean_markdown(route: str = "all", ocr_mode: str = "auto") -> Dict[str
         "converted": 0,
         "pdf_files": 0,
         "docx_files": 0,
+        "md_files": 0,
         "ocr_used": 0,
         "unsupported_files": [],
     }
@@ -338,9 +466,12 @@ def build_clean_markdown(route: str = "all", ocr_mode: str = "auto") -> Dict[str
             extractor = convert_pdf_to_md(src_path, dst_path, ocr_mode)
             if extractor == "windows-ocr":
                 stats["ocr_used"] = int(stats["ocr_used"]) + 1
-        else:
+        elif ext == "docx":
             stats["docx_files"] = int(stats["docx_files"]) + 1
             convert_docx_to_md(src_path, dst_path)
+        else:
+            stats["md_files"] = int(stats["md_files"]) + 1
+            convert_markdown_to_clean_md(src_path, dst_path)
 
         stats["converted"] = int(stats["converted"]) + 1
 
@@ -382,7 +513,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("Done rebuilding clean markdown.")
     print(f"Route: {stats['route']}")
     print(f"Converted: {stats['converted']}")
-    print(f"PDF: {stats['pdf_files']} | DOCX: {stats['docx_files']} | OCR used: {stats['ocr_used']}")
+    print(
+        f"PDF: {stats['pdf_files']} | DOCX: {stats['docx_files']} | MD: {stats['md_files']} | OCR used: {stats['ocr_used']}"
+    )
     print(f"Unsupported tracked files: {len(stats['unsupported_files'])}")
     print(f"Report: {_build_report_path(args.route)}")
     return 0

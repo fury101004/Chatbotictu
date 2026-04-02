@@ -1,16 +1,122 @@
 {% extends "base.html" %}
-{% block content %}
-<section class="hero">
-  <p class="eyebrow">RAG + LangChain + LangGraph</p>
-  <h1>Tro ly tra cuu van ban va quy dinh cho sinh vien ICTU</h1>
-  <p class="hero-copy">
-    He thong duoc to chuc theo Flask MVC, luu lich su hoi thoai bang SQLite,
-    va tra cuu tai lieu tu kho du lieu markdown/vector store.
-  </p>
 
-  <div class="hero-actions">
-    <a href="/chat-ui" class="button primary">Bat dau chat</a>
-    <a href="/history" class="button secondary">Xem lich su</a>
+{% block content %}
+<section class="hero-panel">
+  <div class="hero-copyblock">
+    <p class="eyebrow">ICTU Assistant Workspace</p>
+    <h1>Một giao diện để sinh viên hỏi nhanh, và để bạn cập nhật kho tri thức mà không cần thao tác rườm rà.</h1>
+    <p class="hero-copy">
+      Frontend này không chỉ là màn chat. Nó là một workspace nhỏ cho 3 việc đúng nhất:
+      đặt câu hỏi đúng route, nạp thêm tài liệu, và theo dõi tình trạng dữ liệu để chatbot trả lời ổn định hơn.
+    </p>
+
+    <div class="hero-actions">
+      <a href="/chat" class="button primary">Bắt đầu hỏi đáp</a>
+      <a href="/upload" class="button secondary">Nạp tài liệu mới</a>
+    </div>
+  </div>
+
+  <div class="hero-side">
+    <article class="metric-card accent">
+      <span class="metric-label">Provider đang chạy</span>
+      <strong>{{ current_provider|upper }}</strong>
+      <p>{{ provider_model }}</p>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Gemini</span>
+      <strong>{% if gemini_ready %}Sẵn sàng{% else %}Chưa cấu hình{% endif %}</strong>
+      <p>Sẵn sàng chuyển provider bằng biến môi trường mà không đổi giao diện.</p>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Vector store</span>
+      <strong>Route-based</strong>
+      <p>{{ vector_root }}</p>
+    </article>
+  </div>
+</section>
+
+<section class="section-block">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Tác vụ nhanh</p>
+      <h2>Đi thẳng vào đúng màn hình cần làm</h2>
+    </div>
+    <p class="section-copy">Bố cục này ưu tiên tác vụ hơn là trang trí, nên các luồng chat, upload, rebuild và history được đặt ra sẵn để vào nhanh hơn trên cả desktop lẫn điện thoại.</p>
+  </div>
+
+  <div class="shortcut-grid">
+    <a class="shortcut-card" href="/chat">
+      <p class="feature-kicker">Hỏi đáp</p>
+      <h3>Đặt câu hỏi và nhận câu trả lời theo route</h3>
+      <p>Dùng cho học phí, học bổng, BHYT, sổ tay sinh viên, quyết định và thông báo.</p>
+    </a>
+    <a class="shortcut-card" href="/upload">
+      <p class="feature-kicker">Upload</p>
+      <h3>Bổ sung PDF, DOCX hoặc Markdown mới</h3>
+      <p>Gửi file lên và để hệ thống tự rebuild kho tri thức ở nền.</p>
+    </a>
+    <a class="shortcut-card" href="/vector">
+      <p class="feature-kicker">Vector</p>
+      <h3>Theo dõi route nào sẵn sàng và route nào cần đồng bộ</h3>
+      <p>Xem nhanh document count, lần cập nhật cuối và knowledge jobs gần đây.</p>
+    </a>
+    <a class="shortcut-card" href="/history">
+      <p class="feature-kicker">History</p>
+      <h3>Đọc lại và xuất lịch sử hội thoại</h3>
+      <p>Phù hợp khi cần tổng hợp kết quả hỏi đáp hoặc bắt đầu lại session mới.</p>
+    </a>
+  </div>
+</section>
+
+<section class="section-block">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Điểm nhấn</p>
+      <h2>Ba khu vực vận hành chính</h2>
+    </div>
+    <p class="section-copy">Tổng quan để biết chức năng nào đang phục vụ người dùng cuối, chức năng nào phục vụ vận hành dữ liệu.</p>
+  </div>
+
+  <div class="feature-grid">
+    {% for item in highlights %}
+    <article class="feature-card">
+      <p class="feature-kicker">{{ item.kicker }}</p>
+      <h3>{{ item.title }}</h3>
+      <p>{{ item.copy }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section-block">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Kiến trúc</p>
+      <h2>Frontend đang phục vụ đúng bài toán gì</h2>
+    </div>
+  </div>
+
+  <div class="flow-strip">
+    <div class="flow-node">
+      <span class="step-number">01</span>
+      <strong>Tra cứu</strong>
+      <p>Chat là màn trung tâm, nên được ưu tiên cho khả năng đọc, gõ câu hỏi nhanh và xem route/sources rõ ràng.</p>
+    </div>
+    <div class="flow-node">
+      <span class="step-number">02</span>
+      <strong>Vận hành dữ liệu</strong>
+      <p>Upload và vector control phục vụ người quản trị cập nhật tri thức mà không cần vào CLI mỗi lần.</p>
+    </div>
+    <div class="flow-node">
+      <span class="step-number">03</span>
+      <strong>Quan sát</strong>
+      <p>Status, jobs, manifest và history giúp kiểm tra hệ thống đang chạy ra sao và lần cuối đã đồng bộ đến đâu.</p>
+    </div>
+    <div class="flow-node">
+      <span class="step-number">04</span>
+      <strong>Mở rộng</strong>
+      <p>Template + CSS + JS vẫn nhẹ và dễ mở rộng, phù hợp với project FastAPI hiện tại mà không ép sang SPA.</p>
+    </div>
   </div>
 </section>
 {% endblock %}

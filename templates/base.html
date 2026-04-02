@@ -3,27 +3,64 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ title or "ICTU Student Assistant" }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>{{ title or app_name }}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ request.url_for('static', path='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}">
 </head>
-<body>
-  <header class="navbar">
-    <div class="logo">ICTU Student Assistant</div>
+<body data-page="{{ active }}">
+  <div class="site-shell">
+    <div class="chrome-shell">
+      <header class="app-header">
+        <a class="brand" href="/">
+          <span class="brand-mark"></span>
+          <span class="brand-copy">
+            <strong>{{ app_name }}</strong>
+            <small>Tra cứu học vụ, văn bản và kho tri thức sinh viên</small>
+          </span>
+        </a>
 
-    <nav class="menu">
-      <a href="/" class="{% if active == 'home' %}active{% endif %}">Home</a>
-      <a href="/chat-ui" class="{% if active == 'chat' %}active{% endif %}">Chat</a>
-      <a href="/upload" class="{% if active == 'upload' %}active{% endif %}">Upload</a>
-      <a href="/vector" class="{% if active == 'vector' %}active{% endif %}">Vector</a>
-      <a href="/config" class="{% if active == 'config' %}active{% endif %}">Config</a>
-      <a href="/history" class="{% if active == 'history' %}active{% endif %}">History</a>
-    </nav>
-  </header>
+        <div class="header-meta">
+          <article class="meta-card compact">
+            <span>Provider</span>
+            <strong>{{ current_provider|upper }}</strong>
+          </article>
+          <article class="meta-card">
+            <span>Model</span>
+            <strong>{{ provider_model }}</strong>
+          </article>
+          <article class="meta-card">
+            <span>Gemini</span>
+            <strong>{% if gemini_ready %}Sẵn sàng{% else %}Chưa cấu hình{% endif %}</strong>
+          </article>
+          <article class="meta-card">
+            <span>Upload</span>
+            <strong>{{ max_upload_size_mb }} MB / file</strong>
+          </article>
+        </div>
+      </header>
 
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+      <nav class="app-nav" aria-label="Điều hướng chính">
+        <div class="app-nav-track">
+          <a href="/" class="{% if active == 'home' %}active{% endif %}">Tổng quan</a>
+          <a href="/chat" class="{% if active == 'chat' %}active{% endif %}">Hỏi đáp</a>
+          <a href="/upload" class="{% if active == 'upload' %}active{% endif %}">Nạp tài liệu</a>
+          <a href="/vector" class="{% if active == 'vector' %}active{% endif %}">Vector store</a>
+          <a href="/config" class="{% if active == 'config' %}active{% endif %}">Cấu hình</a>
+          <a href="/history" class="{% if active == 'history' %}active{% endif %}">Lịch sử</a>
+        </div>
+      </nav>
+    </div>
 
-  <script defer src="{{ url_for('static', filename='script.js') }}"></script>
+    <main class="page-shell">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <p>Kho tri thức route-based cho handbook, policy và faq.</p>
+      <p>Upload giới hạn {{ max_upload_size_mb }} MB mỗi file.</p>
+    </footer>
+  </div>
+
+  <script defer src="{{ request.url_for('static', path='script.js') }}"></script>
 </body>
 </html>

@@ -5,11 +5,11 @@ from __future__ import annotations
 import io
 from typing import Dict, List
 
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import simpleSplit
-from reportlab.pdfgen import canvas
-
 from app.models.history import clear_history, get_history_by_user, save_chat
+
+
+class PdfExportUnavailableError(RuntimeError):
+    """Raised when the optional PDF export dependency is unavailable."""
 
 
 def list_history_for_api(user_id: str) -> List[Dict[str, str]]:
@@ -44,6 +44,15 @@ def export_history_as_txt(user_id: str) -> io.BytesIO:
 
 
 def export_history_as_pdf(user_id: str) -> io.BytesIO:
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.utils import simpleSplit
+        from reportlab.pdfgen import canvas
+    except ImportError as exc:  # pragma: no cover - optional runtime dependency
+        raise PdfExportUnavailableError(
+            "Tinh nang export PDF can cai them reportlab."
+        ) from exc
+
     history = list_history_for_rag(user_id)
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)

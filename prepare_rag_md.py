@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Sequence, Tuple
 
 from app.data.source_routes import SOURCE_ROUTES, route_matches_relative_path
-from config import CLEAN_MD_DIR, RAG_MD_DIR
+from app.core.config import CLEAN_MD_DIR, RAG_MD_DIR
 
 
 IGNORE_DIRS = {".venv", "__pycache__", ".git"}
@@ -192,16 +192,29 @@ def prepare_one_file(src_path: Path, dst_path: Path) -> None:
     dst_path.write_text(content, encoding="utf-8")
 
 
+def _prune_empty_dirs(root: Path) -> None:
+    for directory in sorted(root.rglob("*"), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+
+
 def _clear_matching_output(route: str) -> None:
     out_root = Path(RAG_MD_DIR)
     if not out_root.exists():
         return
 
-    for child in out_root.iterdir():
-        if not child.is_dir():
-            continue
-        if route_matches_relative_path(child.relative_to(out_root), route):
-            shutil.rmtree(child)
+    if route == "all":
+        for child in out_root.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+        return
+
+    for path in sorted(out_root.rglob("*.md")):
+        rel_path = path.relative_to(out_root)
+        if route_matches_relative_path(rel_path, route):
+            path.unlink()
+
+    _prune_empty_dirs(out_root)
 
 
 def build_rag_markdown(route: str = "all") -> dict:

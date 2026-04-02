@@ -1,57 +1,31 @@
 {% extends "base.html" %}
+
 {% block content %}
-<section class="page-header">
-  <p class="eyebrow">History</p>
-  <h2>Lich su hoi thoai</h2>
-  <p class="page-copy">Du lieu duoc luu theo session hien tai.</p>
+<section class="page-banner">
+  <div>
+    <p class="eyebrow">Conversation History</p>
+    <h1>Lịch sử hội thoại theo session</h1>
+    <p class="section-copy">Đọc lại các câu hỏi đã hỏi, xuất dữ liệu để lưu trữ, hoặc xóa session hiện tại khi bạn muốn bắt đầu một phiên tra cứu mới.</p>
+  </div>
+  <div class="banner-badge">
+    <span>Export</span>
+    <strong>TXT / PDF</strong>
+  </div>
 </section>
 
-<div class="toolbar">
-  <button type="button" onclick="clearHistory()">Xoa lich su</button>
-  <button type="button" onclick="window.location='/api/history/export/txt'">Export TXT</button>
-  <button type="button" onclick="window.location='/api/history/export/pdf'">Export PDF</button>
-</div>
-
-<div class="card" id="historyBox">
-  Dang tai lich su...
-</div>
-
-<script>
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-async function loadHistory() {
-  const res = await fetch("/api/history");
-  const data = await res.json();
-  const box = document.getElementById("historyBox");
-
-  if (!data.length) {
-    box.innerHTML = "<p>Chua co cuoc hoi thoai nao.</p>";
-    return;
-  }
-
-  box.innerHTML = data.map((item) => `
-    <div class="history-item">
-      <div class="history-time">${escapeHtml(item.timestamp)}</div>
-      <div class="bubble user">${escapeHtml(item.question)}</div>
-      <div class="bubble bot">${escapeHtml(item.answer)}</div>
+<section class="section-block">
+  <div class="surface-card accent-card">
+    <div class="page-actions">
+      <button id="clearHistoryButton" type="button">Xóa lịch sử</button>
+      <a href="/api/history/export/txt" class="button secondary">Export TXT</a>
+      <a href="/api/history/export/pdf" class="button secondary">Export PDF</a>
     </div>
-  `).join("");
-}
+  </div>
 
-async function clearHistory() {
-  if (!confirm("Xoa toan bo lich su cua session hien tai?")) {
-    return;
-  }
-
-  await fetch("/api/history/clear", { method: "POST" });
-  await loadHistory();
-}
-
-loadHistory();
-</script>
+  <div class="surface-card">
+    <div id="historyBox" class="history-stack">
+      <p class="muted-text">Đang tải lịch sử...</p>
+    </div>
+  </div>
+</section>
 {% endblock %}
