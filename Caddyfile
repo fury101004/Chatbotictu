@@ -1,0 +1,25 @@
+chatbot.hachitechsolution.com {
+    reverse_proxy http://bot:8000
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    client_max_body_size 100M
+
+    @default {
+        not path /api/v1/health
+    }
+    handle @default {
+        reverse_proxy http://bot:8000 {
+            timeout 300s
+        }
+    }
+}
+
+www.chatbot.hachitechsolution.com {
+    redir https://chatbot.hachitechsolution.com{uri}
+}

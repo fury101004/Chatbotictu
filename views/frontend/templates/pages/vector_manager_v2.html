@@ -1,0 +1,319 @@
+{% extends "layouts/base.html" %}
+{% block title %}Quản Lý Vector Store{% endblock %}
+
+{% block content %}
+<div class="manager-page">
+    <h1 class="page-title">QUẢN LÝ VECTOR STORE</h1>
+    <p class="page-desc">Quản lý kho tri thức của bot, xem chunk và import seed corpus vào Chroma.</p>
+
+    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Tổng Files</h3>
+            <div class="big-number">{{ total_files }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Tổng Chunks</h3>
+            <div class="big-number">{{ total_chunks }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Embedding Model</h3>
+            <div class="big-number">MiniLM-L12-v2</div>
+        </div>
+    </div>
+
+    <div class="seed-zone">
+        <h2>Seed Corpus</h2>
+        <p>
+            Import toàn bộ dữ liệu từ <code>data/qa_generated_fixed</code> vào vector store để tạo embedding.
+            Nếu muốn làm sạch vector store trước khi nạp lại, dùng nút <code>RESET + IMPORT QA</code>.
+        </p>
+        <div class="seed-actions">
+            <button type="button" id="importQaBtn" class="btn-nav green">IMPORT QA CORPUS</button>
+            <button type="button" id="rebuildQaBtn" class="btn-nav orange">RESET + IMPORT QA</button>
+        </div>
+        <div id="seedStatus" class="seed-status" hidden></div>
+    </div>
+
+    {% for filename, chunks in chunks_by_file.items() %}
+    <div class="file-section">
+        <div class="file-header" onclick="toggleCollapse(this)">
+            <div class="header-left">
+                <span class="arrow">&darr;</span>
+                <h2>{{ filename }}</h2>
+                <span class="chunk-count">{{ chunks|length }} chunks</span>
+            </div>
+            <div class="header-right">
+                <form method="post" action="/delete-file" style="display:inline;"
+                      onsubmit="return confirm('Xóa toàn bộ file {{ filename }}?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="filename" value="{{ filename }}">
+                    <button type="submit" class="btn-delete-small">Xóa file</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="chunks-container collapsed">
+            <div class="chunks-grid">
+                {% for chunk in chunks %}
+                <div class="chunk-card-mini level-{{ chunk.level }}">
+                    <div class="chunk-header-mini">
+                        <span class="level-badge">L{{ chunk.level }}</span>
+                        <span class="word-count">{{ chunk.word_count }} từ</span>
+                        <button class="btn-delete-chunk"
+                                onclick="event.stopPropagation(); deleteChunk('{{ chunk.id }}', '{{ filename }}')">
+                            X
+                        </button>
+                    </div>
+
+                    <div class="chunk-title-mini" title="{{ chunk.title | default('Không có tiêu đề') }}">
+                        {{ (chunk.title or '[Không có tiêu đề]')[:97] }}{% if (chunk.title or '')|length > 97 %}...{% endif %}
+                    </div>
+
+                    <button class="btn-copy-mini" data-content="{{ chunk.content|e }}">
+                        Copy nội dung đầy đủ
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="danger-zone">
+        <h2>Danger Zone</h2>
+        <p>Xóa sạch toàn bộ vector store và file upload.</p>
+        <form method="post" action="/reset-vectorstore" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" id="resetAllBtn" class="btn-danger" onclick="return doubleConfirm()">
+                XÓA HẾT VECTOR STORE
+            </button>
+        </form>
+    </div>
+
+    <div class="nav-buttons">
+        <a href="/data-loader" class="btn-nav">Upload File Mới</a>
+        <a href="/chat" class="btn-nav purple">Chat Với Bot</a>
+    </div>
+</div>
+
+<script>
+function toggleCollapse(header) {
+    const container = header.nextElementSibling;
+    const arrow = header.querySelector('.arrow');
+    container.classList.toggle('collapsed');
+    arrow.innerHTML = container.classList.contains('collapsed') ? '&rarr;' : '&darr;';
+}
+
+function doubleConfirm() {
+    return confirm('Bạn chắc chắn muốn xóa hết vector store?')
+        && confirm('Xác nhận lần 2: thao tác này không thể hoàn tác.');
+}
+
+const csrfInput = document.getElementById('csrfToken');
+const seedStatus = document.getElementById('seedStatus');
+const importQaBtn = document.getElementById('importQaBtn');
+const rebuildQaBtn = document.getElementById('rebuildQaBtn');
+
+function setSeedStatus(kind, message) {
+    seedStatus.hidden = false;
+    seedStatus.className = `seed-status ${kind}`;
+    seedStatus.textContent = message;
+}
+
+async function importQaCorpus(resetFirst = false) {
+    if (resetFirst) {
+        if (!confirm('Reset vector store rồi import lại qa_generated_fixed?')) return;
+        if (!confirm('Xác nhận lần 2: sẽ xóa vector hiện tại trước khi import.')) return;
+    }
+
+    importQaBtn.disabled = true;
+    rebuildQaBtn.disabled = true;
+    setSeedStatus('loading', resetFirst ? 'Đang reset + import qa_generated_fixed...' : 'Đang import qa_generated_fixed...');
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfInput.value);
+    if (resetFirst) {
+        formData.append('reset_first', 'true');
+    }
+
+    try {
+        const resp = await fetch('/import-qa-corpus', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+        if (data.csrf_token) {
+            csrfInput.value = data.csrf_token;
+        }
+        if (!resp.ok || data.status === 'error') {
+            throw new Error(data.msg || 'Import thất bại');
+        }
+
+        setSeedStatus('success', data.msg);
+        setTimeout(() => location.reload(), 1400);
+    } catch (err) {
+        setSeedStatus('error', err.message || 'Import thất bại');
+    } finally {
+        importQaBtn.disabled = false;
+        rebuildQaBtn.disabled = false;
+    }
+}
+
+importQaBtn.addEventListener('click', () => importQaCorpus(false));
+rebuildQaBtn.addEventListener('click', () => importQaCorpus(true));
+
+document.querySelectorAll('.btn-copy-mini').forEach(btn => {
+    btn.addEventListener('click', async function (e) {
+        e.stopPropagation();
+        const text = this.getAttribute('data-content');
+        try {
+            await navigator.clipboard.writeText(text);
+            const old = this.textContent;
+            this.textContent = 'Đã copy!';
+            this.style.background = '#26de81';
+            setTimeout(() => {
+                this.textContent = old;
+                this.style.background = '';
+            }, 1500);
+        } catch (err) {
+            alert('Copy thất bại!');
+        }
+    });
+});
+
+async function deleteChunk(chunkId, filename) {
+    if (!confirm(`Xóa chunk này khỏi "${filename}"?`)) return;
+
+    const formData = new FormData();
+    formData.append('chunk_id', chunkId);
+    formData.append('csrf_token', csrfInput.value);
+
+    try {
+        const resp = await fetch('/delete-chunk', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (resp.ok) {
+            location.reload();
+        } else {
+            const data = await resp.json();
+            alert(data.error || 'Xóa thất bại!');
+        }
+    } catch (err) {
+        alert('Lỗi mạng!');
+    }
+}
+</script>
+
+<style>
+.manager-page { max-width: 1600px; margin: 2rem auto; padding: 0 1rem; font-family: 'Segoe UI', sans-serif; }
+.page-title {
+    font-size: 4.5rem; text-align: center; font-weight: 900;
+    background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #a29bfe);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.page-desc { text-align: center; color: #bdc3c7; font-size: 1.2rem; margin-bottom: 3rem; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 3rem; }
+.stat-card { background: #1e1e2e; padding: 1.8rem; border-radius: 16px; text-align: center; box-shadow: 0 8px 25px rgba(0,0,0,0.4); border: 1px solid #333; }
+.stat-card h3 { color: #74b9ff; margin-bottom: 0.8rem; }
+.big-number { font-size: 3rem; font-weight: bold; color: #4ecdc4; }
+
+.seed-zone {
+    margin: 0 0 3rem;
+    padding: 2rem;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(78,205,196,0.14), rgba(116,185,255,0.12));
+    border: 1px solid rgba(78,205,196,0.35);
+    text-align: center;
+}
+.seed-zone h2 { margin: 0 0 0.8rem; color: #81ecec; }
+.seed-zone p { margin: 0 auto 1.2rem; max-width: 900px; color: #dfe6e9; line-height: 1.6; }
+.seed-zone code { color: #ffeaa7; font-size: 0.95rem; }
+.seed-actions { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+.seed-status { margin-top: 1rem; padding: 1rem 1.2rem; border-radius: 12px; font-weight: 700; }
+.seed-status.loading { background: rgba(116,185,255,0.12); color: #74b9ff; border: 1px solid rgba(116,185,255,0.45); }
+.seed-status.success { background: rgba(38,222,129,0.12); color: #7bed9f; border: 1px solid rgba(38,222,129,0.45); }
+.seed-status.error { background: rgba(255,71,87,0.14); color: #ff6b81; border: 1px solid rgba(255,71,87,0.45); }
+
+.file-section { margin: 2.5rem 0; background: #1a1a2e; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.file-header {
+    background: linear-gradient(135deg, #2d3436, #1e1e2e);
+    padding: 1.4rem 2rem; display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; user-select: none; transition: 0.3s; border-bottom: 3px solid #4ecdc4;
+}
+.file-header:hover { background: #2d3436; }
+.header-left { display: flex; align-items: center; gap: 1rem; }
+.arrow { font-size: 1.3rem; transition: 0.3s; }
+.file-header h2 { margin: 0; color: #4ecdc4; font-size: 1.3rem; font-weight: bold; word-break: break-word; }
+.chunk-count { background: #4ecdc4; color: #000; padding: 0.4rem 1rem; border-radius: 50px; font-weight: bold; font-size: 0.9rem; }
+
+.btn-delete-small { background: #e74c3c; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 10px; cursor: pointer; font-weight: bold; }
+
+.chunks-container { transition: all 0.5s ease; max-height: 3000px; overflow: hidden; }
+.chunks-container.collapsed { max-height: 0; padding: 0; }
+
+.chunks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.3rem;
+    padding: 2rem;
+    background: #16213e;
+}
+
+.chunk-card-mini {
+    background: #1e1e2e; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4); transition: all 0.3s ease;
+    border: 2px solid transparent; display: flex; flex-direction: column;
+}
+.chunk-card-mini:hover { transform: translateY(-6px); box-shadow: 0 15px 30px rgba(78,205,196,0.3); }
+
+.chunk-card-mini.level-5 { border-color: #ff6b6b; }
+.chunk-card-mini.level-4 { border-color: #feca57; }
+.chunk-card-mini.level-3 { border-color: #a29bfe; }
+.chunk-card-mini.level-2 { border-color: #74b9ff; }
+.chunk-card-mini.level-1 { border-color: #81ecec; }
+
+.chunk-header-mini {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.8rem 1rem; background: rgba(0,0,0,0.3);
+}
+.level-badge { background: #ff6b6b; color: white; padding: 0.3rem 0.8rem; border-radius: 50px; font-size: 0.8rem; font-weight: bold; }
+.word-count { color: #aaa; font-size: 0.85rem; }
+.btn-delete-chunk { background:none; border:none; color:#e74c3c; font-size:1.5rem; cursor:pointer; }
+.btn-delete-chunk:hover { color:#ff4757; }
+
+.chunk-title-mini {
+    padding: 1rem; font-weight: 600; color:#ddd; line-height:1.5; flex-grow:1; word-break:break-word;
+}
+
+.btn-copy-mini {
+    margin: 0 1rem 1rem; padding: 0.7rem; background:#4ecdc4; color:black;
+    border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:0.9rem;
+}
+.btn-copy-mini:hover { background:#26de81; }
+
+.danger-zone { border: 3px solid #ff4757; background: rgba(255,71,87,0.15); text-align:center; padding:3rem; border-radius:20px; margin:4rem 0; }
+.btn-danger { background:#ff4757; color:white; padding:1.2rem 3rem; font-size:1.1rem; border-radius:50px; cursor:pointer; font-weight:bold; border: none; }
+
+.nav-buttons { text-align:center; margin:4rem 0; display:flex; justify-content:center; gap:1.5rem; flex-wrap:wrap; }
+.btn-nav { padding:1rem 2.5rem; background:#2d3436; color:white; text-decoration:none; border-radius:50px; font-weight:bold; transition:0.3s; border: none; cursor: pointer; }
+.btn-nav:hover { background:#4ecdc4; transform:scale(1.05); color: #111; }
+.btn-nav.purple { background:#6c5ce7; }
+.btn-nav.purple:hover { background:#a29bfe; color: #111; }
+.btn-nav.green { background:#00b894; }
+.btn-nav.green:hover { background:#55efc4; }
+.btn-nav.orange { background:#e17055; }
+.btn-nav.orange:hover { background:#fab1a0; }
+
+@media (max-width: 768px) {
+    .chunks-grid { grid-template-columns: 1fr; }
+    .page-title { font-size: 3rem; }
+    .file-header { flex-direction: column; text-align: center; gap: 1rem; }
+    .seed-actions { flex-direction: column; }
+}
+</style>
+{% endblock %}

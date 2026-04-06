@@ -1,0 +1,424 @@
+# vector_store.py
+# • ChromaDB + all-MiniLM-L6-v2 (vector) + BM25 (keyword)
+# • Tốc độ: 1.0–1.6s/query | Cache 100 query | Không crash reload
+# • Lazy rebuild BM25 chỉ khi DB thay đổi → cực nhẹ RAM/CPU
+# • Tự động chunk theo heading # ## ### ####
+# • Hybrid score: BM25 + (1-cosine_distance)×20
+# • Bot-rule.md luôn đứng top 1 context (Level 3 – chắc như đinh đóng cột)
+# • Hàm chính: add_documents(), query_documents(), reset_vectorstore()
+
+import chromadb
+from chromadb.utils import embedding_functions
+from pathlib import Path
+from rank_bm25 import BM25Okapi
+from typing import List, Tuple
+import re
+from functools import lru_cache
+import time
+
+# ===================================================================
+# 0. BOT RULE – LUÔN ĐỨNG ĐẦU CONTEXT (LEVEL 3)
+# ===================================================================
+BOT_RULE_PATH = Path("data/bot-rule.md")
+BOT_RULE_ID = "BOT_RULE_001"
+BOT_RULE_CONTENT = ""
+
+def _load_bot_rule():
+    global BOT_RULE_CONTENT
+    if BOT_RULE_PATH.exists():
+        BOT_RULE_CONTENT = BOT_RULE_PATH.read_text(encoding="utf-8").strip()
+    else:
+        default = "# Nội quy Bot\nBạn là trợ lý AI chuyên nghiệp, thân thiện và cực kỳ chính xác.\nTrả lời ngắn gọn, dùng tiếng Việt, không ba hoa, không thêm thắt thông tin ngoài tài liệu."
+        BOT_RULE_PATH.write_text(default, encoding="utf-8")
+        BOT_RULE_CONTENT = default.strip()
+    print("bot-rule.md đã được load")
+
+_load_bot_rule()
+
+def inject_bot_rule():
+    """Chèn hoặc cập nhật nội quy bot vào Chroma – priority cao nhất"""
+    coll = get_collection()
+    coll.upsert(
+        ids=[BOT_RULE_ID],
+        documents=[BOT_RULE_CONTENT],
+        metadatas=[{
+            "source": "BOT_RULE",
+            "title": "Nội quy & giọng điệu bot",
+            "title_clean": "noi quy bot",
+            "priority": 999999
+        }]
+    )
+
+# ===================================================================
+# 1. CHROMA SETUP
+# ===================================================================
+ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+client = chromadb.PersistentClient(path="./vectorstore")
+
+def get_collection():
+    return client.get_or_create_collection(
+        name="markdown_docs",
+        embedding_function=ef,
+        metadata={"hnsw:space": "cosine"}
+    )
+
+# ===================================================================
+# 2. BM25 – lấy keyword siêu ngon từ chunk
+# ===================================================================
+_bm25: BM25Okapi | None = None
+_all_docs_tokenized: List[List[str]] = []
+_all_ids: List[str] = []
+_last_doc_count = -1
+
+def _rebuild_bm25_if_needed():
+    global _bm25, _all_docs_tokenized, _all_ids, _last_doc_count
+    coll = get_collection()
+    current_count = coll.count()
+
+    if current_count == _last_doc_count:
+        return
+
+    data = coll.get(include=["documents"])
+    docs = data.get("documents", [])
+    ids = data.get("ids", [])
+
+    _all_docs_tokenized = [doc.lower().split() for doc in docs]
+    _all_ids = ids
+    _bm25 = BM25Okapi(_all_docs_tokenized) if _all_docs_tokenized else None
+    _last_doc_count = current_count
+    print(f"BM25 rebuilt – {len(docs)} docs")
+
+_rebuild_bm25_if_needed()
+inject_bot_rule()  # đảm bảo rule có ngay từ đầu
+
+# ===================================================================
+# 3. ADD DOCUMENTS – NHANH + CHUẨN
+# ===================================================================
+def add_documents(file_content: str, filename: str) -> None:
+    coll = get_collection()
+    filename_clean = Path(filename).name
+
+    coll.delete(where={"source": filename_clean})
+
+    lines = file_content.split("\n")
+    chunks = []
+    current_chunk = []
+    current_title = "Không có tiêu đề"
+
+    for line in lines:
+        line = line.rstrip()
+        if line.startswith("#"):
+            hash_count = len(line) - len(line.lstrip("#"))
+            if 1 <= hash_count <= 4:
+                if current_chunk:
+                    text = "\n".join(current_chunk).strip()
+                    if text:
+                        chunks.append({"text": text, "title": current_title})
+                current_title = line.lstrip("# ").strip() or f"Heading cấp {hash_count}"
+                current_chunk = [line]
+                continue
+        current_chunk.append(line)
+
+    if current_chunk:
+        text = "\n".join(current_chunk).strip()
+        if text:
+            chunks.append({"text": text, "title": current_title})
+
+    if not chunks:
+        words = file_content.split()
+        for i in range(0, len(words), 500):
+            chunk = words[i:i+600]
+            if chunk:
+                chunks.append({"text": " ".join(chunk), "title": "Không có tiêu đề"})
+
+    if chunks:
+        docs = [c["text"] for c in chunks]
+        metadatas = [{
+            "source": filename_clean,
+            "title": c["title"],
+            "title_clean": re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', '', c["title"].lower())).strip()
+        } for c in chunks]
+        ids = [f"{filename_clean}_{i}" for i in range(len(chunks))]
+        coll.add(documents=docs, metadatas=metadatas, ids=ids)
+        print(f"Added {len(chunks)} chunks from {filename_clean}")
+
+    _rebuild_bm25_if_needed()
+    inject_bot_rule()  # luôn giữ rule sống mãi
+
+# ===================================================================
+# 4. HYBRID SEARCH + FORCE BOT RULE TOP 1
+# ===================================================================
+@lru_cache(maxsize=100)
+def query_documents(query: str, n_results: int = 8) -> Tuple[List[str], List[dict]]:
+    """
+    Hybrid search vector + BM25, sau đó ép bot-rule.md lên đầu context
+    """
+    start = time.time()
+    coll = get_collection()
+
+    # Vector search lấy dư
+    vec = coll.query(
+        query_texts=[query],
+        n_results=n_results + 10,
+        include=["documents", "metadatas", "distances"]
+    )
+
+    v_docs = vec["documents"][0] or []
+    v_metas = vec["metadatas"][0] or []
+    v_ids = vec["ids"][0] or []
+    v_dist = vec["distances"][0] or []
+
+    # Hybrid với BM25
+    _rebuild_bm25_if_needed()
+    if _bm25 and _all_ids:
+        bm25_scores = _bm25.get_scores(query.lower().split())
+        scores = {doc_id: bm25_scores[i] for i, doc_id in enumerate(_all_ids)}
+        for vid, dist in zip(v_ids, v_dist):
+            scores[vid] = scores.get(vid, 0) + (1.0 - dist) * 20
+        top_ids = [x[0] for x in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n_results + 5]]
+        result = coll.get(ids=top_ids, include=["documents", "metadatas"])
+        docs = result["documents"]
+        metas = result["metadatas"]
+    else:
+        docs = v_docs[:n_results + 5]
+        metas = v_metas[:n_results + 5]
+
+    # Tách rule ra
+    rule_doc = None
+    rule_meta = None
+    normal_docs = []
+    normal_metas = []
+
+    for doc, meta in zip(docs, metas):
+        if meta.get("source") == "BOT_RULE" or BOT_RULE_ID in str(meta.get("id", "")):
+            rule_doc = doc
+            rule_meta = meta
+        else:
+            normal_docs.append(doc)
+            normal_metas.append(meta)
+
+    # Nếu không có trong kết quả → lấy thủ công
+    if not rule_doc:
+        data = coll.get(ids=[BOT_RULE_ID], include=["documents", "metadatas"])
+        if data["documents"]:
+            rule_doc = data["documents"][0]
+            rule_meta = data["metadatas"][0]
+
+    # Ghép lại: rule luôn đầu
+    final_docs = []
+    final_metas = []
+
+    if rule_doc:
+        final_docs.append(rule_doc)
+        final_metas.append(rule_meta or {"source": "BOT_RULE", "priority": 999999})
+
+    final_docs.extend(normal_docs[:(n_results-1)])
+    final_metas.extend(normal_metas[:(n_results-1)])
+
+    elapsed = time.time() - start
+    cache_info = query_documents.cache_info()
+    print(f"QUERY | {elapsed:.3f}s | {len(final_docs)} results | Rule: INJECTED | Cache: {cache_info.hits}/{cache_info.hits + cache_info.misses}")
+
+    return final_docs, final_metas
+
+# ===================================================================
+# 5. HỖ TRỢ
+# ===================================================================
+def reset_vectorstore():
+    """Xóa sạch collection + reset BM25 – dùng khi reload toàn bộ docs"""
+    client.delete_collection("markdown_docs")
+    global _bm25, _all_docs_tokenized, _all_ids, _last_doc_count
+    _bm25 = None
+    _all_docs_tokenized = []
+    _all_ids = []
+    _last_doc_count = -1
+    print("Vector store đã được reset!")
+    inject_bot_rule()  # rule sống lại ngay lập tức
+
+def get_all_documents():
+    """Lấy toàn bộ document + metadata hiện có – dùng debug/export"""
+    coll = get_collection()
+    data = coll.get(include=["documents", "metadatas"])
+    if "ids" not in data or not data["ids"]:
+        data["ids"] = [f"unknown_{i}" for i in range(len(data["documents"]))]
+    return data
+
+# Warm-up + đảm bảo rule có mặt
+if get_collection().count() > 0:
+    query_documents("startup warm", 1)
+
+print("Vectorstore ready – bot-rule luôn top 1 – chiến thôi!")
+
+
+
+Tiếng Trung: Hidemium 中的 API 是什么？
+Tiếng Nga: Что такое API в Hidemium?
+你错了, Hidemium的API是什么？
+
+
+
+
+
+
+
+
+
+## 🧠 Contextual Responses
+
+- If the user shows **confusion or frustration**, proactively ask follow-up questions and explain gently and empathetically.
+- If the user **gives compliments or thanks**, respond positively but not excessively.
+- If the user shares **a differing opinion**, respect it and avoid arguing.
+
+
+
+
+ctrl + shift + p:
+Thunder Client: New Request
+
+
+ssh hieu@192.168.254.136
+123456a@
+curl ifconfig.me xem ip máy
+
+
+
+
+chatbot.hachitechsolution.com {
+    reverse_proxy bot:8000 {
+        transport http {
+            max_request_body_size 100MB
+        }
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+
+www.chatbot.hachitechsolution.com {
+    redir https://chatbot.hachitechsolution.com{uri}
+}
+
+
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.11.0
+attrs==25.4.0
+backoff==2.2.1
+bcrypt==5.0.0
+build==1.3.0
+cachetools==6.2.2
+certifi==2025.11.12
+charset-normalizer==3.4.4
+chromadb==1.3.5
+click==8.3.1
+colorama==0.4.6
+coloredlogs==15.0.1
+distro==1.9.0
+durationpy==0.10
+fastapi==0.122.0
+filelock==3.20.0
+flatbuffers==25.9.23
+fsspec==2025.10.0
+google-ai-generativelanguage==0.6.15
+google-api-core==2.28.1
+google-api-python-client==2.187.0
+google-auth==2.43.0
+google-auth-httplib2==0.2.1
+google-generativeai==0.8.5
+googleapis-common-protos==1.72.0
+grpcio==1.76.0
+grpcio-status==1.71.2
+h11==0.16.0
+httpcore==1.0.9
+httplib2==0.31.0
+httptools==0.7.1
+httpx==0.28.1
+huggingface-hub==0.36.0
+humanfriendly==10.0
+idna==3.11
+importlib_metadata==8.7.0
+importlib_resources==6.5.2
+Jinja2==3.1.6
+joblib==1.5.2
+jsonschema==4.25.1
+jsonschema-specifications==2025.9.1
+kubernetes==34.1.0
+Markdown==3.10
+markdown-it-py==4.0.0
+MarkupSafe==3.0.3
+mdurl==0.1.2
+mmh3==5.2.0
+mpmath==1.3.0
+networkx==3.6
+numpy==2.3.5
+oauthlib==3.3.1
+onnxruntime==1.23.2
+opentelemetry-api==1.38.0
+opentelemetry-exporter-otlp-proto-common==1.38.0
+opentelemetry-exporter-otlp-proto-grpc==1.38.0
+opentelemetry-proto==1.38.0
+opentelemetry-sdk==1.38.0
+opentelemetry-semantic-conventions==0.59b0
+orjson==3.11.4
+overrides==7.7.0
+packaging==25.0
+pillow==12.0.0
+posthog==5.4.0
+proto-plus==1.26.1
+protobuf==5.29.5
+pyasn1==0.6.1
+pyasn1_modules==0.4.2
+pybase64==1.4.2
+pydantic==2.12.4
+Pygments==2.19.2
+pyparsing==3.2.5
+PyPika==0.48.9
+pyproject_hooks==1.2.0
+pyreadline3==3.5.4
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.1
+python-multipart==0.0.20
+PyYAML==6.0.3
+rank-bm25==0.2.2
+redis==7.1.0
+referencing==0.37.0
+regex==2025.11.3
+requests==2.32.5
+requests-oauthlib==2.0.0
+rich==14.2.0
+rpds-py==0.29.0
+rsa==4.9.1
+safetensors==0.7.0
+scikit-learn==1.7.2
+scipy==1.16.3
+sentence-transformers==5.1.2
+setuptools==80.9.0
+shellingham==1.5.4
+six==1.17.0
+sniffio==1.3.1
+starlette==0.50.0
+sympy==1.14.0
+uvicorn[standard]
+tenacity==9.1.2
+threadpoolctl==3.6.0
+tokenizers==0.22.1
+torch==2.9.1
+tqdm==4.67.1
+transformers==4.57.3
+typer==0.20.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+uritemplate==4.2.0
+urllib3==2.3.0
+watchfiles==1.1.1
+websocket-client==1.9.0
+websockets==15.0.1
+zipp==3.23.0
+slowapi==0.1.9
+tiktoken 
+itsdangerous
+PyJWT==2.7.0

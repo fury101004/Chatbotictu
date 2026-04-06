@@ -1,0 +1,1094 @@
+﻿{% extends "layouts/base.html" %}
+{% block title %}Chat với Hidemium AI – 2025{% endblock %}
+
+{% block content %}
+<div class="chat-wrapper">
+    <!-- Background gradient theo tông màu -->
+    <div class="bg-gradient"></div>
+    
+    <!-- Chat Container -->
+    <div class="chat-container">
+        <!-- Header tối giản -->
+        <div class="chat-header">
+            <div class="header-content">
+                <div class="ai-info">
+                    <div class="ai-badge">
+                        <span>AI</span>
+                    </div>
+                    <div class="ai-text">
+                        <h2>Hidemium AI</h2>
+                        <div class="status">
+                            <span class="status-dot"></span>
+                            <span id="typing" class="status-text">Đang online</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="action-btn" title="Cài đặt">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M19.4 15C19.2663 15.303 19.216 15.6363 19.2545 15.9645L20.2545 19.9645C20.3288 20.5308 19.8616 21 19.2899 21H4.7101C4.13845 21 3.67121 20.5308 3.74547 19.9645L4.74547 15.9645C4.784 15.6363 4.73374 15.303 4.60001 15C4.46627 14.697 4.25435 14.436 3.98701 14.2455L1.08701 12.2455C0.593012 11.903 0.593012 11.097 1.08701 10.7545L3.98701 8.75451C4.25435 8.56395 4.46627 8.303 4.60001 8C4.73374 7.697 4.784 7.36373 4.74547 7.03554L3.74547 3.03554C3.67121 2.46917 4.13845 2 4.7101 2H19.2899C19.8616 2 20.3288 2.46917 20.2545 3.03554L19.2545 7.03554C19.216 7.36373 19.2663 7.697 19.4 8C19.5337 8.303 19.7457 8.56395 20.013 8.75451L22.913 10.7545C23.407 11.097 23.407 11.903 22.913 12.2455L20.013 14.2455C19.7457 14.436 19.5337 14.697 19.4 15Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages Area -->
+        <div class="messages-container">
+            <div class="messages" id="messages">
+                <!-- Welcome Message -->
+                <div class="welcome-section">
+                    <div class="welcome-avatar">
+                        <span>AI</span>
+                    </div>
+                    <div class="welcome-content">
+                        <h3>Xin chào bro!</h3>
+                        <p>Mình ở đây, hỏi gì cũng rep chuẩn chỉnh, không vòng vo</p>
+                    </div>
+                </div>
+                <!-- Tin nhắn sẽ được thêm bằng JS -->
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-section">
+            <div class="input-container">
+                <form id="chatForm" class="message-form">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="userInput" 
+                            rows="1"
+                            placeholder="Hỏi mình đi..." 
+                            autocomplete="off" 
+                            autofocus
+                        ></textarea>
+                        <div class="input-actions">
+                            <button type="button" class="action-icon" title="Gửi file">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                    <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M12 18V12" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M9 15H15" stroke="currentColor" stroke-width="1.5"/>
+                                </svg>
+                            </button>
+                            <button type="submit" id="sendBtn" class="send-button">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="input-footer">
+                        <span class="hint-text">Enter để gửi • Shift + Enter để xuống dòng</span>
+                        <span id="charCount" class="char-count">0/1000</span>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Button -->
+    <div id="floating-cskh" class="floating-btn" style="display:none;">
+        <div class="floating-pulse"></div>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+            <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z"/>
+        </svg>
+        <span class="floating-badge">!</span>
+    </div>
+</div>
+
+<script>
+// ==================== GIỮ NGUYÊN CHỨC NĂNG CSKH + WEBSOCKET ====================
+let ws = null;
+window.cskhConnected = false;
+
+function safeParse(data) {
+    if (typeof data === "object") return data;
+    try { return JSON.parse(data); } catch { return { message: data }; }
+}
+
+window.connectToCSKH = function(sessionId, firstMessage) {
+    if (window.cskhConnected) return;
+    window.cskhConnected = true;
+
+    document.getElementById("userInput").placeholder = "Đang chat với nhân viên...";
+    document.getElementById("typing").textContent = "Nhân viên đang gõ...";
+
+    const protocol = location.protocol === "https:" ? "wss://" : "ws://";
+    ws = new WebSocket(`${protocol}${location.host}/ws-customer/${sessionId}`);
+
+    ws.onopen = () => addMessage("user", firstMessage, "Bạn");
+
+    ws.onmessage = (e) => {
+        const data = safeParse(e.data);
+        if (data.from === "cskh" || data.trigger_floating === true) {
+            if (navigator.vibrate) navigator.vibrate([200]);
+            new Audio('https://assets.mixkit.co/sfx/preview/mixkit-message-pop-alert-2354.mp3').play().catch(()=>{});
+            addMessage("bot", data.message || data, "CSKH", "#00ff88");
+            showFloating();
+            document.getElementById("typing").textContent = "Nhân viên online";
+        }
+    };
+
+    ws.onclose = () => {
+        window.cskhConnected = false;
+        ws = null;
+        addMessage("system", "Nhân viên đã rời phòng. Hidemium AI tiếp tục hỗ trợ!", "Hệ thống");
+        document.getElementById("typing").textContent = "Đang online";
+        document.getElementById("userInput").placeholder = "Hỏi đại ca đi...";
+    };
+
+    window.sendToCSKH = (msg) => {
+        if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(msg);
+            addMessage("user", msg, "Bạn");
+        }
+    };
+};
+
+function showFloating() {
+    const btn = document.getElementById("floating-cskh");
+    const area = document.getElementById("messages");
+    const isNearBottom = area.scrollHeight - area.clientHeight <= area.scrollTop + 150;
+    if (isNearBottom) return;
+
+    btn.style.display = "flex";
+    setTimeout(() => btn.style.opacity = "1", 10);
+    
+    const hide = () => {
+        btn.style.opacity = "0";
+        setTimeout(() => btn.style.display = "none", 300);
+    };
+    
+    btn.onclick = () => {
+        area.scrollTop = area.scrollHeight;
+        hide();
+    };
+    
+    area.addEventListener("scroll", function check() {
+        if (area.scrollHeight - area.clientHeight <= area.scrollTop + 50) {
+            hide();
+            area.removeEventListener("scroll", check);
+        }
+    });
+}
+
+function addMessage(sender, text, name = "Hidemium AI", bgColor = null) {
+    const container = document.getElementById("messages");
+    const msgElement = document.createElement("div");
+    msgElement.className = `message ${sender}`;
+    
+    const timestamp = new Date().toLocaleTimeString('vi-VN', { 
+        hour: '2-digit', 
+        minute: '2-digit'
+    });
+    
+    const html = String(text || "")
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>')
+    .replace(
+        /(https?:\/\/[^\s<]+[^\s<.,;:!?])/g,
+        '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+    
+    msgElement.innerHTML = `
+        <div class="message-header">
+            <span class="sender-name">${name}</span>
+            <span class="message-time">${timestamp}</span>
+        </div>
+        <div class="message-content">${html}</div>
+    `;
+    
+    if (bgColor) {
+        msgElement.style.borderLeft = `3px solid ${bgColor}`;
+    }
+    
+    container.appendChild(msgElement);
+    container.scrollTop = container.scrollHeight;
+}
+
+// Xử lý form submit
+document.getElementById("chatForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("userInput");
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    if (window.cskhConnected && window.sendToCSKH) {
+        window.sendToCSKH(msg);
+        input.value = "";
+        updateCharCount(0);
+        return;
+    }
+
+    addMessage("user", msg, "Bạn");
+    input.value = "";
+    updateCharCount(0);
+    input.disabled = true;
+
+    const thinking = document.createElement("div");
+    thinking.className = "message bot thinking";
+    thinking.innerHTML = `
+        <div class="thinking-indicator">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+        <span class="thinking-text">Mình đang nghĩ...</span>
+    `;
+    document.getElementById("messages").appendChild(thinking);
+
+    try {
+        const res = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ message: msg })
+        });
+        const data = await res.json();
+        thinking.remove();
+
+        if (data.is_cskh) {
+            document.getElementById("messages").insertAdjacentHTML("beforeend", data.response || "");
+            if (data.session_id) window.connectToCSKH(data.session_id, msg);
+            showFloating();
+            return;
+        }
+
+        if (data.response) addMessage("bot", data.response, "Hidemium AI");
+    } catch (err) {
+        thinking.remove();
+        addMessage("system", "Mạng lag rồi đại ca ơi, thử lại đi!", "Hệ thống");
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+};
+
+// Character counter
+function updateCharCount(length) {
+    const charCount = document.getElementById('charCount');
+    charCount.textContent = `${length}/1000`;
+    
+    if (length > 900) {
+        charCount.style.color = '#ff4757';
+    } else if (length > 700) {
+        charCount.style.color = '#feca57';
+    } else {
+        charCount.style.color = '#666';
+    }
+}
+
+// Textarea auto-resize và xử lý phím
+const userInput = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+
+userInput.addEventListener('input', function() {
+    // Auto resize
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    
+    // Character count
+    const length = this.value.length;
+    updateCharCount(length);
+    
+    // Send button state
+    if (this.value.trim().length > 0) {
+        sendBtn.classList.add('active');
+        sendBtn.disabled = false;
+    } else {
+        sendBtn.classList.remove('active');
+        sendBtn.disabled = true;
+    }
+});
+
+// Handle keyboard shortcuts
+userInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (this.value.trim().length > 0) {
+            document.getElementById('chatForm').dispatchEvent(new Event('submit'));
+        }
+    }
+});
+
+// Khởi tạo
+updateCharCount(0);
+sendBtn.disabled = true;
+
+// Focus input on load
+setTimeout(() => {
+    userInput.focus();
+}, 100);
+</script>
+
+<style>
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono&display=swap');
+
+* { 
+    margin: 0; 
+    padding: 0; 
+    box-sizing: border-box; 
+}
+
+/* Phối hợp giữa cuộn trang và cuộn nội dung chat */
+/* Sửa phần CSS cuộn */
+
+/* Tắt cuộn body khi không cần thiết */
+body {
+    font-family: 'Inter', sans-serif;
+    background: #0f0f1a;
+    color: #e0e0ff;
+    overflow-y: auto; /* Thay scroll bằng auto */
+    margin: 0;
+    padding: 0;
+}
+
+.chat-wrapper {
+    min-height: 100vh;
+    position: relative;
+}
+
+.chat-container {
+    min-height: 100vh;
+    max-width: 1200px;
+    margin: 0 auto;
+    background: rgba(15, 15, 26, 0.95);
+    backdrop-filter: blur(10px);
+    border-left: 1px solid #333;
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Phần header cố định */
+.chat-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(15, 15, 26, 0.95);
+    border-bottom: 1px solid #333;
+    padding: 1rem 1.5rem;
+}
+
+/* Messages container chiếm không gian còn lại */
+.messages-container {
+    flex: 1;
+    overflow-y: auto; /* Chỉ cho phép cuộn ở đây */
+    min-height: 0; /* Quan trọng cho flex scroll */
+}
+
+.messages {
+    min-height: 100%; /* Đảm bảo chiếm đủ chiều cao */
+    padding: 1.5rem;
+    box-sizing: border-box;
+}
+
+/* Input section cố định dưới cùng */
+.input-section {
+    position: sticky;
+    bottom: 0;
+    background: rgba(26, 26, 46, 0.9);
+    border-top: 1px solid #333;
+    padding: 1rem 1.5rem;
+    z-index: 10;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .chat-container {
+        min-height: 100vh;
+        border-left: none;
+        border-right: none;
+    }
+    
+    .chat-header {
+        padding: 0.75rem 1rem;
+    }
+    
+    .messages-container {
+        /* Giảm chiều cao cho mobile */
+        max-height: calc(100vh - 140px);
+    }
+    
+    .input-section {
+        padding: 0.75rem 1rem;
+    }
+}
+
+/* Custom scrollbar cho messages container */
+.messages-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+    background: #00ff88;
+    border-radius: 3px;
+    opacity: 0.3;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+    opacity: 0.5;
+}
+
+/* Đảm bảo tin nhắn mới luôn hiển thị */
+.messages {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: auto;
+}
+.message-content a {
+    color: #00ff88 !important;
+    text-decoration: underline;
+    font-weight: 600;
+    word-break: break-all;                    /* Dài quá thì xuống dòng */
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.message-content a:hover {
+    color: #00ffff !important;
+    text-decoration: none;
+    background: rgba(0, 255, 136, 0.15);
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
+/* Mở link trong tab mới (an toàn + không thoát chat) */
+.message-content a[target="_blank"]::after {
+    content: " ↗";
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+/* Welcome section */
+.welcome-section {
+    margin-top: auto; /* Đẩy welcome lên trên nếu ít tin nhắn */
+    padding: 2rem 1rem;
+}
+
+/* Thêm padding cho tin nhắn cuối */
+.messages::after {
+    content: '';
+    display: block;
+    height: 1rem;
+    flex-shrink: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .chat-container {
+        min-height: 100vh;
+        border-left: none;
+        border-right: none;
+    }
+    
+    .messages-container {
+        max-height: calc(100vh - 160px);
+    }
+}
+
+.bg-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(0, 255, 136, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(0, 210, 255, 0.05) 0%, transparent 50%);
+    z-index: -1;
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ai-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.ai-badge {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #00ff88, #00ffff);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0f0f1a;
+    font-weight: 700;
+    font-size: 14px;
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+.ai-text h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 2px;
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    background: #00ff88;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #00ff88;
+    animation: pulse 2s infinite;
+}
+
+.status-text {
+    font-size: 0.75rem;
+    color: #aaa;
+    font-weight: 500;
+}
+
+.header-actions .action-btn {
+    width: 40px;
+    height: 40px;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 10px;
+    color: #aaa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.header-actions .action-btn:hover {
+    background: #16213e;
+    color: white;
+    border-color: #00ff88;
+}
+
+/* Messages container */
+.messages-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+
+.messages {
+    height: 100%;
+    overflow-y: auto;
+    padding: 1.5rem;
+    scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+.messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.messages::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.messages::-webkit-scrollbar-thumb {
+    background: #00ff88;
+    border-radius: 3px;
+    opacity: 0.3;
+}
+
+.messages::-webkit-scrollbar-thumb:hover {
+    opacity: 0.5;
+}
+
+/* Welcome section */
+.welcome-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 2rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.welcome-avatar {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #00ff88, #00ffff);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+}
+
+.welcome-avatar span {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #0f0f1a;
+}
+
+.welcome-content h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 0.5rem;
+}
+
+.welcome-content p {
+    color: #aaa;
+    font-size: 0.95rem;
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+/* Message styles */
+.message {
+    max-width: 70%;
+    margin-bottom: 1rem;
+    padding: 1rem 1.25rem;
+    border-radius: 14px;
+    animation: messageAppear 0.3s ease-out;
+    position: relative;
+    word-wrap: break-word;
+    line-height: 1.5;
+    font-size: 0.95rem;
+}
+
+.message.user {
+    margin-left: auto;
+    background: linear-gradient(135deg, #00ff88, #00ffff);
+    color: #0f0f1a;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 4px 15px rgba(0, 255, 136, 0.2);
+}
+
+.message.bot {
+    margin-right: auto;
+    background: #1a1a2e;
+    color: #e0e0ff;
+    border: 1px solid #333;
+    border-left: 3px solid #00ff88;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.message.system {
+    max-width: 80%;
+    margin: 1rem auto;
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    text-align: center;
+    border: 1px solid rgba(255, 107, 107, 0.2);
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+}
+
+.message.thinking {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1.25rem;
+}
+
+.thinking-indicator {
+    display: flex;
+    gap: 4px;
+}
+
+.thinking-indicator .dot {
+    width: 8px;
+    height: 8px;
+    background: #00ff88;
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite ease-in-out;
+}
+
+.thinking-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
+.thinking-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
+
+.thinking-text {
+    color: #aaa;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.7rem;
+}
+
+.sender-name {
+    font-weight: 600;
+    color: #fff;
+    opacity: 0.9;
+}
+
+.message-time {
+    color: #666;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.message-content {
+    line-height: 1.6;
+}
+
+.message-content strong {
+    color: #00ff88;
+    font-weight: 600;
+}
+
+.message-content em {
+    color: #00ffff;
+    font-style: italic;
+}
+
+/* Input section */
+.input-section {
+    padding: 1rem 1.5rem;
+    background: rgba(26, 26, 46, 0.9);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid #333;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.input-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.input-wrapper {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    background: #1a1a2e;
+    border: 2px solid #333;
+    border-radius: 16px;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.input-wrapper:focus-within {
+    border-color: #00ff88;
+    box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.1);
+}
+
+#userInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #e0e0ff;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    resize: none;
+    min-height: 24px;
+    max-height: 100px;
+    outline: none;
+    font-family: 'Inter', sans-serif;
+    padding: 0.25rem 0;
+}
+
+#userInput::placeholder {
+    color: #666;
+}
+
+.input-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.action-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid #333;
+    color: #666;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.action-icon:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #aaa;
+    border-color: #00ff88;
+}
+
+.send-button {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #333;
+    border: 2px solid #333;
+    color: #666;
+    cursor: not-allowed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.send-button.active {
+    background: linear-gradient(135deg, #00ff88, #00ffff);
+    border-color: transparent;
+    color: #0f0f1a;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+}
+
+.send-button:hover.active {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 255, 136, 0.4);
+}
+
+.input-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    padding: 0 0.5rem;
+}
+
+.hint-text {
+    font-size: 0.75rem;
+    color: #666;
+    font-family: 'Inter', sans-serif;
+}
+
+.char-count {
+    font-size: 0.75rem;
+    font-family: 'Roboto Mono', monospace;
+    color: #666;
+    transition: all 0.3s ease;
+}
+
+/* Floating button */
+.floating-btn {
+    position: fixed;
+    bottom: 100px;
+    right: 30px;
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, #00ff88, #00ffff);
+    border-radius: 16px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(0, 255, 136, 0.4);
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    animation: float 3s ease-in-out infinite;
+}
+
+.floating-pulse {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    background: inherit;
+    animation: pulseRing 2s ease-out infinite;
+    opacity: 0.6;
+}
+
+.floating-btn svg {
+    position: relative;
+    z-index: 2;
+}
+
+.floating-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 22px;
+    height: 22px;
+    background: #ff4757;
+    border-radius: 50%;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: bounce 2s infinite;
+}
+
+/* Animations */
+@keyframes messageAppear {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+@keyframes typingBounce {
+    0%, 80%, 100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+@keyframes pulseRing {
+    0% {
+        transform: scale(1);
+        opacity: 0.6;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-4px);
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .chat-container {
+        border-left: none;
+        border-right: none;
+    }
+    
+    .chat-header {
+        padding: 0.75rem 1rem;
+    }
+    
+    .ai-badge {
+        width: 36px;
+        height: 36px;
+        font-size: 13px;
+    }
+    
+    .ai-text h2 {
+        font-size: 1.1rem;
+    }
+    
+    .messages {
+        padding: 1rem;
+    }
+    
+    .message {
+        max-width: 85%;
+        font-size: 0.9rem;
+        padding: 0.75rem 1rem;
+    }
+    
+    .welcome-section {
+        padding: 1.5rem 1rem;
+    }
+    
+    .welcome-avatar {
+        width: 56px;
+        height: 56px;
+    }
+    
+    .welcome-content h3 {
+        font-size: 1.3rem;
+    }
+    
+    .input-section {
+        padding: 0.75rem 1rem;
+    }
+    
+    .input-wrapper {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .send-button {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+    }
+    
+    .floating-btn {
+        width: 52px;
+        height: 52px;
+        bottom: 90px;
+        right: 20px;
+        border-radius: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .message {
+        max-width: 90%;
+    }
+    
+    .welcome-content p {
+        font-size: 0.85rem;
+    }
+    
+    .input-footer {
+        flex-direction: column;
+        gap: 0.25rem;
+        align-items: flex-start;
+    }
+    
+    .floating-btn {
+        width: 48px;
+        height: 48px;
+        bottom: 80px;
+        right: 15px;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,189 @@
+﻿{% extends "layouts/base.html" %}
+{% block title %}CSKH Live – Tu Tiên Doanh Nghiệp 2025{% endblock %}
+
+{% block content %}
+<div class="cskh-wrapper">
+    <div class="cskh-header">
+        <h1>
+            <span class="icon">CSKH</span> CSKH LIVE SUPPORT
+            <span class="badge" id="count">0</span> khách đang chờ
+        </h1>
+        <p class="subtitle">Nhân viên chăm sóc khách hàng – Hệ Thống Tu Tiên Doanh Nghiệp 2025</p>
+    </div>
+
+    <div class="cskh-body">
+        <div class="sidebar">
+            <h2><span>Khách đang chờ</span></h2>
+            <div id="customers" class="customer-list">
+                <div class="empty-state">
+                    <p>Chưa có khách nào cần hỗ trợ</p>
+                    <p>Uống trà chờ đạo hữu giá lâm thôi</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-chat">
+            <div class="chat-header" id="chat-header">
+                <span>Chọn một khách để bắt đầu hỗ trợ</span>
+            </div>
+
+            <div id="chat" class="chat-messages">
+                <div class="welcome-msg">
+                    <p>Chào mừng đại hiệp đã đến với Thiên Cơ Các</p>
+                    <p>Chọn đạo hữu bên trái để hộ đạo</p>
+                </div>
+            </div>
+
+            <div class="chat-input">
+                <input type="text" id="msg" placeholder="Gõ tin nhắn trả lời khách (Enter để gửi)" autocomplete="off">
+                <button onclick="send()" id="sendBtn">Gửi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============== WEBSOCKET CSKH – ĐÃ FIX KHÔNG NGẮT NỮA ==============
+let currentSession = null;
+let ws;
+
+function connectWS() {
+    ws = new WebSocket(`ws://${location.host}/ws-cskh`);
+
+    ws.onopen = () => {
+        console.log("CSKH WebSocket đã kết nối HOÀN HẢO");
+    };
+
+    ws.onmessage = function(e) {
+        const d = JSON.parse(e.data);
+
+        if (d.type === "new_customer") {
+            addCustomer(d.session_id, d.message);
+            playNotify();
+        }
+        else if (d.type === "message" && d.session_id === currentSession) {
+            addMessage(d.message, "customer");
+        }
+        else if (d.type === "count") {
+            document.getElementById("count").textContent = d.count;
+            document.querySelector(".empty-state").style.display = d.count == 0 ? "block" : "none";
+        }
+    };
+
+    ws.onclose = () => {
+        console.log("CSKH WebSocket bị ngắt → TỰ ĐỘNG KẾT NỐI LẠI SAU 2 GIÂY");
+        setTimeout(connectWS, 2000); // QUAN TRỌNG NHẤT: TỰ ĐỘNG KẾT NỐI LẠI!
+    };
+
+    ws.onerror = (err) => {
+        console.error("CSKH WS lỗi:", err);
+    };
+}
+
+connectWS(); // GỌI NGAY KHI MỞ TRANG
+
+// Thêm khách
+function addCustomer(session_id, firstMsg) {
+    const list = document.getElementById("customers");
+    const empty = list.querySelector(".empty-state");
+    if (empty) empty.style.display = "none";
+
+    const div = document.createElement("div");
+    div.className = "customer-item";
+    div.dataset.id = session_id;
+    div.innerHTML = `
+        <div class="cust-info">
+            <strong>Khách ${session_id.slice(-6)}</strong>
+            <span class="time">Vừa xong</span>
+        </div>
+        <div class="preview">${firstMsg.substring(0,60)}${firstMsg.length > 60 ? "..." : ""}</div>
+    `;
+
+    div.onclick = () => {
+        document.querySelectorAll(".customer-item").forEach(c => c.classList.remove("active"));
+        div.classList.add("active");
+        currentSession = session_id;
+        document.getElementById("chat-header").innerHTML = `<strong>Đang chat với Khách ${session_id.slice(-6)}</strong>`;
+        document.getElementById("chat").innerHTML = `<div class="msg customer">${firstMsg}</div>`;
+    };
+
+    list.prepend(div);
+    if (!currentSession) div.click();
+}
+
+// Thêm tin nhắn
+function addMessage(text, from) {
+    const chat = document.getElementById("chat");
+    const div = document.createElement("div");
+    div.className = `msg ${from}`;
+    div.textContent = text;
+    chat.appendChild(div);
+    div.scrollIntoView({ behavior: "smooth" });
+}
+
+// Gửi tin nhắn
+function send() {
+    const input = document.getElementById("msg");
+    const text = input.value.trim();
+    if (!text || !currentSession || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    ws.send(JSON.stringify({
+        type: "reply",
+        session_id: currentSession,
+        message: text
+    }));
+
+    addMessage(text, "cskh");
+    input.value = "";
+}
+
+// Enter để gửi
+document.getElementById("msg").addEventListener("keypress", e => {
+    if (e.key === "Enter") send();
+});
+
+// Âm thanh thông báo
+function playNotify() {
+    new Audio("https://assets.mixkit.co/sfx/preview/mixkit-bell-notification-933.mp3").play().catch(()=>{});
+}
+</script>
+
+<style>
+.cskh-wrapper{max-width:1600px;margin:2rem auto;padding:0 1rem;}
+.cskh-header{text-align:center;margin-bottom:3rem;}
+.cskh-header h1{font-size:3.5rem;font-weight:900;background:linear-gradient(90deg,#8b5cf6,#ec4899,#10b981);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.cskh-header .icon{font-size:4rem;margin-right:1rem;}
+.cskh-header .badge{background:#ef4444;color:white;padding:0.5rem 1.2rem;border-radius:50px;font-size:1.3rem;font-weight:bold;}
+.subtitle{color:#94a3b8;font-size:1.3rem;margin-top:1rem;}
+
+.cskh-body{display:grid;grid-template-columns:380px 1fr;gap:2rem;height:80vh;}
+.sidebar{background:#1e293b;border-radius:20px;padding:1.5rem;box-shadow:0 10px 30px rgba(0,0,0,0.6);display:flex;flex-direction:column;}
+.sidebar h2{color:#8b5cf6;margin:0 0 1rem 0;font-size:1.5rem;}
+.sidebar h2 span{background:linear-gradient(90deg,#8b5cf6,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.customer-list{flex:1;overflow-y:auto;padding-right:10px;}
+.customer-item{background:#2d3748;padding:1rem;margin-bottom:1rem;border-radius:16px;cursor:pointer;transition:all .3s;border-left:5px solid transparent;}
+.customer-item:hover{background:#374151;transform:translateY(-3px);}
+.customer-item.active{border-left:5px solid #10b981;background:#172436;box-shadow:0 0 20px rgba(16,185,129,0.4);}
+.cust-info{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;}
+.cust-info strong{color:#60a5fa;}
+.time{color:#94a3b8;font-size:.8rem;}
+.preview{color:#cbd5e1;font-size:.95rem;}
+.empty-state{text-align:center;color:#64748b;margin-top:100px;}
+
+.main-chat{background:#1e293b;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,0.7);}
+.chat-header{background:linear-gradient(135deg,#8b5cf6,#ec4899);color:white;padding:1.5rem;font-size:1.4rem;font-weight:bold;text-align:center;}
+.chat-messages{flex:1;padding:2rem;overflow-y:auto;background:#0f172a;}
+.welcome-msg{text-align:center;color:#94a3b8;font-size:1.3rem;line-height:2;}
+.msg{max-width:75%;margin:15px 0;padding:14px 18px;border-radius:20px;line-height:1.6;animation:fadeIn .4s;}
+.msg.customer{background:#3b82f6;color:white;margin-left:auto;border-bottom-right-radius:6px;}
+.msg.cskh{background:#10b981;color:white;margin-right:auto;border-bottom-left-radius:6px;}
+.chat-input{padding:1.5rem;background:#1e293b;border-top:1px solid #334155;display:flex;gap:1rem;}
+.chat-input input{flex:1;padding:16px 20px;background:#2d3748;border:none;border-radius:16px;color:white;font-size:1.1rem;}
+.chat-input input:focus{outline:2px solid #8b5cf6;}
+.chat-input button{padding:0 40px;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:white;border:none;border-radius:16px;font-weight:bold;cursor:pointer;}
+.chat-input button:hover{transform:scale(1.05);}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+@media(max-width:992px){.cskh-body{grid-template-columns:1fr;height:auto;}.sidebar{max-height:300px;}}
+</style>
+{% endblock %}

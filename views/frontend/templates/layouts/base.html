@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Tro ly ao Hidemium{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/global.css">
+    {% block page_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="nav-btn">Home</a>
+        <a href="/chat" class="nav-btn">Chat</a>
+        <a href="/data-loader" class="nav-btn">Upload MD</a>
+        <a href="/vector-manager" class="nav-btn">Vector Store</a>
+        <a href="/config" class="nav-btn">Config</a>
+        <a href="/history" class="nav-btn history">Lich Su Chat</a>
+    </nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block page_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,937 @@
+﻿{% extends "layouts/base.html" %}
+{% block title %}LỊCH SỬ TRÒ CHUYỆN{% endblock %}
+
+{% block content %}
+<div class="history-page">
+
+    <!-- Header -->
+    <div class="page-header">
+        <h1 class="hero-title">📜 LỊCH SỬ TRÒ CHUYỆN</h1>
+        <p class="hero-subtitle">Tất cả cuộc trò chuyện giữa bạn và AI</p>
+    </div>
+
+    <div class="history-grid">
+
+        <!-- CỘT TRÁI: LỊCH SỬ CHAT -->
+        <div class="panel chat-panel">
+            <div class="panel-header">
+                <div class="header-content">
+                    <h2><i class="fas fa-comments yellow"></i> Lịch sử Chat</h2>
+                    <div class="conversation-info">
+                        <div class="user-badge">
+                            <span class="user-avatar">👤</span>
+                            <span class="orange">Bạn</span>
+                        </div>
+                        <div class="ai-badge">
+                            <span class="ai-avatar">🤖</span>
+                            <span class="teal">AI Assistant</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <i class="fas fa-message purple"></i>
+                        <span>{{ history|length }} tin</span>
+                    </div>
+                    <div class="page-info">
+                        <i class="fas fa-file yellow"></i>
+                        <span>Trang {{ page }} / {{ total_pages }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="messages-container">
+                {% if history|length == 0 %}
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-comment-slash"></i>
+                    </div>
+                    <h3>Chưa có lịch sử trò chuyện</h3>
+                    <p>Bắt đầu trò chuyện với AI để tạo lịch sử!</p>
+                    <a href="/chat" class="btn-large red">
+                        <i class="fas fa-comment"></i> Chat ngay
+                    </a>
+                </div>
+                {% else %}
+                {% for msg in history %}
+                <div class="message {{ 'user' if msg.role == 'user' else 'ai' }}">
+                    <div class="message-content">
+                        <div class="message-header">
+                            <div class="message-sender">
+                                {% if msg.role == 'user' %}
+                                <div class="sender-badge user">
+                                    <div class="avatar-circle user-avatar orange-bg">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    <span class="sender-name orange">Bạn</span>
+                                </div>
+                                {% else %}
+                                <div class="sender-badge ai">
+                                    <div class="avatar-circle ai-avatar teal-bg">
+                                        <i class="fas fa-robot"></i>
+                                    </div>
+                                    <span class="sender-name teal">AI Assistant</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="message-time">
+                                <i class="far fa-clock"></i>
+                                <span>{{ msg.time }}</span>
+                            </div>
+                        </div>
+                        <div class="message-body">
+                            {{ msg.content | replace("\n", "<br>") | safe }}
+                        </div>
+                        <div class="message-footer">
+                            {% if msg.role == 'user' %}
+                            <span class="message-tag orange-tag">Người dùng</span>
+                            {% else %}
+                            <span class="message-tag teal-tag">AI trả lời</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+
+            <!-- Phân trang -->
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                <div class="pagination-info">
+                    <span>Hiển thị {{ history|length }} tin nhắn</span>
+                </div>
+                <div class="pagination-controls">
+                    {% if has_prev %}
+                    <a href="?page={{ page - 1 }}" class="page-link prev purple">
+                        <i class="fas fa-chevron-left"></i> Trước
+                    </a>
+                    {% endif %}
+
+                    <div class="page-numbers">
+                        {% for p in range(1, total_pages + 1) %}
+                            {% if p >= page - 2 and p <= page + 2 %}
+                                {% if p == page %}
+                                <span class="page-link current teal-bg">{{ p }}</span>
+                                {% else %}
+                                <a href="?page={{ p }}" class="page-link">{{ p }}</a>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if total_pages > page + 2 %}
+                        <span class="page-dots">...</span>
+                        <a href="?page={{ total_pages }}" class="page-link">{{ total_pages }}</a>
+                        {% endif %}
+                    </div>
+
+                    {% if has_next %}
+                    <a href="?page={{ page + 1 }}" class="page-link next purple">
+                        Sau <i class="fas fa-chevron-right"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- CỘT PHẢI: FILE ĐÃ NẠP -->
+        <div class="panel files-panel">
+            <div class="panel-header">
+                <div class="header-content">
+                    <h2><i class="fas fa-file-alt purple"></i> File .md đã nạp</h2>
+                    <p class="panel-subtitle">Tài liệu AI đã học</p>
+                </div>
+                <a href="/data-loader" class="btn-upload yellow">
+                    <i class="fas fa-upload"></i> Upload mới
+                </a>
+            </div>
+
+            <div class="files-container" id="files-container">
+                {% if uploaded_files|length == 0 %}
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-folder-open"></i>
+                    </div>
+                    <h3>Chưa có file nào</h3>
+                    <p>Upload file .md để AI học thêm kiến thức!</p>
+                    <a href="/data-loader" class="btn-large purple">
+                        <i class="fas fa-upload"></i> Upload ngay
+                    </a>
+                </div>
+                {% else %}
+                <div class="files-stats">
+                    <div class="file-stat orange">
+                        <i class="fas fa-file"></i>
+                        <span>{{ uploaded_files|length }} file</span>
+                    </div>
+                    <div class="file-stat teal">
+                        <i class="fas fa-database"></i>
+                        <span>Đã nạp vào vector</span>
+                    </div>
+                </div>
+                
+                <div class="files-list">
+                    {% for f in uploaded_files %}
+                    <div class="file-item">
+                        <div class="file-icon purple-bg">
+                            <i class="fas fa-file-code"></i>
+                        </div>
+                        <div class="file-info">
+                            <div class="file-header">
+                                <h4 class="filename">{{ f.filename }}</h4>
+                                <span class="file-badge yellow">.md</span>
+                            </div>
+                            <div class="file-details">
+                                <span class="upload-time">
+                                    <i class="far fa-clock"></i> {{ f.time }}
+                                </span>
+                                <span class="file-size teal">
+                                    <i class="fas fa-hdd"></i> Đã xử lý
+                                </span>
+                            </div>
+                        </div>
+                        <div class="file-actions">
+                            <form method="post" action="/delete-file" class="delete-form">
+                                <input type="hidden" name="filename" value="{{ f.filename }}">
+                                <button type="submit" class="btn-delete red"
+                                        onclick="return confirm('Xóa file {{ f.filename }}? AI sẽ quên kiến thức từ file này!')"
+                                        title="Xóa file">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Nút điều hướng -->
+    <div class="nav-buttons bottom-actions">
+        <a href="/" class="nav-btn">
+            <i class="fas fa-home"></i> Trang chủ
+        </a>
+        <a href="/chat" class="nav-btn teal">
+            <i class="fas fa-comment-dots"></i> Chat tiếp
+        </a>
+        <a href="/vector-manager" class="nav-btn purple">
+            <i class="fas fa-brain"></i> Vector Store
+        </a>
+        <a href="/data-loader" class="nav-btn yellow">
+            <i class="fas fa-file-upload"></i> Nạp file
+        </a>
+    </div>
+</div>
+
+<style>
+/* ===== Biến màu theo style của bạn ===== */
+:root {
+    --primary-gradient: linear-gradient(90deg, #00ff88, #00ffff);
+    --user-gradient: linear-gradient(90deg, #ff6b6b, #ff8e8e);
+    --ai-gradient: linear-gradient(90deg, #4ecdc4, #6ef9f0);
+    --panel-bg: #1a1a2e;
+    --card-bg: #16213e;
+    --border-color: #333;
+    --shadow: 0 10px 30px rgba(0,255,150,0.1);
+    --text-primary: #e0e0ff;
+    --text-secondary: #aaa;
+    --text-muted: #777;
+    
+    /* Màu đặc trưng */
+    --orange: #ff6b6b;
+    --teal: #4ecdc4;
+    --purple: #a29bfe;
+    --yellow: #feca57;
+    --red: #ff4757;
+    --green: #00ff88;
+    --blue: #74b9ff;
+}
+
+/* ===== Cấu trúc chính ===== */
+.history-page { 
+    padding: 2rem; 
+    background: #0f0f1a;
+    min-height: 100vh;
+}
+
+.page-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: rgba(20, 20, 40, 0.9);
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
+
+.hero-title {
+    font-size: 3.5rem;
+    font-weight: bold;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.hero-subtitle { 
+    color: #88ffaa; 
+    font-size: 1.3rem; 
+    margin-top: 1rem;
+}
+
+.history-grid {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+@media (max-width: 1200px) {
+    .history-grid { 
+        grid-template-columns: 1fr; 
+    }
+    .files-panel { 
+        max-width: 800px; 
+        margin: 0 auto; 
+    }
+}
+
+/* ===== Panel chung ===== */
+.panel {
+    background: var(--panel-bg);
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,255,150,0.05);
+    transition: transform 0.3s;
+}
+
+.panel:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0,255,150,0.1);
+}
+
+.panel-header {
+    background: rgba(26, 26, 46, 0.9);
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-content h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.panel-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+}
+
+.stats {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+}
+
+.page-info {
+    background: var(--teal);
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    color: #0f0f1a;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.conversation-info {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+.user-badge, .ai-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    border-radius: 50px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.user-badge {
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.ai-badge {
+    background: rgba(78, 205, 196, 0.1);
+    border: 1px solid rgba(78, 205, 196, 0.3);
+}
+
+/* ===== Màu đặc trưng ===== */
+.orange { color: var(--orange) !important; }
+.teal { color: var(--teal) !important; }
+.purple { color: var(--purple) !important; }
+.yellow { color: var(--yellow) !important; }
+.red { color: var(--red) !important; }
+
+.orange-bg { background: var(--orange) !important; }
+.teal-bg { background: var(--teal) !important; }
+.purple-bg { background: var(--purple) !important; }
+.yellow-bg { background: var(--yellow) !important; }
+.red-bg { background: var(--red) !important; }
+
+/* ===== Container tin nhắn ===== */
+.messages-container, .files-container {
+    height: 65vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.messages-container::-webkit-scrollbar, .files-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.messages-container::-webkit-scrollbar-track, .files-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb, .files-container::-webkit-scrollbar-thumb {
+    background: var(--teal);
+    border-radius: 4px;
+}
+
+/* ===== Tin nhắn ===== */
+.message {
+    margin-bottom: 1.5rem;
+    animation: slideIn 0.4s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message-content {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.message.user .message-content {
+    border-left: 4px solid var(--orange);
+    background: rgba(255, 107, 107, 0.05);
+}
+
+.message.ai .message-content {
+    border-left: 4px solid var(--teal);
+    background: rgba(78, 205, 196, 0.05);
+}
+
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.message-sender {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.sender-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.avatar-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: #0f0f1a;
+    font-weight: bold;
+}
+
+.sender-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.message-time {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.message-body {
+    color: var(--text-primary);
+    line-height: 1.7;
+    margin-bottom: 1rem;
+    font-size: 1.05rem;
+}
+
+.message-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.message-tag {
+    padding: 0.3rem 1rem;
+    border-radius: 50px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.orange-tag {
+    background: rgba(255, 107, 107, 0.2);
+    color: var(--orange);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.teal-tag {
+    background: rgba(78, 205, 196, 0.2);
+    color: var(--teal);
+    border: 1px solid rgba(78, 205, 196, 0.3);
+}
+
+/* ===== Phân trang ===== */
+.pagination {
+    background: var(--panel-bg);
+    padding: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.pagination-info {
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+}
+
+.page-numbers {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.page-link {
+    padding: 0.6rem 1.2rem;
+    border-radius: 12px;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    font-weight: 500;
+    transition: all 0.3s;
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.page-link:hover {
+    background: var(--purple);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.page-link.current {
+    background: var(--teal);
+    color: #0f0f1a;
+    border-color: transparent;
+    font-weight: bold;
+}
+
+.page-dots {
+    color: var(--text-muted);
+    padding: 0.5rem;
+}
+
+/* ===== File Panel ===== */
+.btn-upload {
+    background: var(--yellow);
+    color: #0f0f1a;
+    padding: 0.8rem 1.5rem;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s;
+}
+
+.btn-upload:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(254, 202, 87, 0.3);
+    color: #0f0f1a;
+}
+
+.files-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.file-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.file-item {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s;
+}
+
+.file-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateX(5px);
+    border-color: var(--purple);
+}
+
+.file-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.file-info {
+    flex: 1;
+}
+
+.file-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.filename {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+}
+
+.file-badge {
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.file-details {
+    display: flex;
+    gap: 1rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.file-actions .btn-delete {
+    background: rgba(255, 71, 87, 0.2);
+    color: var(--red);
+    border: 1px solid rgba(255, 71, 87, 0.3);
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.file-actions .btn-delete:hover {
+    background: var(--red);
+    color: white;
+    transform: scale(1.1);
+}
+
+/* ===== Empty State ===== */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.empty-icon {
+    font-size: 3.5rem;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    font-size: 1.5rem;
+}
+
+.empty-state p {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+}
+
+.btn-large {
+    display: inline-block;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    font-weight: bold;
+    text-decoration: none;
+    transition: all 0.3s;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-large:hover {
+    transform: scale(1.1);
+}
+
+/* ===== Nút điều hướng ===== */
+.nav-buttons.bottom-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 2rem 0;
+    margin-top: 2rem;
+}
+
+.nav-btn {
+    padding: 1rem 2rem;
+    background: #2d3436;
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-secondary);
+    font-weight: 600;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 160px;
+    justify-content: center;
+}
+
+.nav-btn:hover {
+    background: #374785;
+    color: white;
+    transform: translateY(-3px);
+}
+
+.nav-btn.teal {
+    background: var(--teal);
+    color: #0f0f1a;
+}
+
+.nav-btn.purple {
+    background: var(--purple);
+    color: white;
+}
+
+.nav-btn.yellow {
+    background: var(--yellow);
+    color: #0f0f1a;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+    .history-page {
+        padding: 1rem;
+    }
+    
+    .hero-title {
+        font-size: 2.2rem;
+    }
+    
+    .panel-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .stats {
+        justify-content: center;
+    }
+    
+    .pagination-controls {
+        flex-wrap: wrap;
+    }
+    
+    .nav-buttons.bottom-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .nav-btn {
+        width: 100%;
+        max-width: 300px;
+    }
+    
+    .history-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+}
+</style>
+
+<script>
+// Auto refresh phần file mỗi 8 giây
+setInterval(() => {
+    fetch(location.href)
+        .then(r => r.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newFiles = doc.getElementById('files-container');
+            const currentFiles = document.getElementById('files-container');
+            
+            if (newFiles && newFiles.innerHTML !== currentFiles.innerHTML) {
+                // Thêm hiệu ứng fade
+                currentFiles.style.opacity = '0.5';
+                currentFiles.style.transition = 'opacity 0.3s';
+                
+                setTimeout(() => {
+                    currentFiles.innerHTML = newFiles.innerHTML;
+                    currentFiles.style.opacity = '1';
+                    
+                    // Thêm hiệu ứng cho các file item mới
+                    const newFileItems = currentFiles.querySelectorAll('.file-item');
+                    newFileItems.forEach((item, index) => {
+                        item.style.animationDelay = `${index * 0.1}s`;
+                        item.classList.add('animate__animated', 'animate__fadeIn');
+                    });
+                }, 300);
+            }
+        })
+        .catch(err => console.log('Auto-refresh error:', err));
+}, 8000);
+
+// Hiệu ứng cho tin nhắn khi cuộn
+const observerOptions = {
+    root: null,
+    rootMargin: '0px',
+    threshold: 0.1
+};
+
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+        }
+    });
+}, observerOptions);
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Áp dụng hiệu ứng cho các tin nhắn
+    document.querySelectorAll('.message').forEach((msg, index) => {
+        msg.style.opacity = '0';
+        msg.style.transform = 'translateY(20px)';
+        msg.style.transition = `opacity 0.5s ease ${index * 0.1}s, transform 0.5s ease ${index * 0.1}s`;
+        observer.observe(msg);
+    });
+    
+    // Thêm hiệu ứng cho các file item
+    document.querySelectorAll('.file-item').forEach((item, index) => {
+        item.style.animationDelay = `${index * 0.1}s`;
+    });
+    
+    // Hiệu ứng hover cho các card
+    document.querySelectorAll('.panel').forEach(panel => {
+        panel.addEventListener('mouseenter', () => {
+            panel.style.transform = 'translateY(-5px)';
+        });
+        panel.addEventListener('mouseleave', () => {
+            panel.style.transform = 'translateY(0)';
+        });
+    });
+});
+</script>
+{% endblock %}

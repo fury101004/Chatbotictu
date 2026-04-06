@@ -1,0 +1,63 @@
+/* static/css/config.css */
+
+/* ==================== CODEMIRROR SIÊU ĐẸP 2025 ==================== */
+.CodeMirror {
+  height: 100% !important;
+  font-size: 15.5px !important;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace !important;
+  background: #0d1117 !important;
+  border-radius: 0 0 16px 16px;
+  box-shadow: inset 0 0 50px rgba(0, 255, 255, 0.08), 0 20px 50px rgba(0,0,0,0.8);
+}
+
+.CodeMirror-gutters {
+  background: linear-gradient(to right, #161b22, #0d1117) !important;
+  border-right: 1px solid #30363d !important;
+  width: 70px !important;
+}
+
+.CodeMirror-linenumber {
+  color: #8b949e !important;
+  font-weight: 600;
+  text-shadow: 0 0 6px rgba(139,148,158,0.5);
+}
+
+.CodeMirror-activeline-background {
+  background: rgba(88, 166, 255, 0.12) !important;
+  border-left: 4px solid #58a6ff !important;
+}
+
+.CodeMirror-cursor {
+  border-left: 2.5px solid #58a6ff !important;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { border-color: transparent; } }
+
+.CodeMirror-selected { background: rgba(88, 166, 255, 0.3) !important; }
+
+.CodeMirror-matchingbracket {
+  background: #58a6ff40 !important;
+  color: #fff !important;
+  border: 1px solid #58a6ff;
+  border-radius: 4px;
+}
+
+/* Scrollbar đẹp */
+.CodeMirror ::-webkit-scrollbar { width: 14px; }
+.CodeMirror ::-webkit-scrollbar-track { background: #0d1117; border-radius: 10px; }
+.CodeMirror ::-webkit-scrollbar-thumb {
+  background: linear-gradient(#58a6ff, #8b5cf6);
+  border-radius: 10px;
+  border: 3px solid #0d1117;
+}
+.CodeMirror ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(#79c0ff, #a78bfa);
+}
+
+/* Markdown syntax highlight */
+.cm-header { color: #79c1ff !important; font-weight: bold; }
+.cm-strong { color: #f1fa8c !important; font-weight: bold; }
+.cm-em { color: #79c1ff !important; font-style: italic; }
+.cm-link { color: #8be9fd !important; text-decoration: underline; }
+.cm-string { color: #a5d6ff !important; }
+.cm-comment { color: #8b949e !important; font-style: italic; }

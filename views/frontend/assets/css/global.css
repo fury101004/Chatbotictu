@@ -1,0 +1,232 @@
+:root {
+    --font-sans: 'Be Vietnam Pro', sans-serif;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --bg-main: #0f0f1a;
+    --bg-panel: #1a1a2e;
+    --bg-panel-alt: #16213e;
+    --text-main: #e0e0ff;
+    --text-muted: #aaa;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+    font-size: 16px;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: var(--font-sans);
+    background: var(--bg-main);
+    color: var(--text-main);
+    min-height: 100vh;
+}
+
+body, button, input, textarea, select {
+    font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6,
+.hero-title,
+.page-title,
+.card-title,
+.nav-btn,
+.btn-large {
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
+}
+
+code, pre, kbd, samp {
+    font-family: var(--font-mono);
+}
+
+body .chat-wrapper,
+body .chat-container,
+body .manager-page,
+body #userInput,
+body .hint-text {
+    font-family: var(--font-sans) !important;
+}
+
+body .chat-header h2,
+body .welcome-content h3,
+body .seed-zone h2,
+body .file-header h2,
+body .page-title,
+body .hero-title,
+body .nav-btn,
+body .btn-large {
+    font-family: var(--font-display) !important;
+}
+
+body .message-time,
+body .char-count {
+    font-family: var(--font-mono) !important;
+}
+
+.navbar {
+    background: rgba(20, 20, 40, 0.9);
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid #333;
+}
+
+.nav-btn {
+    padding: 0.6rem 1.2rem;
+    background: var(--bg-panel);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-muted);
+    font-weight: 700;
+    transition: all 0.3s;
+}
+
+.nav-btn:hover { background: var(--bg-panel-alt); color: white; }
+.history { background: #ff4d4d; color: white !important; }
+
+main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+
+.hero-title {
+    font-size: 4.5rem;
+    text-align: center;
+    background: linear-gradient(90deg, #00ff88, #00ffff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 3rem 0 1rem;
+}
+
+.hero-subtitle {
+    text-align: center;
+    font-size: 1.5rem;
+    color: #88ffaa;
+    margin-bottom: 4rem;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.feature-card {
+    background: var(--bg-panel-alt);
+    padding: 2rem;
+    border-radius: 20px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 255, 150, 0.1);
+    transition: transform 0.3s;
+}
+
+.feature-card:hover { transform: translateY(-10px); }
+
+.card-title { font-size: 1.8rem; margin-bottom: 1rem; }
+.orange { color: #ff6b6b; }
+.teal { color: #4ecdc4; }
+.purple { color: #a29bfe; }
+.yellow { color: #feca57; }
+
+.btn-large {
+    display: inline-block;
+    margin-top: 1.5rem;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.3s;
+}
+
+.red { background: #ff4757; color: white; }
+.teal { background: #4ecdc4; color: #0f0f1a; }
+.purple { background: #6c5ce7; color: white; }
+.yellow { background: #feca57; color: #0f0f1a; }
+.btn-large:hover { transform: scale(1.1); }
+
+.page-title {
+    font-size: 3rem;
+    text-align: center;
+    margin: 2rem 0;
+    background: linear-gradient(90deg, #74b9ff, #a29bfe);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.page-desc { text-align: center; color: var(--text-muted); margin-bottom: 3rem; }
+
+.upload-box, .drop-zone, .info-box, .btn-reset, .btn-go {
+    margin: 2rem auto;
+    max-width: 800px;
+}
+
+.drop-zone {
+    border: 3px dashed #444;
+    border-radius: 20px;
+    padding: 4rem;
+    text-align: center;
+    background: var(--bg-panel);
+}
+
+.btn-browse {
+    margin-top: 1rem;
+    padding: 0.8rem 2rem;
+    background: #374785;
+    border: none;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    max-width: 800px;
+    margin: 3rem auto;
+}
+
+.setting-item label { display: block; margin-bottom: 0.5rem; color: var(--text-muted); }
+.setting-item input[type=range] { width: 100%; }
+
+.vector-info { text-align: center; }
+
+.info-box.success {
+    display: inline-block;
+    padding: 1rem 2rem;
+    background: #1a3a2a;
+    color: #4ade80;
+    border-radius: 12px;
+    margin: 2rem;
+}
+
+.btn-reset { background: #ff4757; padding: 1rem 2rem; border: none; border-radius: 12px; color: white; margin: 0 1rem; }
+.btn-go { background: #00d2d3; padding: 1rem 2rem; border: none; border-radius: 12px; color: #0f0f1a; text-decoration: none; }
+
+.stats { text-align: center; font-size: 1.2rem; margin: 2rem 0; }
+.source-table { width: 100%; border-collapse: collapse; margin: 2rem 0; }
+.source-table th, .source-table td { padding: 1rem; text-align: left; border-bottom: 1px solid #333; }
+.btn-delete-all { background: #c92a2a; padding: 1rem 3rem; border: none; border-radius: 12px; color: white; font-size: 1.1rem; }
+
+.nav-buttons { text-align: center; margin: 3rem 0; }
+.btn-nav { display: inline-block; margin: 0 1rem; padding: 1rem 2rem; background: #2d3436; border-radius: 12px; text-decoration: none; }
+
+.tabs { text-align: center; margin: 2rem 0; }
+.tab { padding: 1rem 2rem; background: #2d3436; border: none; color: var(--text-muted); margin: 0 0.5rem; border-radius: 12px; }
+.tab.active { background: #6c5ce7; color: white; }
+
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 2rem 0; }
+.info-item label { color: var(--text-muted); }
+.info-value { background: var(--bg-panel); padding: 1rem; border-radius: 12px; margin-top: 0.5rem; }
+
+.form-group { margin: 2rem 0; }
+.form-group label { display: block; margin-bottom: 0.5rem; }
+.form-group input, .form-group textarea { width: 100%; padding: 1rem; background: var(--bg-panel); border: none; border-radius: 12px; color: white; }
+.btn-save { background: #00d2d3; padding: 1rem 3rem; border: none; border-radius: 12px; color: #0f0f1a; font-weight: bold; }
+.btn-restart { background: #fd79a8; padding: 1rem 2rem; border: none; border-radius: 12px; color: white; margin-top: 2rem; }

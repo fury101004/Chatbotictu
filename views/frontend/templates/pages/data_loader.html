@@ -1,0 +1,216 @@
+﻿{% extends "layouts/base.html" %}
+{% block title %}Data Loader{% endblock %}
+
+{% block content %}
+<div class="loader-page">
+    <h1 class="page-title">DATA LOADER</h1>
+    <p class="page-desc">Upload file .md để dạy bot kiến thức mới – mượt như bơ!</p>
+
+    <!-- Khu vực kéo thả + chọn file -->
+    <div class="drop-zone" id="dropZone">
+        <p>Kéo thả file .md vào đây<br><small>Hoặc click để chọn • Chỉ hỗ trợ .md • Tối đa 200MB</small></p>
+        <input type="file" id="fileInput" name="files" multiple accept=".md,.markdown" hidden>
+    </div>
+
+    <!-- Danh sách file đã chọn -->
+    <div id="fileList" class="file-preview"></div>
+
+    <!-- Cài đặt chunk -->
+    <div class="settings-grid">
+        <div class="setting-item">
+            <label>Chunk Size: <span id="chunkValue">{{ chunk_size }}</span> từ</label>
+            <input type="range" min="500" max="3000" step="100" value="{{ chunk_size }}" id="chunkSize">
+        </div>
+        <div class="setting-item">
+            <label>Chunk Overlap: <span id="overlapValue">{{ chunk_overlap }}</span> từ</label>
+            <input type="range" min="0" max="800" step="50" value="{{ chunk_overlap }}" id="chunkOverlap">
+        </div>
+    </div>
+
+    <!-- Nút hành động -->
+    <div class="action-buttons">
+        <button id="uploadBtn" class="btn-large teal" disabled>UPLOAD NGAY</button>
+        <button id="resetBtn" class="btn-large red">RESET VECTOR STORE</button>
+    </div>
+
+    <!-- Thông báo trạng thái -->
+    <div id="status" class="status-box"></div>
+
+    <!-- Điều hướng -->
+    <div class="nav-buttons">
+        <a href="/history" class="btn-nav">Xem Lịch Sử & File</a>
+        <a href="/chat" class="btn-nav purple">Chat Với Bot</a>
+    </div>
+</div>
+
+<script>
+// ĐÃ FIX 100% – KHÔNG BAO GIỜ LỖI NỮA!
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const uploadBtn = document.getElementById('uploadBtn');
+const resetBtn = document.getElementById('resetBtn');
+const status = document.getElementById('status');
+
+let selectedFiles = [];
+
+// Xử lý file an toàn tuyệt đối
+function handleFiles(fileList) {
+    if (!fileList || fileList.length === 0) {
+        selectedFiles = [];
+        renderFileList();
+        uploadBtn.disabled = true;
+        return;
+    }
+
+    const validFiles = [];
+    for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        if (file && file.name && typeof file.name === "string") {
+            const ext = file.name.toLowerCase();
+            if (ext.endsWith('.md') || ext.endsWith('.markdown')) {
+                validFiles.push(file);
+            }
+        }
+    }
+
+    selectedFiles = validFiles;
+    renderFileList();
+    uploadBtn.disabled = selectedFiles.length === 0;
+}
+
+function renderFileList() {
+    if (selectedFiles.length === 0) {
+        fileList.innerHTML = '';
+        return;
+    }
+    fileList.innerHTML = `
+        <div class="preview-header">ĐÃ CHỌN ${selectedFiles.length} FILE:</div>
+        ${selectedFiles.map(f => `
+            <div class="preview-item">
+                <span>${f.name}</span>
+                <small>${(f.size / 1024 / 1024).toFixed(2)} MB</small>
+            </div>
+        `).join('')}
+    `;
+}
+
+// Upload
+uploadBtn.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) return;
+
+    // NOTE: Đo chính xác thời gian + dung lượng người dùng thực sự upload
+    const uploadStartTime = Date.now();                                      // Thời điểm client bắt đầu gửi
+    const totalClientSize = selectedFiles.reduce((sum, f) => sum + f.size, 0); // Tổng byte thực tế
+
+    const formData = new FormData();
+    selectedFiles.forEach(file => formData.append("files", file));
+
+    // Gửi thêm thông tin để backend tính tốc độ thật
+    formData.append("client_start_time", uploadStartTime);   // ms
+    formData.append("client_total_size", totalClientSize);   // bytes
+
+    status.innerHTML = `<div class="info-box">Đang upload... Đợi tí nha!</div>`;
+    uploadBtn.disabled = true;
+
+    try {
+        const response = await fetch("/upload", {
+            method: "POST",
+            body: formData
+        });
+        const result = await response.json();
+
+        // Hiển thị tốc độ thực tế cho người dùng (nếu backend trả về)
+        const speedText = result.real_speed 
+            ? ` • Tốc độ thực tế: ${result.real_speed} MB/s` 
+            : "";
+
+        status.innerHTML = `<div class="info-box success">
+            UPLOAD THÀNH CÔNG! ${speedText}
+        </div>`;
+
+        selectedFiles = [];
+        renderFileList();
+        uploadBtn.disabled = true;
+    } catch (err) {
+        console.error(err);
+        status.innerHTML = `<div class="info-box error">Lỗi mạng!</div>`;
+        uploadBtn.disabled = false;
+    }
+});
+
+// Reset
+resetBtn.addEventListener('click', async () => {
+    if (!confirm("Xóa sạch hết kiến thức bot học được?")) return;
+    if (!confirm("Thật luôn hả đại ca?")) return;
+
+    status.innerHTML = `<div class="info-box">Đang xóa vector store...</div>`;
+    try {
+        await fetch("/reset-vectorstore", { method: "POST" });
+        status.innerHTML = `<div class="info-box success">XÓA SẠCH RỒI! Bot ngu lại từ đầu!</div>`;
+    } catch (err) {
+        status.innerHTML = `<div class="info-box error">Xóa lỗi rồi...</div>`;
+    }
+});
+
+// Realtime chunk value
+document.getElementById('chunkSize').addEventListener('input', e => {
+    document.getElementById('chunkValue').textContent = e.target.value;
+});
+document.getElementById('chunkOverlap').addEventListener('input', e => {
+    document.getElementById('overlapValue').textContent = e.target.value;
+});
+
+// Event Listeners – ĐÃ FIX CHẮN CHẮN
+dropZone.addEventListener('click', () => fileInput.click());
+
+dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#4ecdc4';
+});
+dropZone.addEventListener('dragleave', () => {
+    dropZone.style.borderColor = '#333';
+});
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#333';
+    handleFiles(e.dataTransfer?.files);
+});
+
+fileInput.addEventListener('change', () => {
+    handleFiles(fileInput.files);
+});
+</script>
+
+<style>
+.loader-page { max-width: 900px; margin: 2rem auto; padding: 0 1rem; text-align: center; }
+.drop-zone {
+    border: 4px dashed #333; border-radius: 20px; padding: 3rem; cursor: pointer;
+    transition: all 0.3s; background: #1a1a2e; margin: 2rem 0;
+}
+.drop-zone:hover { border-color: #4ecdc4; }
+.file-preview { margin: 2rem 0; text-align: left; background: #1a1a2e; padding: 1.5rem; border-radius: 12px; }
+.preview-header { font-weight: bold; color: #4ecdc4; margin-bottom: 1rem; }
+.preview-item { padding: 0.5rem 0; color: #a29bfe; display: flex; justify-content: space-between; }
+
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 700px; margin: 3rem auto; }
+.setting-item label { display: block; font-size: 1.3rem; margin-bottom: 0.5rem; color: #fff; }
+.setting-item input[type=range] { width: 100%; }
+
+.action-buttons { margin: 3rem 0; display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; }
+.btn-large { padding: 1.2rem 3rem; font-size: 1.3rem; border-radius: 50px; border: none; cursor: pointer; }
+.teal { background: #4ecdc4; color: #0f0f1a; }
+.red { background: #ff4757; color: white; }
+
+.status-box { min-height: 60px; margin: 2rem 0; }
+.info-box { padding: 1.2rem 2rem; border-radius: 12px; display: inline-block; font-weight: bold; }
+.success { background: #1a3a2a; color: #4ade80; border: 1px solid #4ade80; }
+.error { background: #3a1a1a; color: #ff6b6b; border: 1px solid #ff6b6b; }
+
+.nav-buttons a { 
+    display: inline-block; margin: 1rem; padding: 1rem 2.5rem; 
+    background: #6c5ce7; color: white; border-radius: 50px; text-decoration: none; font-weight: bold;
+}
+.nav-buttons a.purple { background: #a29bfe; }
+</style>
+{% endblock %}

@@ -1,0 +1,221 @@
+﻿{% extends "layouts/base.html" %}
+{% block title %}CẤU HÌNH BOT LẦY{% endblock %}
+{% block page_head %}
+<link rel="stylesheet" href="/static/css/pages/config.css">
+{% endblock %}
+
+{% block content %}
+<div class="config-page">
+    <h1 class="page-title">CẤU HÌNH BOT LẦY</h1>
+    <p class="page-desc">Bot sẽ hành xử đúng y chang file <code>data/systemprompt.md</code> dưới đây!</p>
+
+    <div class="config-container">
+        <div class="info-box">
+            <h2>Thông tin hệ thống</h2>
+            <div class="info-grid">
+                <div><strong>LLM Model:</strong> gemini-1.5-flash</div>
+                <div><strong>Chunk Size:</strong> {{ chunk_size }} từ</div>
+                <div><strong>Chunk Overlap:</strong> {{ chunk_overlap }} từ</div>
+                <div><strong>Prompt Source:</strong> data/systemprompt.md</div>
+            </div>
+        </div>
+
+        <form id="configForm">
+            <div class="form-group">
+                <label>Chunk Size <small>(500 - 3000)</small></label>
+                <input type="number" name="chunk_size" value="{{ chunk_size }}" min="500" max="3000" required>
+            </div>
+
+            <div class="form-group">
+                <label>Chunk Overlap <small>(0 - 800)</small></label>
+                <input type="number" name="chunk_overlap" value="{{ chunk_overlap }}" min="0" max="800" required>
+            </div>
+
+            <!-- CHECKBOX QUAN TRỌNG -->
+            <div class="form-group" style="background:#2f3542; padding:18px; border-radius:10px; margin:25px 0; border-left:4px solid #ff6b6b;">
+                <label style="color:#ff6b6b; font-weight:bold; font-size:1.05em;">
+                    <input type="checkbox" name="reingest" checked style="transform:scale(1.4); margin-right:12px; accent-color:#ff6b6b;">
+                    Tái tạo lại toàn bộ vectorstore với Chunk mới
+                </label>
+                <p style="margin:10px 0 0; font-size:0.95em; color:#ccc;">
+                    ✅ <strong>Bắt buộc tick</strong> nếu bạn vừa thay đổi Chunk Size hoặc Overlap<br>
+                    <span style="color:#f1c40f;">Không tick → chỉ áp dụng cho file upload sau này</span>
+                </p>
+            </div>
+
+            <!-- PHẦN SYSTEM PROMPT ĐẸP LỊM -->
+            <div class="form-group">
+                <label class="label-with-btn">
+                    <span>Bot Rules (System Prompt)</span>
+                    <span style="color:#00d2d3; font-size:0.9em;">→ Lưu tự động vào <code>data/systemprompt.md</code></span>
+                    <button type="button" id="copyPrompt" class="btn-small" title="Copy toàn bộ prompt">
+                        Copy
+                    </button>
+                </label>
+
+                <div class="editor-container">
+                    <textarea name="bot_rules" id="botRulesTextarea" rows="24" spellcheck="false" required>{{ bot_rules }}</textarea>
+                    <div class="line-numbers" id="lineNumbers"></div>
+                </div>
+
+                <small style="color:#888; display:block; margin-top:10px;">
+                    Tip: Dùng markdown thoải mái (#, **, -, >, `code`) – bot sẽ lầy lội đúng như bạn viết ở đây!
+                </small>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-save">LƯU + TÁI TẠO (nếu tick)</button>
+                <button type="button" id="reloadPrompt" class="btn-reset">Tải lại từ file</button>
+            </div>
+        </form>
+
+        <div id="status"></div>
+    </div>
+
+    <div class="nav-buttons">
+        <a href="/chat" class="btn-nav">Vào Chat Với Bot</a>
+        <a href="/data-loader" class="btn-nav">Upload File .md</a>
+        <a href="/history" class="btn-nav purple">Lịch Sử Chat</a>
+    </div>
+</div>
+
+<!-- CSS ĐỈNH CAO CHO EDITOR -->
+<style>
+.label-with-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    font-weight: 600;
+    font-size: 1.1em;
+}
+
+.btn-small {
+    background: #4e5a75;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-small:hover { background: #636f93; }
+
+.editor-container {
+    position: relative;
+    border: 1px solid #444c64;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #1a1c2e;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    margin-top: 8px;
+}
+
+#botRulesTextarea {
+    width: 100%;
+    padding: 18px 18px 18px 68px;
+    background: transparent;
+    color: #e0e0e0;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 15px;
+    line-height: 1.7;
+    border: none;
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.line-numbers {
+    position: absolute;
+    left: 0; top: 0;
+    width: 56px;
+    padding: 18px 8px;
+    text-align: right;
+    color: #666f8d;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.7;
+    user-select: none;
+    pointer-events: none;
+    border-right: 1px solid #33394d;
+    background: #161821;
+    overflow: hidden;
+}
+</style>
+
+<!-- SCRIPT TOÀN BỘ -->
+<script>
+// Submit form + xử lý reingest
+document.getElementById("configForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const status = document.getElementById("status");
+    const reingest = formData.get("reingest") === "on";
+
+    status.innerHTML = `<div class="info-box">Đang lưu cấu hình...</div>`;
+
+    if (reingest) {
+        status.innerHTML = `<div class="info-box" style="background:#e67e22; color:white;">
+            Đang xóa vectorstore cũ và tái tạo lại toàn bộ... (có thể mất 10-40s tùy dữ liệu)
+        </div>`;
+    }
+
+    try {
+        const res = await fetch("/update-config", { method: "POST", body: formData });
+        if (res.ok) {
+            const data = await res.json();
+            status.innerHTML = `<div class="info-box success">${data.msg}</div>`;
+            setTimeout(() => location.reload(), 2500);
+        } else {
+            status.innerHTML = `<div class="info-box error">Lỗi server rồi bro!</div>`;
+        }
+    } catch (err) {
+        status.innerHTML = `<div class="info-box error">Lỗi mạng rồi đại ca ơi!</div>`;
+    }
+});
+
+// Tải lại prompt từ file
+document.getElementById("reloadPrompt").addEventListener("click", async () => {
+    const res = await fetch("/get-current-prompt");
+    const text = await res.text();
+    document.getElementById("botRulesTextarea").value = text;
+    updateLineNumbers();
+    alert("Đã tải lại system prompt từ file thành công!");
+});
+
+// Đánh số dòng + đồng bộ scroll
+function updateLineNumbers() {
+    const textarea = document.getElementById("botRulesTextarea");
+    const lineNumbers = document.getElementById("lineNumbers");
+    const lines = textarea.value.split('\n').length;
+    let content = '';
+    for (let i = 1; i <= lines + 15; i++) {
+        content += i + '\n';
+    }
+    lineNumbers.textContent = content;
+}
+document.getElementById("botRulesTextarea").addEventListener("input", updateLineNumbers);
+document.getElementById("botRulesTextarea").addEventListener("scroll", () => {
+    document.getElementById("lineNumbers").scrollTop = document.getElementById("botRulesTextarea").scrollTop;
+});
+updateLineNumbers(); // init
+
+// Nút Copy đẹp lung linh
+document.getElementById("copyPrompt").addEventListener("click", () => {
+    const text = document.getElementById("botRulesTextarea").value;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("copyPrompt");
+        const oldText = btn.textContent;
+        btn.textContent = "Copied!";
+        btn.style.background = "#27ae60";
+        setTimeout(() => {
+            btn.textContent = oldText;
+            btn.style.background = "";
+        }, 1500);
+    });
+});
+</script>
+{% endblock %}  
+

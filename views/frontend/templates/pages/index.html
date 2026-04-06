@@ -1,0 +1,35 @@
+﻿{% extends "layouts/base.html" %}
+{% block title %}Xin chào mình là Hidemium{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1 class="hero-title">Xin chào</h1>
+    <p class="hero-subtitle">hệ thống Pro 2025 bản Việt Nam không giới hạn đã sẵn sàng</p>
+</div>
+
+<div class="features-grid">
+    <div class="feature-card">
+        <h2 class="card-title orange">Chat Ngay</h2>
+        <p>Chat AI đỉnh nhất Việt Nam</p>
+        <a href="/chat" class="btn-large red">Vào Chat</a>
+    </div>
+
+    <div class="feature-card">
+        <h2 class="card-title teal">Upload Kiến Thức</h2>
+        <p>Cho bot nhớ file .md của bạn</p>
+        <a href="/data-loader" class="btn-large teal">Data Loader</a>
+    </div>
+
+    <div class="feature-card">
+        <h2 class="card-title purple">Vector Store</h2>
+        <p>Quản lý & xóa embeddings</p>
+        <a href="/vector-manager" class="btn-large purple">Quản Lý</a>
+    </div>
+
+    <div class="feature-card">
+        <h2 class="card-title yellow">Config Prompt</h2>
+        <p>Chỉnh system prompt, bật/tắt cache</p>
+        <a href="/config" class="btn-large yellow">Config</a>
+    </div>
+</div>
+{% endblock %}
