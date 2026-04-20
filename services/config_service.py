@@ -4,6 +4,11 @@ from pathlib import Path
 
 from config.settings import settings
 from config.db import save_system_prompt, set_config
+from services.llm_service import (
+    PRIMARY_MODEL_NAME,
+    get_configured_model_labels,
+    model_rotation_mode,
+)
 
 
 
@@ -24,7 +29,9 @@ def get_config_page_payload() -> dict:
         "chunk_size": settings.CHUNK_SIZE,
         "chunk_overlap": settings.CHUNK_OVERLAP,
         "bot_rules": beautiful_prompt,
-        "model_name": "gemini-2.5-flash",
+        "model_name": PRIMARY_MODEL_NAME,
+        "model_names": get_configured_model_labels(),
+        "model_rotation": model_rotation_mode(),
     }
 
 

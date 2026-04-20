@@ -181,6 +181,7 @@
                             <div class="file-header">
                                 <h4 class="filename">{{ f.filename }}</h4>
                                 <span class="file-badge yellow">.md</span>
+                                <span class="file-badge teal">{{ f.tool_label or f.tool_name }}</span>
                             </div>
                             <div class="file-details">
                                 <span class="upload-time">
@@ -193,7 +194,8 @@
                         </div>
                         <div class="file-actions">
                             <form method="post" action="/delete-file" class="delete-form">
-                                <input type="hidden" name="filename" value="{{ f.filename }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="filename" value="{{ f.storage_path or f.filename }}">
                                 <button type="submit" class="btn-delete red"
                                         onclick="return confirm('Xóa file {{ f.filename }}? AI sẽ quên kiến thức từ file này!')"
                                         title="Xóa file">
@@ -219,6 +221,9 @@
         </a>
         <a href="/vector-manager" class="nav-btn purple">
             <i class="fas fa-brain"></i> Vector Store
+        </a>
+        <a href="/knowledge-base" class="nav-btn red">
+            <i class="fas fa-layer-group"></i> Knowledge Base
         </a>
         <a href="/data-loader" class="nav-btn yellow">
             <i class="fas fa-file-upload"></i> Nạp file
@@ -812,6 +817,11 @@
 
 .nav-btn.purple {
     background: var(--purple);
+    color: white;
+}
+
+.nav-btn.red {
+    background: var(--red);
     color: white;
 }
 

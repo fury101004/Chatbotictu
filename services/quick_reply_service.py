@@ -1,4 +1,4 @@
-﻿# quick_reply.py – BẢN SIÊU ĐẦY ĐỦ 2025 (60+ câu mỗi ngôn ngữ)
+# quick_reply.py – BẢN SIÊU ĐẦY ĐỦ 2025 (60+ câu mỗi ngôn ngữ)
 # Hỗ trợ: vi, en, ru (Russian), zh-CN (Simplified Chinese)
 import random
 from typing import Optional
@@ -12,12 +12,12 @@ _greetings_cache: Optional[set[str]] = None
 # ==================== TRẢ LỜI KHI HỎI "BẠN LÀ AI" – CHUYÊN NGHIỆP, 4 NGÔN NGỮ ====================
 WHO_AM_I = {
     "vi": (
-        "Chào anh/chị! Em là trợ lý AI của Công ty HIDEMIUM – chuyên cung cấp giải pháp chuyển đổi số toàn diện cho doanh nghiệp. "
+        "Chào anh/chị! Em là trợ lý AI của ICTU – hỗ trợ thông tin, giải đáp và tra cứu nhanh cho người dùng trong hệ thống. "
         "Em được huấn luyện để hỗ trợ tư vấn 24/7 về phần mềm, website, app, automation và mọi nhu cầu công nghệ. "
         "Anh/chị cần em hỗ trợ gì hôm nay ạ?"
     ),
     "en": (
-        "Hello! I'm the AI Assistant of HIDEMIUM – a leading Digital Transformation company in Vietnam. "
+        "Hello! I'm the AI Assistant of ICTU – here to help users with information lookup, guidance, and support in this system. "
         "I'm here 24/7 to help you with software solutions, website/app development, automation tools, and any tech-related questions. "
         "How may I assist you today?"
     )
@@ -28,9 +28,9 @@ QUICK_RESPONSES = {
         "Xin chào! Rất vui được trò chuyện cùng anh/chị hôm nay.",
         "Dạ chào anh/chị, em đang nghe đây ạ!",
         "Chào anh/chị ạ, hôm nay em có thể giúp gì cho mình?",
-        "Xin chào! Hidemium luôn sẵn sàng hỗ trợ anh/chị 24/7.",
+        "Xin chào! ICTU luôn sẵn sàng hỗ trợ anh/chị 24/7.",
         "Rất vui được gặp anh/chị! Em có thể hỗ trợ gì hôm nay?",
-        "Chào anh/chị, cảm ơn đã liên hệ với Hidemium!",
+        "Chào anh/chị, cảm ơn đã liên hệ với ICTU!",
         "Dạ alo, em nghe đây ạ! Anh/chị cần gì nào?",
         "Rất hân hạnh được hỗ trợ anh/chị!",
         "Dạ em đây ạ! Anh/chị cần tư vấn gì nào?",
@@ -57,9 +57,9 @@ IDENTITY_KEYWORDS = {
 
 COMPANY_KEYWORDS = {
     # Việt
-    "công ty","hidemium","giới thiệu công ty","dịch vụ","phần mềm","website","liên hệ",
+    "công ty","ictu","giới thiệu công ty","dịch vụ","phần mềm","website","liên hệ",
     # English
-    "company","hidemium","about company","services","software","contact",
+    "company","ictu","about company","services","software","contact",
     
 }
 

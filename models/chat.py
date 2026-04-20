@@ -9,6 +9,7 @@ from pydantic import BaseModel
 class ChatRequest(BaseModel):
     message: str
     session_id: str = "default"
+    llm_model: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -19,6 +20,8 @@ class ChatResponse(BaseModel):
     language: Optional[str] = None
     rag_tool: Optional[str] = None
     rag_route: Optional[str] = None
+    llm_model: Optional[str] = None
+    web_kb_status: Optional[dict[str, Any]] = None
     timestamp: str
     session_id: str
 
@@ -56,6 +59,9 @@ class ChatGraphState(TypedDict, total=False):
     chunks: list[RetrievedChunk]
     rag_tool: str
     rag_route: str
+    llm_model: str
+    selected_llm_model: str
+    web_kb_status: dict[str, Any]
 
 
 

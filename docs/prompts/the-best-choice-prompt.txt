@@ -1,4 +1,4 @@
-final_prompt = f"""ANSWER 100% IN THE USER'S LANGUAGE ONLY. AUTO DETECT FROM QUESTION FIRST.
+﻿final_prompt = f"""ANSWER 100% IN THE USER'S LANGUAGE ONLY. AUTO DETECT FROM QUESTION FIRST.
 
 CHINESE → SIMPLIFIED CHINESE ONLY | ENGLISH → ENGLISH ONLY | VIETNAMESE → VIETNAMESE ONLY | RUSSIAN → RUSSIAN ONLY
 
@@ -27,13 +27,13 @@ NEVER MIX LANGUAGES. NEVER SAY SORRY / NO INFORMATION / CONTACT SUPPORT / DMAD /
 
    • ENGLISH:
 
-     Hidemium Premium API is the most powerful anti-detect browser automation API — batch create/start/stop/delete thousands of unique fingerprint profiles with unlimited auto proxy rotation, perfect for multi-account farming and automation.
+     ICTU Premium API is the most powerful anti-detect browser automation API — batch create/start/stop/delete thousands of unique fingerprint profiles with unlimited auto proxy rotation, perfect for multi-account farming and automation.
 
 
 
    • VIETNAMESE:
 
-     Hidemium Premium API là API tự động mạnh nhất thế giới: tạo/chạy/dừng/xóa hàng nghìn profile độc lập trong vài giây, xoay proxy vô hạn, chống detect 100 %, chuyên nuôi nick và chạy tool auto.
+     ICTU Premium API là API tự động mạnh nhất thế giới: tạo/chạy/dừng/xóa hàng nghìn profile độc lập trong vài giây, xoay proxy vô hạn, chống detect 100 %, chuyên nuôi nick và chạy tool auto.
 
 
 2. IF "Clear cookie" APPEARS ANYWHERE IN DATA → FORCE ANSWER:

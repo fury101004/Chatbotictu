@@ -1,220 +1,280 @@
-Làm trong 5–10 phút là có HTTPS xanh lè, đẹp như website thật.
+# ICTU AI Chatbot
 
-Tạo lại docker-compose.yml chuẩn production (thêm Nginx + Certbot)
-Thay toàn bộ nội dung file docker-compose.yml bằng cái này (đã test rất nhiều lần):
+ Mục tiêu là mô tả đúng trạng thái thực tế của dự án, tập trung vào kiến trúc, luồng xử lý, cách chạy và các điểm còn cần hoàn thiện.
 
-YAMLservices:
-  backend:
-    build: .
-    restart: unless-stopped
-    env_file: .env
-    volumes:
-      - ./data:/app/data
-    expose:
-      - "8000"
-    networks:
-      - app-network
+## Tổng Quan
 
-  nginx:
-    image: nginx:alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - certbot-web:/var/www/html
-      - certbot-conf:/etc/letsencrypt
-    depends_on:
-      - backend
-    networks:
-      - app-network
+Đây là ứng dụng FastAPI cho chatbot hỗ trợ người học trong phạm vi ICTU. Hệ thống hiện đã vượt ra ngoài một chatbot FAQ đơn giản và gồm các khối chính sau:
 
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - certbot-web:/var/www/html
-      - certbot-conf:/etc/letsencrypt
-    depends_on:
-      - nginx
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 6h & wait $${!}; done;'"
+- Chat web và REST API.
+- RAG theo 3 nhóm tri thức: `student_handbook_rag`, `school_policy_rag`, `student_faq_rag`.
+- Vector store dùng ChromaDB kết hợp BM25/hybrid retrieval.
+- Upload tài liệu Markdown/TXT theo từng nhóm RAG.
+- Knowledge Base hợp nhất từ:
+  - tài liệu đã index trong vector store;
+  - cặp hỏi đáp chatbot đã duyệt thủ công;
+  - web knowledge cache đáng tin cậy từ kết quả tìm kiếm ICTU.
+- Web search ưu tiên domain chính thức của ICTU, có cơ chế cache và TTL.
+- Trang quản trị: `chat`, `data-loader`, `vector-manager`, `knowledge-base`, `config`, `history`, `cskh-panel`.
 
-volumes:
-  certbot-web:
-  certbot-conf:
+## Kiến Trúc Thực Tế
 
-networks:
-  app-network:
-    driver: bridge
+### Entry Points
 
-Tạo thư mục và file config Nginx
+- `main.py`: re-export `config.asgi:app`.
+- `config/asgi.py`: tạo `app = create_app()`.
+- `config/app_factory.py`: khởi tạo FastAPI, middleware, static files, web routes, API routes và CSKH websocket routes.
 
-Bashmkdir -p nginx/conf.d
-nano nginx/conf.d/default.conf
-Dán vào:
-nginxserver {
-    listen 80;
-    server_name your-domain.com www.your-domain.com;  # thay bằng domain hoặc IP tạm thời
+### Các Lớp Chính
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
+- `controllers/`
+  - `web_controller.py`: route giao diện web.
+  - `api_controller.py`: route API `/api/v1/...`.
+- `services/`
+  - `chat_service.py`: điều phối luồng chat.
+  - `graph_service.py`: wrapper cho LangGraph, có fallback sequential.
+  - `rag_service.py`: router RAG, lexical fallback, vector retrieval, web search merge.
+  - `vector_store_service.py`: ChromaDB + BM25 + smart chunking.
+  - `multilingual_service.py`: prompt builder, chọn ngôn ngữ, gọi LLM.
+  - `knowledge_base_service.py`: hợp nhất vector data và chat Q&A, duyệt Q&A vào KB.
+  - `document_service.py`: upload/import/xóa/reset tài liệu và payload cho Vector Manager.
+  - `web_search.py`: tìm web ICTU, ưu tiên site chính thức.
+  - `web_knowledge_service.py`: cache câu trả lời web đáng tin cậy.
+  - `llm_service.py`: rotation Groq/Ollama.
+  - `gemini_service.py`: service cũ/thử nghiệm, hiện không phải luồng chat chính.
+- `config/`
+  - `settings.py`: một phần cấu hình qua `.env`.
+  - `db.py`: SQLite, config, prompt, chat history, approved chat, web knowledge.
+  - `middleware.py`: logging, rate limit, session, CORS.
+- `views/`
+  - Jinja templates và API/web response builders.
+- `tests/`
+  - Unit tests cho LLM rotation, RAG upload, knowledge base, web search, web knowledge, prompt builder và scope detection.
 
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
+## Luồng Xử Lý Chat
 
-server {
-    listen 443 ssl;
-    server_name your-domain.com www.your-domain.com;
+1. Request đi vào `/chat` hoặc `/api/v1/chat`.
+2. `services/chat_service.py` chuẩn hóa input, lưu tin nhắn user vào SQLite.
+3. `services/rag_service.py` chọn nhóm tri thức bằng LLM router hoặc keyword router.
+4. Hệ thống truy xuất theo thứ tự ưu tiên:
+   - trusted web knowledge cache;
+   - corpus local theo tool;
+   - vector search / hybrid search;
+   - lexical fallback;
+   - web search ICTU khi cần dữ liệu mới.
+5. `services/multilingual_service.py` tạo final prompt và gọi `services/llm_service.py`.
+6. Bot lưu câu trả lời, cập nhật `SESSION_MEMORY`; nếu câu trả lời đến từ web search thì có thể đưa vào `web_search_knowledge`.
 
-    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+## Tính Năng Nổi Bật
 
-    location / {
-        proxy_pass http://backend:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+- RAG chia nhóm dữ liệu thay vì nhét tất cả vào một kho duy nhất.
+- Có cơ chế fallback khi:
+  - không có embedding backend;
+  - không có LLM network;
+  - vector retrieval lỗi;
+  - web search không khả dụng.
+- Knowledge Base có chức năng duyệt thủ công câu trả lời từ lịch sử chat để đưa ngược vào retrieval.
+- Model chat có UI chọn model và hỗ trợ rotation `round-robin`/`fixed`.
+- Web search có chiến lược official-first cho ICTU.
+- Có websocket CSKH cho trường hợp cần chuyển sang người thật.
 
-Chạy và lấy chứng chỉ SSL miễn phí
+## Thư Mục Và Dữ Liệu Quan Trọng
 
-Bashdocker compose up -d
-# Lấy chứng chỉ (thay your-email và your-domain.com thật của bạn)
-docker compose run --rm certbot certonly --webroot --webroot-path=/var/www/html -d your-domain.com -d www.your-domain.com --email you@gmail.com --agree-tos --no-eff-email
-Xong! Từ giờ truy cập https://your-domain.com là có HTTPS xanh lè, bảo mật, tốc độ nhanh.
-Bạn muốn đi cách nhanh (cách 1) hay làm luôn cách pro có HTTPS (cách 2)?
-Mình hướng dẫn chi tiết từng bước luôn nếu bạn chọn cách 2 nhé!
+- `data/bot_config.db`: SQLite runtime.
+- `data/systemprompt.md`: system prompt hiện hành.
+- `data/bot-rule.md`: bot rule chèn vào retrieval.
+- `data/qa_generated_fixed/`: seed corpus.
+- `data/rag_uploads/`: tài liệu upload theo tool.
+- `vectorstore/`: Chroma persistent store.
+- `logs/api.log`: access/application log.
+- `reports/`, `docs/`, `scripts/`: báo cáo, tài liệu nội bộ, script phân tích/evaluate.
 
+## Biến Môi Trường Cần Lưu Ý
 
-annotated-doc==0.0.4
-annotated-types==0.7.0
-anyio==4.12.1
-attrs==26.1.0
-backoff==2.2.1
-bcrypt==5.0.0
-build==1.4.2
-cachetools==6.2.6
-certifi==2026.2.25
-cffi==2.0.0
-charset-normalizer==3.4.7
-chromadb==1.5.5
-click==8.2.1
-colorama==0.4.6
-coloredlogs==15.0.1
-cryptography==46.0.6
-Deprecated==1.3.1
-distro==1.9.0
-durationpy==0.10
-exceptiongroup==1.3.1
-fastapi==0.128.8
-filelock==3.19.1
-flatbuffers==25.12.19
-fsspec==2025.10.0
-google-ai-generativelanguage==0.6.15
-google-api-core==2.30.2
-google-api-python-client==2.193.0
-google-auth==2.49.1
-google-auth-httplib2==0.3.1
-google-generativeai==0.8.6
-googleapis-common-protos==1.74.0
-grpcio==1.80.0
-grpcio-status==1.71.2
-h11==0.16.0
-httpcore==1.0.9
-httplib2==0.31.2
-httptools==0.7.1
-httpx==0.28.1
-huggingface_hub==0.36.2
-humanfriendly==10.0
-idna==3.11
-importlib_metadata==8.7.1
-importlib_resources==6.5.2
-itsdangerous==2.2.0
-Jinja2==3.1.6
-joblib==1.5.3
-jsonschema==4.25.1
-jsonschema-specifications==2025.9.1
-kubernetes==35.0.0
-limits==4.2
-markdown-it-py==3.0.0
-MarkupSafe==3.0.3
-mdurl==0.1.2
-mmh3==5.2.0
-mpmath==1.3.0
-networkx==3.2.1
-numpy==2.0.2
-oauthlib==3.3.1
-onnxruntime==1.19.2
-opentelemetry-api==1.40.0
-opentelemetry-exporter-otlp-proto-common==1.40.0
-opentelemetry-exporter-otlp-proto-grpc==1.40.0
-opentelemetry-proto==1.40.0
-opentelemetry-sdk==1.40.0
-opentelemetry-semantic-conventions==0.61b0
-orjson==3.11.5
-overrides==7.7.0
-packaging==24.2
-pillow==11.3.0
-posthog==6.9.3
-proto-plus==1.27.2
-protobuf==5.29.6
-pyasn1==0.6.3
-pyasn1_modules==0.4.2
-pybase64==1.4.3
-pycparser==2.23
-pydantic==2.12.5
-pydantic-settings==2.11.0
-pydantic_core==2.41.5
-Pygments==2.20.0
-PyJWT==2.12.1
-PyMuPDF==1.26.5
-pyparsing==3.3.2
-pypdf==6.9.2
-PyPika==0.51.1
-pyproject_hooks==1.2.0
-pyreadline3==3.5.4
-python-dateutil==2.9.0.post0
-python-dotenv==1.2.1
-python-multipart==0.0.20
-PyYAML==6.0.3
-rank-bm25==0.2.2
-referencing==0.36.2
-regex==2026.1.15
-requests==2.32.5
-requests-oauthlib==2.0.0
-rich==14.3.3
-rpds-py==0.27.1
-rsa==4.9.1
-safetensors==0.7.0
-scikit-learn==1.6.1
-scipy==1.13.1
-sentence-transformers==5.1.2
-shellingham==1.5.4
-six==1.17.0
-slowapi==0.1.9
-starlette==0.49.3
-sympy==1.14.0
-tenacity==9.1.2
-threadpoolctl==3.6.0
-tiktoken==0.12.0
-tokenizers==0.22.2
-tomli==2.4.1
-torch==2.8.0
-tqdm==4.67.3
-transformers==4.57.6
-typer==0.23.2
-typing-inspection==0.4.2
-typing_extensions==4.15.0
-uritemplate==4.2.0
-urllib3==2.6.3
-uvicorn==0.39.0
-watchfiles==1.1.1
-websocket-client==1.9.0
-websockets==15.0.1
-wrapt==2.1.2
-zipp==3.23.0
+### Bắt Buộc Cho Production
+
+- `PARTNER_API_KEY`
+- `JWT_SECRET`
+- `SESSION_SECRET`
+
+### LLM
+
+- `GROQ_API_KEY`
+- `LLM_PROVIDER_ORDER`
+- `GROQ_MODEL_ORDER`
+- `OLLAMA_MODEL` hoặc `OLLAMA_MODEL_ORDER`
+- `OLLAMA_BASE_URL`
+- `LLM_MODEL_ROTATION`
+
+### Web Search / Web Knowledge
+
+- `SEARXNG_URL` hoặc `SEARXNG_API`
+- `TRAFILATURA_URL` hoặc `TRAFILATURA_API`
+- `WEB_KB_TRUSTED_THRESHOLD`
+- `WEB_KB_MIN_SCORE`
+- `WEB_KB_TTL_DAYS`
+- `WEB_KB_REALTIME_TTL_DAYS`
+
+### Legacy / Chưa Phải Luồng Chat Chính
+
+- `GEMINI_API_KEY`
+
+## Cách Chạy Local
+
+Ví dụ trên Windows PowerShell:
+
+```powershell
+py -3.11 -m venv venv
+.\venv\Scripts\pip.exe install -r requirements.txt
+.\venv\Scripts\python.exe -m uvicorn config.asgi:app --reload
+```
+
+Nếu cần bộ web search phụ trợ:
+
+```powershell
+.\venv\Scripts\pip.exe install -r requirements-search.txt
+```
+
+Sau khi chạy:
+
+- Web UI: `http://127.0.0.1:8000/`
+- API health: `http://127.0.0.1:8000/api/v1/health`
+
+## API Và Màn Hình Chính
+
+### API
+
+- `POST /api/v1/auth/token`
+- `POST /api/v1/chat`
+- `POST /api/v1/upload`
+- `GET /api/v1/knowledge-base`
+- `GET /api/v1/health`
+
+### Web Pages
+
+- `/`
+- `/chat`
+- `/data-loader`
+- `/vector-manager`
+- `/knowledge-base`
+- `/config`
+- `/history`
+- `/cskh-panel`
+
+## Kết Quả Verify Khi Review
+
+Đã đọc các nhóm file: `config/`, `controllers/`, `services/`, `views/`, `tests/`, `Dockerfile`, `docker-compose.yml`, `Caddyfile`, `docs/`.
+
+Đã chạy unit test bằng lệnh:
+
+```powershell
+.\venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+```
+
+Đã chạy benchmark router/retrieval bằng lệnh:
+
+```powershell
+.\venv\Scripts\python.exe scripts\evaluate_chatbot.py
+```
+
+Kết quả sau đợt review và cleanup ngày `16/04/2026`:
+
+- `29 tests`
+- `OK`
+- benchmark: `31` câu hỏi, `25` câu có nhãn nguồn
+- route accuracy: `100%`
+- source hit rate: `100%`
+- source top-1 hit rate: `96%`
+- source MRR: `0.9733`
+- avg latency: `1061.65 ms`
+- không còn failing case benchmark
+
+Phạm vi test hiện có:
+
+- LLM rotation và model selection.
+- DB schema migration.
+- Session middleware config.
+- Prompt builder.
+- Upload/index fallback.
+- Knowledge base merge và approve chat.
+- Vector manager payload.
+- ICTU scope detection.
+- Web search.
+- Web knowledge cache.
+
+Chưa thấy integration/smoke test rõ ràng cho:
+
+- Docker deployment path mapping trong container thật.
+- Web UI end-to-end.
+- Startup smoke test sau migration trên DB thực tế có dữ liệu lớn.
+
+## Đã Xử Lý Trong Đợt Này
+
+- Thêm migration tự động cho `chat_history.session_id` và index theo session.
+- Đổi `SessionMiddleware` sang secret ổn định qua `settings`, hỗ trợ `SESSION_SECRET`.
+- Dọn `Dockerfile`, bỏ phần cài `torch` trùng lặp.
+- Đồng bộ `docker-compose.yml` với đường dẫn template/static thật của app.
+- Cắt một liên kết legacy không cần thiết: `scripts/evaluate_chatbot.py` không còn phụ thuộc vào `gemini_service`.
+- Làm `gemini_service` lazy-import hơn để giảm noise khi luồng chính không dùng Gemini.
+- Mở rộng bộ benchmark lên `31` câu hỏi, trong đó `25` câu có nhãn nguồn để đo router/retrieval.
+- Viết lại `scripts/evaluate_chatbot.py` theo nội dung sạch hơn và sinh `reports/generated/eval_results.*` mới.
+- Đồng bộ lại tài liệu tổng hợp để không còn số liệu cũ `13` câu benchmark.
+
+## Đánh Giá Tiến Độ Theo Đề Cương
+
+Theo lịch trong PDF, kế hoạch 10 tuần chạy từ `09/03/2026` đến `22/05/2026`. Tính theo mốc thời gian thực, ngày review `16/04/2026` đang nằm trong tuần 6 của kế hoạch.
+
+Nếu tính theo mức độ hoàn thành deliverable, dự án đã vượt mức tuần 6:
+
+- Tuần 1-5: đã có phần phân tích, thu thập tri thức, kho dữ liệu và retrieval.
+- Tuần 6-8: đã có router, graph orchestration, prompt builder, tích hợp model và 3 nhóm tri thức.
+- Tuần 9: đã có Web chat, API, trang quản trị dữ liệu và benchmark có thể demo.
+- Tuần 10: đã có bộ test >= 30 câu hỏi, tài liệu tổng hợp, kết quả benchmark và minh chứng unit test.
+
+Kết luận thẳng:
+
+- Nếu chấm theo deliverable để demo/báo cáo: dự án đang ở mức `week 9 hoàn thành` và `week 10 đang hoàn thiện`.
+- Nếu đối chiếu rất sát đề cương PDF: chưa khớp 100% vì vector store vẫn là `ChromaDB` thay vì `FAISS`, và nhóm tool nghiệp vụ chưa tách đúng tên như đề cương.
+
+## Vấn Đề Còn Tồn Đọng
+
+### 1. Mức Độ Trung Bình: Repo Đang Có Lỗi Encoding Ở Nhiều Nơi
+
+README cũ, một số template, script, `config/rag_tools.py` và một số nội dung hiển thị bị lỗi dấu tiếng Việt.
+
+Tác động:
+
+- Giao diện và tài liệu không nhất quán.
+- Keyword routing/cố định danh corpus có thể khó debug hơn.
+- Khó bàn giao và khó bảo trì.
+
+### 2. Mức Độ Trung Bình: Cấu Hình Security Vẫn Mang Tính Dev
+
+Code đang cho phép default:
+
+- `PARTNER_API_KEY = "dev-partner-key"`
+- `JWT_SECRET = "dev-jwt-secret"`
+- `SESSION_SECRET` sẽ fallback về `JWT_SECRET` nếu chưa khai báo.
+- CORS `allow_origins=["*"]` kèm `allow_credentials=True`.
+
+Nếu đem lên môi trường thật mà chưa harden, ranh giới xác thực và truy cập API sẽ yếu.
+
+### 3. Mức Độ Trung Bình: Còn Dấu Vết Service Cũ
+
+`services/gemini_service.py` và dependency `google.generativeai` vẫn tồn tại, nhưng luồng chat chính hiện đi qua `services/llm_service.py`.
+
+Tác động:
+
+- Dễ gây nhầm service nào đang là service chính.
+- Tăng chi phí bảo trì dependency.
+
+## Ưu Tiên Xử Lý Tiếp Theo
+
+1. Chuẩn hóa encoding UTF-8 cho README, templates, script và metadata corpus.
+2. Siết CORS theo domain thật và bắt buộc set secret production riêng cho JWT/session.
+3. Tách rõ code active vs legacy, đặc biệt quanh Gemini và các script cũ.
+4. Bổ sung smoke test cho app startup và UI chính.
+
+## Đánh Giá Tổng Kết
+
+Dự án có hướng đi tốt, đã có nhiều năng lực thực dụng hơn một chatbot demo thông thường: RAG chia nhóm, hybrid retrieval, web search cache, knowledge base duyệt thủ công và test unit cho các feature mới. Sau đợt cleanup này, các điểm nghẽn vận hành rõ nhất quanh session schema, session secret và deploy config đã được xử lý; phần còn lại chủ yếu là hardening, encoding và tách legacy cho gọn repo.

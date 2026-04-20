@@ -1,28 +1,57 @@
+# Environment secrets
 .env
 .env.*
 *.env
+!.env.example
 
+# Virtual environments
 venv/
 .venv/
 ENV/
 env/
 
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*$py.class
 
+# Test and tooling cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Logs
 logs/
 *.log
 
+# Local app data
 data/uploads/
 data/api.log
 data/bot_config.db
 data/qa_generated/
 data/qa_generated_fixed/
 clean_data/
-
 vectorstore/
+*.db
 *.sqlite3
+*.sqlite
+*.sqlite-journal
 
+# Local models and generated artifacts
 all-MiniLM-L6-v2.onnx
+
+# Build outputs
+build/
+dist/
+
+# Editor and OS files
+.vscode/
+.idea/
+*.code-workspace
+Thumbs.db
+.DS_Store

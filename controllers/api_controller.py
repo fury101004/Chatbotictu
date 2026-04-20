@@ -4,14 +4,17 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
+from config.rag_tools import DEFAULT_RAG_TOOL
 from config.dependencies import create_partner_token, verify_token
 from config.settings import settings
 from models.chat import ChatRequest, ChatResponse
 from services.chat_service import process_chat_message
 from services.document_service import upload_markdown_files
+from services.knowledge_base_service import get_knowledge_base_payload
 from views.api_view import (
     build_chat_response,
     build_health_response,
+    build_knowledge_base_response,
     build_token_response,
     build_upload_response,
 )
@@ -34,7 +37,7 @@ async def api_chat(
     body: ChatRequest,
     token=Depends(verify_token),
 ):
-    result = await process_chat_message(body.message, body.session_id)
+    result = await process_chat_message(body.message, body.session_id, llm_model=body.llm_model or "auto")
     return build_chat_response(result, body.session_id)
 
 
@@ -43,11 +46,22 @@ async def api_chat(
 async def api_upload(
     request: Request,
     files: list[UploadFile] = File(...),
+    tool_name: str = Form(DEFAULT_RAG_TOOL),
     session_id: Optional[str] = Form(None),
     token=Depends(verify_token),
 ):
-    result = await upload_markdown_files(files=files)
+    result = await upload_markdown_files(files=files, tool_name=tool_name)
     return build_upload_response(result, session_id)
+
+
+@router.get("/knowledge-base")
+async def api_knowledge_base(
+    q: str = "",
+    limit: int = 18,
+    token=Depends(verify_token),
+):
+    payload = get_knowledge_base_payload(query=q, limit=limit)
+    return build_knowledge_base_response(payload)
 
 
 @router.get("/health")

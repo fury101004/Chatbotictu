@@ -3,10 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Tro ly ao Hidemium{% endblock %}</title>
+    <title>{% block title %}Tro ly ao ICTU{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <script>
+    (() => {
+        try {
+            const savedTheme = localStorage.getItem("ictu-chat-theme");
+            if (savedTheme === "light" || savedTheme === "dark") {
+                document.documentElement.dataset.chatTheme = savedTheme;
+            }
+        } catch {
+            // Theme still works without persisted storage.
+        }
+    })();
+    </script>
     <link rel="stylesheet" href="/static/css/global.css">
     {% block page_head %}{% endblock %}
 </head>
@@ -16,6 +28,7 @@
         <a href="/chat" class="nav-btn">Chat</a>
         <a href="/data-loader" class="nav-btn">Upload MD</a>
         <a href="/vector-manager" class="nav-btn">Vector Store</a>
+        <a href="/knowledge-base" class="nav-btn">Knowledge Base</a>
         <a href="/config" class="nav-btn">Config</a>
         <a href="/history" class="nav-btn history">Lich Su Chat</a>
     </nav>
@@ -25,5 +38,31 @@
     </main>
 
     {% block page_scripts %}{% endblock %}
+    <script>
+    document.addEventListener("click", event => {
+        const trigger = event.target.closest('.action-icon[title="Gửi file"]');
+        if (!trigger) return;
+        window.location.href = "/data-loader";
+    });
+
+    (() => {
+        const syncStoredTheme = () => {
+            try {
+                const savedTheme = localStorage.getItem("ictu-chat-theme");
+                if (savedTheme === "light" || savedTheme === "dark") {
+                    document.documentElement.dataset.chatTheme = savedTheme;
+                    document.body.dataset.chatTheme = savedTheme;
+                }
+            } catch {
+                // Local storage may be disabled.
+            }
+        };
+
+        syncStoredTheme();
+        window.addEventListener("storage", event => {
+            if (event.key === "ictu-chat-theme") syncStoredTheme();
+        });
+    })();
+    </script>
 </body>
 </html>

@@ -2,16 +2,17 @@
 # Lazy Gemini setup so the web app can boot even when the API key is missing.
 import os
 from functools import lru_cache
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 from services.vector_store_service import get_bot_rule_text
 
 load_dotenv()
 
-MODEL_NAME = "gemini-2.5-flash-lite"
+PRIMARY_MODEL_NAME = "gemini-2.5-flash"
+FALLBACK_MODEL_NAME = "gemini-2.5-flash-lite"
+MODEL_NAME = PRIMARY_MODEL_NAME
 SAFETY_SETTINGS = [
     {"category": category, "threshold": "BLOCK_NONE"}
     for category in [
@@ -29,18 +30,99 @@ DEFAULT_GENERATION_CONFIG = {
 
 
 @lru_cache(maxsize=1)
-def get_model() -> Optional[genai.GenerativeModel]:
+def _import_genai():
+    import google.generativeai as genai
+
+    return genai
+
+
+@lru_cache(maxsize=4)
+def get_model(model_name: str = PRIMARY_MODEL_NAME) -> Optional[Any]:
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         print("GEMINI_API_KEY is missing; Gemini responses are disabled until it is configured.")
         return None
 
+    genai = _import_genai()
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(
-        MODEL_NAME,
+        model_name,
         safety_settings=SAFETY_SETTINGS,
         generation_config=DEFAULT_GENERATION_CONFIG,
     )
+
+
+def _looks_like_quota_error(exc: Exception) -> bool:
+    message = f"{type(exc).__name__}: {exc}".lower()
+    status_markers = [
+        " 400",
+        "status code 400",
+        "(400)",
+        "badrequest",
+        " 429",
+        "status code 429",
+        "(429)",
+        "resource exhausted",
+        "resourceexhausted",
+        "too many requests",
+    ]
+    quota_markers = [
+        "free tier",
+        "quota",
+        "rate limit",
+        "billing",
+        "resource exhausted",
+        "resourceexhausted",
+        "exceeded",
+        "too many requests",
+    ]
+    return any(marker in message for marker in status_markers) and any(
+        marker in message for marker in quota_markers
+    )
+
+
+def generate_content_with_fallback(
+    contents: Any,
+    *,
+    generation_config: Optional[dict] = None,
+    safety_settings: Optional[list[dict]] = None,
+    request_options: Optional[dict] = None,
+    stream: bool = False,
+    preferred_model: str = PRIMARY_MODEL_NAME,
+) -> tuple[Any, str]:
+    model = get_model(preferred_model)
+    if model is None:
+        raise RuntimeError("Gemini model is not configured.")
+
+    try:
+        response = model.generate_content(
+            contents,
+            generation_config=generation_config,
+            safety_settings=safety_settings,
+            request_options=request_options,
+            stream=stream,
+        )
+        return response, preferred_model
+    except Exception as exc:
+        if preferred_model != PRIMARY_MODEL_NAME or not _looks_like_quota_error(exc):
+            raise
+
+        fallback_model = get_model(FALLBACK_MODEL_NAME)
+        if fallback_model is None:
+            raise
+
+        print(
+            f"Gemini {PRIMARY_MODEL_NAME} quota/free-tier limit detected; retrying with "
+            f"{FALLBACK_MODEL_NAME}. Original error: {exc}"
+        )
+        response = fallback_model.generate_content(
+            contents,
+            generation_config=generation_config,
+            safety_settings=safety_settings,
+            request_options=request_options,
+            stream=stream,
+        )
+        return response, FALLBACK_MODEL_NAME
 
 
 def chat_with_gemini(
@@ -49,8 +131,7 @@ def chat_with_gemini(
     history: List[Dict[str, str]],
     dangerous_5w1h: bool = False,
 ) -> str:
-    model = get_model()
-    if model is None:
+    if get_model() is None:
         return "Trợ lý AI chưa được cấu hình xong. Bạn kiểm tra lại GEMINI_API_KEY rồi thử lại nhé."
 
     lines = context_text.strip().split("\n", 1)
@@ -115,7 +196,9 @@ Trả lời ngay."""
     messages.append({"role": "user", "parts": [base_prompt]})
 
     try:
-        response = model.generate_content(messages, stream=True)
+        response, used_model = generate_content_with_fallback(messages, stream=True)
+        if used_model != PRIMARY_MODEL_NAME:
+            print(f"chat_with_gemini switched to fallback model: {used_model}")
         full = ""
         for chunk in response:
             print(chunk.text, end="", flush=True)

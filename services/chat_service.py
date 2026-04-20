@@ -16,18 +16,22 @@ from config.db import save_message
 from services.multilingual_service import chat_multilingual, get_current_language
 from services.quick_reply_service import get_quick_response
 from services.vector_store_service import SESSION_MEMORY
+from services.web_knowledge_service import save_web_search_answer
 
 
 
 def _normalize_input(state: ChatGraphState) -> ChatGraphState:
     message = (state.get("message") or "").strip()
     session_id = state.get("session_id") or "default"
+    selected_llm_model = (state.get("selected_llm_model") or "auto").strip() or "auto"
     state["message"] = message
     state["session_id"] = session_id
+    state["selected_llm_model"] = selected_llm_model
     state["language"] = get_current_language(session_id)
 
     if not message:
         state["response"] = "Ban gui gi do di chu"
+        state["llm_model"] = "local:empty_input"
         state["handled"] = True
         state["stop_graph"] = True
 
@@ -50,6 +54,7 @@ def _handle_guardrails(state: ChatGraphState) -> ChatGraphState:
         state["response"] = get_swear_response()
         state["handled"] = True
         state["mode"] = "guardrail"
+        state["llm_model"] = "local:moderation"
         return state
 
     if len(message) <= 12 and not message.endswith("?"):
@@ -68,6 +73,7 @@ def _handle_guardrails(state: ChatGraphState) -> ChatGraphState:
             state["response"] = get_quick_response(message, target_lang=get_current_language(session_id))
             state["handled"] = True
             state["mode"] = "quick_reply"
+            state["llm_model"] = "local:quick_reply"
 
     state["language"] = get_current_language(session_id)
     return state
@@ -152,12 +158,21 @@ def _retrieve_general_rag(state: ChatGraphState) -> ChatGraphState:
 
 
 def _generate_response(state: ChatGraphState) -> ChatGraphState:
-    response = chat_multilingual(
+    if state.get("mode") == "ictu_scope_guard":
+        state["response"] = state.get("context_text", "")
+        state["llm_model"] = "local:ictu_scope_guard"
+        state["language"] = get_current_language(state["session_id"])
+        return state
+
+    response, llm_model = chat_multilingual(
         user_question=state["message"],
         context_text=state.get("context_text", "Thong tin dang duoc cap nhat."),
         session_id=state["session_id"],
+        rag_tool=state.get("rag_tool"),
+        selected_model=state.get("selected_llm_model"),
     )
     state["response"] = response
+    state["llm_model"] = llm_model
     state["language"] = get_current_language(state["session_id"])
     return state
 
@@ -169,6 +184,16 @@ def _finalize(state: ChatGraphState) -> ChatGraphState:
 
     if response:
         save_message("bot", response, session_id=session_id)
+
+    if response and "web_search" in str(state.get("mode", "")):
+        state["web_kb_status"] = save_web_search_answer(
+            question=state["message"],
+            answer=response,
+            chunks=state.get("chunks", []),
+            rag_tool=state.get("rag_tool"),
+            rag_route=state.get("rag_route"),
+            llm_model=state.get("llm_model"),
+        )
 
     if state.get("chunks"):
         SESSION_MEMORY[session_id].append(
@@ -208,8 +233,14 @@ def get_chat_graph_engine() -> str:
     return _CHAT_GRAPH.engine
 
 
-async def process_chat_message(message: str, session_id: str = "default") -> dict:
-    state = _CHAT_GRAPH.invoke({"message": message, "session_id": session_id})
+async def process_chat_message(message: str, session_id: str = "default", llm_model: str = "auto") -> dict:
+    state = _CHAT_GRAPH.invoke(
+        {
+            "message": message,
+            "session_id": session_id,
+            "selected_llm_model": llm_model,
+        }
+    )
     result = {
         "response": state.get("response", ""),
         "language": state.get("language"),
@@ -225,6 +256,10 @@ async def process_chat_message(message: str, session_id: str = "default") -> dic
         result["rag_tool"] = state.get("rag_tool")
     if state.get("rag_route") is not None:
         result["rag_route"] = state.get("rag_route")
+    if state.get("llm_model") is not None:
+        result["llm_model"] = state.get("llm_model")
+    if state.get("web_kb_status") is not None:
+        result["web_kb_status"] = state.get("web_kb_status")
 
     return result
 

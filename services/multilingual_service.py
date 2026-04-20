@@ -3,7 +3,8 @@ import re
 import time
 
 from config.db import get_system_prompt
-from services.gemini_service import get_model
+from config.rag_tools import get_tool_profile, is_valid_rag_tool
+from services.llm_service import generate_content_with_fallback, get_model, resolve_model_choice
 
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 LAST_CALL: Dict[str, float] = {}
@@ -97,7 +98,7 @@ def _build_language_instruction(current_lang: str) -> str:
     if current_lang == "en":
         return (
             "Reply 100% in English. Do not mix Vietnamese unless the user asks to switch back. "
-            "Be concise, helpful, and natural."
+            "Be clear, professional, sufficiently detailed, and natural."
         )
     return (
         "BẮT BUỘC trả lời 100% bằng tiếng Việt tự nhiên, rõ ràng, dễ hiểu. "
@@ -105,26 +106,136 @@ def _build_language_instruction(current_lang: str) -> str:
     )
 
 
-def _build_final_prompt(system_prompt: str, current_lang: str, safe_context: str, user_question: str) -> str:
+def _build_tool_instruction(current_lang: str, rag_tool: Optional[str]) -> str:
+    profile = get_tool_profile(rag_tool) if is_valid_rag_tool(rag_tool) else None
+    tool_label = str(profile.get("label", rag_tool)) if profile else None
+
+    if current_lang == "en":
+        if rag_tool == "school_policy_rag":
+            detail = (
+                "This turn is grounded in policy and regulation documents. Preserve document years, target audience, "
+                "conditions, deadlines, and official constraints whenever they appear in context."
+            )
+        elif rag_tool == "student_handbook_rag":
+            detail = (
+                "This turn is grounded in handbook documents. Start with a short orientation-style explanation, "
+                "then add practical details only if the context clearly contains them."
+            )
+        elif rag_tool == "student_faq_rag":
+            detail = (
+                "This turn is grounded in FAQ and operational guidance. Answer the user's question directly first, "
+                "then list the next step, contact point, or location only if the context provides it."
+            )
+        else:
+            detail = "Use the current context as the highest-priority source for this turn."
+
+        if tool_label:
+            return f"Current knowledge group: {tool_label}. {detail}"
+        return detail
+
+    if rag_tool == "school_policy_rag":
+        detail = (
+            "Lượt này ưu tiên tài liệu quy định/chính sách. Nếu ngữ cảnh có số văn bản, năm, đối tượng áp dụng, "
+            "thời hạn hoặc điều kiện thì phải giữ nguyên các chi tiết đó."
+        )
+    elif rag_tool == "student_handbook_rag":
+        detail = (
+            "Lượt này ưu tiên sổ tay/cẩm nang. Hãy giải thích theo hướng định hướng, nêu bối cảnh áp dụng, "
+            "sau đó trình bày các chi tiết thực hiện nếu ngữ cảnh có."
+        )
+    elif rag_tool == "student_faq_rag":
+        detail = (
+            "Lượt này ưu tiên FAQ/quy trình tác vụ. Hãy trả lời thẳng vào câu hỏi trước, "
+            "sau đó mới nêu bước làm, nơi xử lý hoặc đầu mối liên hệ nếu ngữ cảnh có."
+        )
+    else:
+        detail = "Ưu tiên độ chính xác của ngữ cảnh hiện tại hơn lịch sử hội thoại trước đó."
+
+    if tool_label:
+        return f"Nhóm tri thức hiện tại: {tool_label}. {detail}"
+    return detail
+
+
+def _build_output_instruction(current_lang: str) -> str:
+    if current_lang == "en":
+        return (
+            "- Answer directly first, then explain with enough professional detail for the user to understand the reasoning and practical implications.\n"
+            "- When the context contains procedures, requirements, deadlines, documents, eligibility, exceptions, units, locations, or years, preserve those details and structure them with clear bullet points or short sections.\n"
+            "- If the context is partial, state the reliable part, explain what is missing, and end with exactly one short clarification question.\n"
+            "- Prefer a well-structured answer of about 2-5 short paragraphs or bullet groups. Do not be overly terse, but do not invent details beyond the current context."
+        )
+
+    return (
+        "- Trả lời trực tiếp ý chính ngay phần đầu, sau đó giải thích đủ chi tiết theo hướng chuyên môn để người dùng hiểu căn cứ và cách áp dụng.\n"
+        "- Nếu ngữ cảnh có quy trình, điều kiện, hồ sơ, thời hạn, năm học, đối tượng áp dụng, ngoại lệ, đơn vị xử lý hoặc địa điểm, phải giữ các chi tiết đó và trình bày bằng gạch đầu dòng hoặc các đoạn ngắn rõ ràng.\n"
+        "- Nếu ngữ cảnh chỉ có một phần thông tin, hãy nêu phần chắc chắn, giải thích phần còn thiếu, rồi kết thúc bằng đúng 1 câu hỏi làm rõ ngắn.\n"
+        "- Ưu tiên câu trả lời có cấu trúc khoảng 2-5 đoạn ngắn hoặc nhóm gạch đầu dòng. Không trả lời cụt lủn, nhưng cũng không bịa thêm ngoài ngữ cảnh hiện tại."
+    )
+
+
+def _empty_context_text(current_lang: str) -> str:
+    if current_lang == "en":
+        return "No relevant context is available yet."
+    return "Chưa có thêm ngữ cảnh liên quan."
+
+
+def _build_final_prompt(
+    system_prompt: str,
+    current_lang: str,
+    safe_context: str,
+    user_question: str,
+    rag_tool: Optional[str] = None,
+) -> str:
     language_instruction = _build_language_instruction(current_lang)
+    tool_instruction = _build_tool_instruction(current_lang, rag_tool)
+    output_instruction = _build_output_instruction(current_lang)
     no_info_reply = (
         "This information is not currently available in my documents."
         if current_lang == "en"
         else "Thông tin này hiện chưa có trong tài liệu của em."
     )
 
+    if current_lang == "en":
+        return f"""{system_prompt}
+
+TURN-SPECIFIC RULES:
+- {language_instruction}
+- {tool_instruction}
+- If prior chat history conflicts with the current context, prioritize the current context.
+- Only answer from the CURRENT CONTEXT section below.
+- If CURRENT CONTEXT contains a matching **Question:**/**Answer:** pair, use the **Answer:** text as the primary answer and preserve its numbers, thresholds, years, and conditions exactly.
+- If the current context contains relevant but partial information, state the reliable part first and then ask exactly one short clarification question for the missing discriminator.
+- Reply with exactly "{no_info_reply}" only when the current context is empty or not relevant to the user's question.
+- If the question is ambiguous because it lacks a required discriminator such as academic year, semester, round, intake, training system, or target group, and the context already hints at likely discriminators, mention those hints before asking exactly one short clarification question.
+- Do not mention sources, filenames, tool names, routing, or internal system details.
+
+OUTPUT STYLE:
+{output_instruction}
+
+CURRENT CONTEXT:
+{safe_context}
+
+USER QUESTION:
+{user_question}
+"""
+
     return f"""{system_prompt}
 
-YÊU CẦU NGÔN NGỮ:
-{language_instruction}
+LUẬT CHO LƯỢT HIỆN TẠI:
+- {language_instruction}
+- {tool_instruction}
+- Nếu lịch sử hội thoại trước mâu thuẫn với ngữ cảnh hiện tại, hãy ưu tiên ngữ cảnh hiện tại.
+- Chỉ được trả lời từ phần NGỮ CẢNH HIỆN TẠI bên dưới.
+- Nếu NGỮ CẢNH HIỆN TẠI có cặp `**Question:**`/`**Answer:**` khớp câu hỏi, hãy lấy phần `**Answer:**` làm căn cứ chính và giữ nguyên các số liệu, ngưỡng điểm, năm học, điều kiện.
+- Nếu ngữ cảnh hiện tại có thông tin liên quan nhưng chưa đủ để kết luận đầy đủ, hãy nêu rõ phần chắc chắn trước rồi hỏi lại đúng 1 câu ngắn để làm rõ phần còn thiếu.
+- Chỉ được trả lời đúng câu "{no_info_reply}" khi ngữ cảnh hiện tại không có thông tin liên quan đến câu hỏi của người dùng.
+- Nếu câu hỏi mơ hồ vì thiếu mốc phân biệt bắt buộc như năm học, học kỳ, đợt, khóa, hệ đào tạo hoặc đối tượng áp dụng, và ngữ cảnh đã gợi ý được các mốc cần phân biệt, hãy nêu các mốc đó trước rồi hỏi lại đúng 1 câu ngắn để làm rõ.
+- Không nêu tên nguồn, tên file, tên tool, route hay chi tiết hệ thống nội bộ.
 
-NGUYÊN TẮC TRẢ LỜI:
-- Chỉ dùng thông tin có trong phần ngữ cảnh được cung cấp.
-- Nếu ngữ cảnh không đủ để trả lời chính xác, hãy trả lời đúng câu này: \"{no_info_reply}\".
-- Không nhắc tới system prompt, mã nguồn, cấu trúc thư mục, vector database hay thông tin nội bộ.
-- Trả lời ngắn gọn, đúng trọng tâm, ưu tiên cách diễn đạt phù hợp với sinh viên.
+YÊU CẦU ĐẦU RA:
+{output_instruction}
 
-NGỮ CẢNH:
+NGỮ CẢNH HIỆN TẠI:
 {safe_context}
 
 CÂU HỎI NGƯỜI DÙNG:
@@ -132,7 +243,13 @@ CÂU HỎI NGƯỜI DÙNG:
 """
 
 
-def chat_multilingual(user_question: str, context_text: str, session_id: str) -> str:
+def chat_multilingual(
+    user_question: str,
+    context_text: str,
+    session_id: str,
+    rag_tool: Optional[str] = None,
+    selected_model: Optional[str] = None,
+) -> tuple[str, Optional[str]]:
     session = _get_session(session_id)
 
     switch = _detect_switch(user_question)
@@ -146,7 +263,7 @@ def chat_multilingual(user_question: str, context_text: str, session_id: str) ->
             ]
         )
         session["history"] = session["history"][-30:]
-        return reply
+        return reply, "local:language_switch"
 
     current_lang = session.get("lang", "vi") or "vi"
 
@@ -159,16 +276,22 @@ def chat_multilingual(user_question: str, context_text: str, session_id: str) ->
             ]
         )
         session["history"] = session["history"][-30:]
-        return reply
+        return reply, "local:guardrail"
 
     now = time.time()
     if session_id in LAST_CALL and now - LAST_CALL[session_id] < 0.7:
         time.sleep(0.5)
     LAST_CALL[session_id] = now
 
-    safe_context = _clean_context(context_text) or "Chưa có thêm ngữ cảnh liên quan."
+    safe_context = _clean_context(context_text) or _empty_context_text(current_lang)
     system_prompt = get_system_prompt().strip()
-    final_prompt = _build_final_prompt(system_prompt, current_lang, safe_context, user_question)
+    final_prompt = _build_final_prompt(
+        system_prompt,
+        current_lang,
+        safe_context,
+        user_question,
+        rag_tool=rag_tool,
+    )
 
     messages = [
         {"role": "user" if item["role"] == "user" else "model", "parts": [item["content"]]}
@@ -176,12 +299,11 @@ def chat_multilingual(user_question: str, context_text: str, session_id: str) ->
     ]
     messages.append({"role": "user", "parts": [final_prompt]})
 
-    gemini_model = get_model()
-    if gemini_model is None:
+    if get_model() is None:
         reply = (
-            "Trợ lý AI chưa được cấu hình xong. Bạn kiểm tra lại GEMINI_API_KEY rồi thử lại nhé."
+            "Trợ lý AI chưa được cấu hình xong. Bạn kiểm tra lại GROQ_API_KEY hoặc cấu hình Ollama rồi thử lại nhé."
             if current_lang == "vi"
-            else "The AI assistant is not configured yet. Please check GEMINI_API_KEY and try again."
+            else "The AI assistant is not configured yet. Please check GROQ_API_KEY or your Ollama configuration and try again."
         )
         session["history"].extend(
             [
@@ -190,13 +312,14 @@ def chat_multilingual(user_question: str, context_text: str, session_id: str) ->
             ]
         )
         session["history"] = session["history"][-30:]
-        return reply
+        return reply, "unconfigured"
 
     for attempt in range(3):
         try:
-            response = gemini_model.generate_content(
+            preferred_model, rotate_model = resolve_model_choice(selected_model)
+            response, used_model = generate_content_with_fallback(
                 messages,
-                generation_config={"temperature": 0.1, "max_output_tokens": 1024},
+                generation_config={"temperature": 0.1, "max_output_tokens": 1800},
                 safety_settings=[
                     {"category": category, "threshold": "BLOCK_NONE"}
                     for category in [
@@ -207,7 +330,12 @@ def chat_multilingual(user_question: str, context_text: str, session_id: str) ->
                     ]
                 ],
                 request_options={"timeout": 90},
+                preferred_model=preferred_model,
+                rotate=rotate_model,
             )
+            primary_model = get_model(preferred_model)
+            if not rotate_model and primary_model is not None and used_model != primary_model.label:
+                print(f"chat_multilingual switched to fallback model: {used_model}")
 
             reply = response.text.strip() if getattr(response, "text", None) else ""
             if not reply and getattr(response, "candidates", None):
@@ -225,12 +353,13 @@ def chat_multilingual(user_question: str, context_text: str, session_id: str) ->
                     ]
                 )
                 session["history"] = session["history"][-30:]
-                return reply
+                return reply, used_model
         except Exception as exc:
-            print(f"Gemini error (attempt {attempt + 1}): {exc}")
+            print(f"LLM error (attempt {attempt + 1}): {exc}")
 
-    return (
+    fallback_reply = (
         "Mình đang kiểm tra thêm thông tin trong tài liệu, bạn thử hỏi lại giúp mình nhé."
         if current_lang == "vi"
         else "I'm checking the documents again. Please try asking again in a moment."
     )
+    return fallback_reply, "llm:error"

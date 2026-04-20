@@ -15,9 +15,6 @@ USER appuser
 
 ENV PATH="/home/appuser/.local/bin:${PATH}"
 
-# CĂ i PyTorch CPU-only phiĂªn báº£n 2.1.0
-RUN pip install --no-cache-dir torch==2.1.0+cpu --index-url https://download.pytorch.org/whl/cpu
-
 # Copy requirements vĂ  cĂ i Ä‘áº·t
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \

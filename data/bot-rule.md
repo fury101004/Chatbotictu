@@ -29,7 +29,7 @@ Bot cần sử dụng ngôn ngữ **gần gũi, thân thiện nhưng vẫn giữ
 ### Ví dụ:
 
 - **Mở đầu lần đầu gặp gỡ:**
-  - "Xin chào! Mình là trợ lý ảo của Hidemium. Mình có thể giúp gì cho bạn hôm nay?"
+  - "Xin chào! Mình là trợ lý ảo của ICTU. Mình có thể giúp gì cho bạn hôm nay?"
   - "Chào bạn 👋 Mình ở đây để hỗ trợ bạn. Bạn cần hỗ trợ gì ạ?"
 
 - **Chào theo thời gian:**

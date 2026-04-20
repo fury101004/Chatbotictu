@@ -1,10 +1,12 @@
 ﻿from __future__ import annotations
 
 import secrets
+from urllib.parse import quote_plus
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
+from config.rag_tools import DEFAULT_RAG_TOOL, get_upload_tool_options
 from config.settings import settings
 from services.chat_service import process_chat_message
 from services.config_service import get_config_page_payload, update_runtime_config
@@ -17,6 +19,8 @@ from services.document_service import (
     reset_document_store,
     upload_markdown_files,
 )
+from services.knowledge_base_service import approve_chat_entry, get_knowledge_base_payload
+from services.llm_service import get_chat_model_options
 from views.web_view import (
     current_prompt_response,
     json_upload_result,
@@ -26,6 +30,7 @@ from views.web_view import (
     render_data_loader_page,
     render_history_page,
     render_home,
+    render_knowledge_base_page,
     render_vector_manager_page,
     unauthorized_response,
 )
@@ -42,12 +47,16 @@ async def home(request: Request):
 
 @router.get("/chat")
 async def chat_page(request: Request):
-    return render_chat_page(request)
+    return render_chat_page(request, chat_model_options=get_chat_model_options())
 
 
 @router.post("/chat")
-async def chat_web(message: str = Form(...), session_id: str = Form("default")):
-    return await process_chat_message(message, session_id)
+async def chat_web(
+    message: str = Form(...),
+    session_id: str = Form("default"),
+    llm_model: str = Form("auto"),
+):
+    return await process_chat_message(message, session_id, llm_model=llm_model)
 
 
 @router.post("/delete-file")
@@ -67,21 +76,29 @@ async def get_current_prompt_view():
 
 @router.get("/data-loader")
 async def data_loader_page(request: Request):
+    if "csrf_token" not in request.session:
+        request.session["csrf_token"] = secrets.token_hex(16)
+
     return render_data_loader_page(
         request,
         chunk_size=settings.CHUNK_SIZE,
         chunk_overlap=settings.CHUNK_OVERLAP,
+        tool_options=get_upload_tool_options(),
+        default_tool=DEFAULT_RAG_TOOL,
+        csrf_token=request.session["csrf_token"],
     )
 
 
 @router.post("/upload")
 async def upload_files(
     files: list[UploadFile] = File(...),
+    tool_name: str = Form(DEFAULT_RAG_TOOL),
     client_start_time: float = Form(None),
     client_total_size: int = Form(None),
 ):
     result = await upload_markdown_files(
         files=files,
+        tool_name=tool_name,
         client_start_time=client_start_time,
         client_total_size=client_total_size,
     )
@@ -129,6 +146,54 @@ async def vector_manager(request: Request, limit_per_file: int = 50):
     )
 
 
+@router.get("/knowledge-base")
+async def knowledge_base_page(
+    request: Request,
+    q: str = "",
+    limit: int = 18,
+    status: str = "",
+    message: str = "",
+):
+    if "csrf_token" not in request.session:
+        request.session["csrf_token"] = secrets.token_hex(16)
+
+    payload = get_knowledge_base_payload(query=q, limit=limit)
+    payload["csrf_token"] = request.session["csrf_token"]
+    payload["flash_status"] = status
+    payload["flash_message"] = message
+    return render_knowledge_base_page(request, payload=payload)
+
+
+@router.post("/knowledge-base/approve-chat")
+async def approve_chat_to_knowledge_base(
+    request: Request,
+    entry_id: str = Form(...),
+    tool_name: str = Form(DEFAULT_RAG_TOOL),
+    return_q: str = Form(""),
+    csrf_token: str = Form(...),
+):
+    if request.session.get("csrf_token") != csrf_token:
+        return unauthorized_response("CSRF Invalid!")
+
+    try:
+        result = approve_chat_entry(entry_id=entry_id, tool_name=tool_name)
+        message = result["message"]
+        if result.get("warning"):
+            message = f"{message} {result['warning']}"
+        redirect_url = (
+            f"/knowledge-base?q={quote_plus(return_q)}"
+            f"&status=success&message={quote_plus(message)}"
+        )
+    except Exception as exc:
+        redirect_url = (
+            f"/knowledge-base?q={quote_plus(return_q)}"
+            f"&status=error&message={quote_plus(str(exc))}"
+        )
+
+    request.session["csrf_token"] = secrets.token_hex(16)
+    return RedirectResponse(redirect_url, status_code=303)
+
+
 @router.get("/config")
 async def config_page(request: Request):
     payload = get_config_page_payload()
@@ -163,6 +228,10 @@ async def delete_chunk(chunk_id: str = Form(...)):
 
 @router.get("/history")
 async def history_page(request: Request, page: int = 1):
+    if "csrf_token" not in request.session:
+        request.session["csrf_token"] = secrets.token_hex(16)
+
     payload = get_history_page_data(page=page, per_page=50)
+    payload["csrf_token"] = request.session["csrf_token"]
     return render_history_page(request, payload=payload)
 

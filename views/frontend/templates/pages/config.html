@@ -13,11 +13,19 @@
         <div class="info-box">
             <h2>Thông tin hệ thống</h2>
             <div class="info-grid">
-                <div><strong>LLM Model:</strong> gemini-1.5-flash</div>
+                <div><strong>LLM Model:</strong> {{ model_name }}</div>
+                <div><strong>Luân phiên model:</strong> {{ model_rotation }}</div>
                 <div><strong>Chunk Size:</strong> {{ chunk_size }} từ</div>
                 <div><strong>Chunk Overlap:</strong> {{ chunk_overlap }} từ</div>
                 <div><strong>Prompt Source:</strong> data/systemprompt.md</div>
             </div>
+            {% if model_names %}
+            <div class="model-rotation-list">
+                {% for item in model_names %}
+                <span>{{ item }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
 
         <form id="configForm">
@@ -102,6 +110,22 @@
     transition: all 0.2s;
 }
 .btn-small:hover { background: #636f93; }
+
+.model-rotation-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.model-rotation-list span {
+    background: #6357f3;
+    border-radius: 8px;
+    color: #fff;
+    display: inline-flex;
+    font-size: 0.92em;
+    padding: 8px 12px;
+}
 
 .editor-container {
     position: relative;

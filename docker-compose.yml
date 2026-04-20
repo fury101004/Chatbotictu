@@ -1,29 +1,20 @@
-version: '3.9'
-
 services:
   bot:
     build: .
-    container_name: hidemium-rag-api
+    container_name: ictu-rag-api
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     volumes:
       - ./data:/app/data
       - ./vectorstore:/app/vectorstore
-      - ./templates:/app/templates
-      - ./static:/app/static
       - ./logs:/app/logs
+      - ./views/frontend/templates:/app/views/frontend/templates
+      - ./views/frontend/assets:/app/views/frontend/assets
     environment:
       - PYTHONUNBUFFERED=1
-      - PORT=8000
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s

@@ -4,19 +4,22 @@
 {% block content %}
 <div class="loader-page">
     <h1 class="page-title">DATA LOADER</h1>
-    <p class="page-desc">Upload file .md để dạy bot kiến thức mới – mượt như bơ!</p>
+    <p class="page-desc">Chọn đúng nhóm dữ liệu trước khi upload để mỗi tool RAG đọc đúng loại tài liệu.</p>
 
-    <!-- Khu vực kéo thả + chọn file -->
-    <div class="drop-zone" id="dropZone">
-        <p>Kéo thả file .md vào đây<br><small>Hoặc click để chọn • Chỉ hỗ trợ .md • Tối đa 200MB</small></p>
-        <input type="file" id="fileInput" name="files" multiple accept=".md,.markdown" hidden>
-    </div>
+    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
 
-    <!-- Danh sách file đã chọn -->
-    <div id="fileList" class="file-preview"></div>
-
-    <!-- Cài đặt chunk -->
-    <div class="settings-grid">
+    <div class="settings-grid top-grid">
+        <div class="setting-item select-card">
+            <label for="toolSelect">Nhóm dữ liệu</label>
+            <select id="toolSelect" class="tool-select">
+                {% for tool in tool_options %}
+                <option value="{{ tool.name }}" {% if tool.name == default_tool %}selected{% endif %}>
+                    {{ tool.label }}
+                </option>
+                {% endfor %}
+            </select>
+            <p id="toolDescription" class="tool-description"></p>
+        </div>
         <div class="setting-item">
             <label>Chunk Size: <span id="chunkValue">{{ chunk_size }}</span> từ</label>
             <input type="range" min="500" max="3000" step="100" value="{{ chunk_size }}" id="chunkSize">
@@ -27,36 +30,71 @@
         </div>
     </div>
 
-    <!-- Nút hành động -->
+    <div class="drop-zone" id="dropZone">
+        <p>Kéo thả file vào đây<br><small>Hoặc click để chọn • Hỗ trợ .md, .markdown, .txt • Tối đa 200MB</small></p>
+        <input type="file" id="fileInput" name="files" multiple accept=".md,.markdown,.txt" hidden>
+    </div>
+
+    <div id="fileList" class="file-preview"></div>
+
     <div class="action-buttons">
-        <button id="uploadBtn" class="btn-large teal" disabled>UPLOAD NGAY</button>
+        <button id="uploadBtn" class="btn-large teal" disabled>UPLOAD THEO NHÓM</button>
         <button id="resetBtn" class="btn-large red">RESET VECTOR STORE</button>
     </div>
 
-    <!-- Thông báo trạng thái -->
     <div id="status" class="status-box"></div>
 
-    <!-- Điều hướng -->
     <div class="nav-buttons">
-        <a href="/history" class="btn-nav">Xem Lịch Sử & File</a>
-        <a href="/chat" class="btn-nav purple">Chat Với Bot</a>
+        <a href="/history" class="btn-nav">Xem lịch sử & file</a>
+        <a href="/chat" class="btn-nav purple">Chat với bot</a>
     </div>
 </div>
 
 <script>
-// ĐÃ FIX 100% – KHÔNG BAO GIỜ LỖI NỮA!
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const fileList = document.getElementById('fileList');
-const uploadBtn = document.getElementById('uploadBtn');
-const resetBtn = document.getElementById('resetBtn');
-const status = document.getElementById('status');
+const toolOptions = {{ tool_options|tojson|safe }};
+const dropZone = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
+const fileList = document.getElementById("fileList");
+const uploadBtn = document.getElementById("uploadBtn");
+const resetBtn = document.getElementById("resetBtn");
+const status = document.getElementById("status");
+const toolSelect = document.getElementById("toolSelect");
+const toolDescription = document.getElementById("toolDescription");
+const csrfToken = document.getElementById("csrfToken");
 
 let selectedFiles = [];
 
-// Xử lý file an toàn tuyệt đối
-function handleFiles(fileList) {
-    if (!fileList || fileList.length === 0) {
+function updateToolDescription() {
+    const current = toolOptions.find(item => item.name === toolSelect.value);
+    toolDescription.textContent = current ? current.description : "";
+}
+
+function formatFiles(items) {
+    return items.map(item => `<li>${item}</li>`).join("");
+}
+
+function renderResult(result) {
+    const tone = result.status === "error" ? "error" : result.status === "partial" ? "warning" : "success";
+    const speedText = result.real_speed ? `<div class="meta-line">Tốc độ thực tế: ${result.real_speed} MB/s</div>` : "";
+    const warningBlock = result.detail?.warnings?.length
+        ? `<div class="detail-block"><strong>Cảnh báo</strong><ul>${formatFiles(result.detail.warnings)}</ul></div>`
+        : "";
+    const failedBlock = result.detail?.failed?.length
+        ? `<div class="detail-block"><strong>Lỗi</strong><ul>${formatFiles(result.detail.failed)}</ul></div>`
+        : "";
+
+    status.innerHTML = `
+        <div class="info-box ${tone}">
+            <div class="status-title">${result.msg || "Đã xử lý xong."}</div>
+            ${speedText}
+            ${warningBlock}
+            ${failedBlock}
+        </div>
+    `;
+}
+
+function handleFiles(incomingList) {
+    if (!incomingList || incomingList.length === 0) {
         selectedFiles = [];
         renderFileList();
         uploadBtn.disabled = true;
@@ -64,13 +102,12 @@ function handleFiles(fileList) {
     }
 
     const validFiles = [];
-    for (let i = 0; i < fileList.length; i++) {
-        const file = fileList[i];
-        if (file && file.name && typeof file.name === "string") {
-            const ext = file.name.toLowerCase();
-            if (ext.endsWith('.md') || ext.endsWith('.markdown')) {
-                validFiles.push(file);
-            }
+    for (let i = 0; i < incomingList.length; i++) {
+        const file = incomingList[i];
+        if (!file || !file.name) continue;
+        const ext = file.name.toLowerCase();
+        if (ext.endsWith(".md") || ext.endsWith(".markdown") || ext.endsWith(".txt")) {
+            validFiles.push(file);
         }
     }
 
@@ -81,136 +118,186 @@ function handleFiles(fileList) {
 
 function renderFileList() {
     if (selectedFiles.length === 0) {
-        fileList.innerHTML = '';
+        fileList.innerHTML = "";
         return;
     }
+
     fileList.innerHTML = `
-        <div class="preview-header">ĐÃ CHỌN ${selectedFiles.length} FILE:</div>
-        ${selectedFiles.map(f => `
+        <div class="preview-header">ĐÃ CHỌN ${selectedFiles.length} FILE</div>
+        ${selectedFiles.map(file => `
             <div class="preview-item">
-                <span>${f.name}</span>
-                <small>${(f.size / 1024 / 1024).toFixed(2)} MB</small>
+                <span>${file.name}</span>
+                <small>${(file.size / 1024 / 1024).toFixed(2)} MB</small>
             </div>
-        `).join('')}
+        `).join("")}
     `;
 }
 
-// Upload
-uploadBtn.addEventListener('click', async () => {
+uploadBtn.addEventListener("click", async () => {
     if (selectedFiles.length === 0) return;
 
-    // NOTE: Đo chính xác thời gian + dung lượng người dùng thực sự upload
-    const uploadStartTime = Date.now();                                      // Thời điểm client bắt đầu gửi
-    const totalClientSize = selectedFiles.reduce((sum, f) => sum + f.size, 0); // Tổng byte thực tế
-
+    const uploadStartTime = Date.now();
+    const totalClientSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
     const formData = new FormData();
+
     selectedFiles.forEach(file => formData.append("files", file));
+    formData.append("tool_name", toolSelect.value);
+    formData.append("client_start_time", uploadStartTime);
+    formData.append("client_total_size", totalClientSize);
 
-    // Gửi thêm thông tin để backend tính tốc độ thật
-    formData.append("client_start_time", uploadStartTime);   // ms
-    formData.append("client_total_size", totalClientSize);   // bytes
-
-    status.innerHTML = `<div class="info-box">Đang upload... Đợi tí nha!</div>`;
+    status.innerHTML = `<div class="info-box loading">Đang upload và gán tài liệu vào nhóm <strong>${toolSelect.value}</strong>...</div>`;
     uploadBtn.disabled = true;
 
     try {
         const response = await fetch("/upload", {
             method: "POST",
-            body: formData
+            body: formData,
         });
         const result = await response.json();
+        renderResult(result);
 
-        // Hiển thị tốc độ thực tế cho người dùng (nếu backend trả về)
-        const speedText = result.real_speed 
-            ? ` • Tốc độ thực tế: ${result.real_speed} MB/s` 
-            : "";
-
-        status.innerHTML = `<div class="info-box success">
-            UPLOAD THÀNH CÔNG! ${speedText}
-        </div>`;
+        if (!response.ok || result.status === "error") {
+            uploadBtn.disabled = false;
+            return;
+        }
 
         selectedFiles = [];
         renderFileList();
         uploadBtn.disabled = true;
     } catch (err) {
         console.error(err);
-        status.innerHTML = `<div class="info-box error">Lỗi mạng!</div>`;
+        status.innerHTML = `<div class="info-box error">Lỗi mạng hoặc backend chưa phản hồi.</div>`;
         uploadBtn.disabled = false;
     }
 });
 
-// Reset
-resetBtn.addEventListener('click', async () => {
-    if (!confirm("Xóa sạch hết kiến thức bot học được?")) return;
-    if (!confirm("Thật luôn hả đại ca?")) return;
+resetBtn.addEventListener("click", async () => {
+    if (!confirm("Xóa sạch vector store và file upload hiện tại?")) return;
+    if (!confirm("Xác nhận lần 2: thao tác này không thể hoàn tác.")) return;
 
-    status.innerHTML = `<div class="info-box">Đang xóa vector store...</div>`;
+    status.innerHTML = `<div class="info-box loading">Đang reset vector store...</div>`;
+    const formData = new FormData();
+    formData.append("csrf_token", csrfToken.value);
+
     try {
-        await fetch("/reset-vectorstore", { method: "POST" });
-        status.innerHTML = `<div class="info-box success">XÓA SẠCH RỒI! Bot ngu lại từ đầu!</div>`;
+        const response = await fetch("/reset-vectorstore", {
+            method: "POST",
+            body: formData,
+        });
+        if (!response.ok) {
+            throw new Error("Reset thất bại");
+        }
+
+        status.innerHTML = `<div class="info-box success">Đã reset vector store và toàn bộ file upload.</div>`;
+        selectedFiles = [];
+        renderFileList();
+        uploadBtn.disabled = true;
     } catch (err) {
-        status.innerHTML = `<div class="info-box error">Xóa lỗi rồi...</div>`;
+        console.error(err);
+        status.innerHTML = `<div class="info-box error">Không reset được vector store.</div>`;
     }
 });
 
-// Realtime chunk value
-document.getElementById('chunkSize').addEventListener('input', e => {
-    document.getElementById('chunkValue').textContent = e.target.value;
-});
-document.getElementById('chunkOverlap').addEventListener('input', e => {
-    document.getElementById('overlapValue').textContent = e.target.value;
+document.getElementById("chunkSize").addEventListener("input", event => {
+    document.getElementById("chunkValue").textContent = event.target.value;
 });
 
-// Event Listeners – ĐÃ FIX CHẮN CHẮN
-dropZone.addEventListener('click', () => fileInput.click());
-
-dropZone.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropZone.style.borderColor = '#4ecdc4';
-});
-dropZone.addEventListener('dragleave', () => {
-    dropZone.style.borderColor = '#333';
-});
-dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.style.borderColor = '#333';
-    handleFiles(e.dataTransfer?.files);
+document.getElementById("chunkOverlap").addEventListener("input", event => {
+    document.getElementById("overlapValue").textContent = event.target.value;
 });
 
-fileInput.addEventListener('change', () => {
-    handleFiles(fileInput.files);
+dropZone.addEventListener("click", () => fileInput.click());
+dropZone.addEventListener("dragover", event => {
+    event.preventDefault();
+    dropZone.style.borderColor = "#4ecdc4";
 });
+dropZone.addEventListener("dragleave", () => {
+    dropZone.style.borderColor = "#333";
+});
+dropZone.addEventListener("drop", event => {
+    event.preventDefault();
+    dropZone.style.borderColor = "#333";
+    handleFiles(event.dataTransfer?.files);
+});
+fileInput.addEventListener("change", () => handleFiles(fileInput.files));
+toolSelect.addEventListener("change", updateToolDescription);
+
+updateToolDescription();
 </script>
 
 <style>
-.loader-page { max-width: 900px; margin: 2rem auto; padding: 0 1rem; text-align: center; }
+.loader-page { max-width: 980px; margin: 2rem auto; padding: 0 1rem; text-align: center; }
+.page-desc { max-width: 760px; margin: 0 auto 1.5rem; }
+.top-grid { align-items: stretch; }
+.select-card { grid-column: 1 / -1; text-align: left; }
+.tool-select {
+    width: 100%;
+    padding: 1rem 1.1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(78, 205, 196, 0.35);
+    background: #151523;
+    color: #f7f9fb;
+    font-size: 1rem;
+}
+.tool-description { margin: 0.8rem 0 0; color: #b9c2d0; line-height: 1.5; }
 .drop-zone {
-    border: 4px dashed #333; border-radius: 20px; padding: 3rem; cursor: pointer;
-    transition: all 0.3s; background: #1a1a2e; margin: 2rem 0;
+    border: 4px dashed #333;
+    border-radius: 20px;
+    padding: 3rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: #1a1a2e;
+    margin: 2rem 0;
 }
 .drop-zone:hover { border-color: #4ecdc4; }
 .file-preview { margin: 2rem 0; text-align: left; background: #1a1a2e; padding: 1.5rem; border-radius: 12px; }
 .preview-header { font-weight: bold; color: #4ecdc4; margin-bottom: 1rem; }
-.preview-item { padding: 0.5rem 0; color: #a29bfe; display: flex; justify-content: space-between; }
-
-.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 700px; margin: 3rem auto; }
-.setting-item label { display: block; font-size: 1.3rem; margin-bottom: 0.5rem; color: #fff; }
+.preview-item { padding: 0.5rem 0; color: #d7dcff; display: flex; justify-content: space-between; gap: 1rem; }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem; max-width: 780px; margin: 2rem auto; }
+.setting-item {
+    background: #1a1a2e;
+    border: 1px solid rgba(78, 205, 196, 0.15);
+    border-radius: 16px;
+    padding: 1.3rem;
+}
+.setting-item label { display: block; font-size: 1.05rem; margin-bottom: 0.75rem; color: #fff; text-align: left; }
 .setting-item input[type=range] { width: 100%; }
-
-.action-buttons { margin: 3rem 0; display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; }
-.btn-large { padding: 1.2rem 3rem; font-size: 1.3rem; border-radius: 50px; border: none; cursor: pointer; }
+.action-buttons { margin: 3rem 0; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+.btn-large { padding: 1.1rem 2.4rem; font-size: 1.05rem; border-radius: 999px; border: none; cursor: pointer; font-weight: 700; }
 .teal { background: #4ecdc4; color: #0f0f1a; }
 .red { background: #ff4757; color: white; }
-
-.status-box { min-height: 60px; margin: 2rem 0; }
-.info-box { padding: 1.2rem 2rem; border-radius: 12px; display: inline-block; font-weight: bold; }
+.status-box { min-height: 70px; margin: 2rem 0; }
+.info-box {
+    padding: 1.2rem 1.4rem;
+    border-radius: 16px;
+    display: inline-block;
+    min-width: min(720px, 100%);
+    text-align: left;
+}
+.status-title { font-weight: 700; line-height: 1.6; }
+.meta-line { margin-top: 0.5rem; opacity: 0.9; }
+.detail-block { margin-top: 0.9rem; }
+.detail-block ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
 .success { background: #1a3a2a; color: #4ade80; border: 1px solid #4ade80; }
+.warning { background: #3a3417; color: #ffd166; border: 1px solid #ffd166; }
 .error { background: #3a1a1a; color: #ff6b6b; border: 1px solid #ff6b6b; }
-
-.nav-buttons a { 
-    display: inline-block; margin: 1rem; padding: 1rem 2.5rem; 
-    background: #6c5ce7; color: white; border-radius: 50px; text-decoration: none; font-weight: bold;
+.loading { background: #13263b; color: #74b9ff; border: 1px solid #74b9ff; }
+.nav-buttons a {
+    display: inline-block;
+    margin: 1rem;
+    padding: 1rem 2.5rem;
+    background: #6c5ce7;
+    color: white;
+    border-radius: 50px;
+    text-decoration: none;
+    font-weight: bold;
 }
 .nav-buttons a.purple { background: #a29bfe; }
+
+@media (max-width: 720px) {
+    .settings-grid { grid-template-columns: 1fr; }
+    .info-box { min-width: 100%; }
+    .drop-zone { padding: 2.2rem 1rem; }
+}
 </style>
 {% endblock %}

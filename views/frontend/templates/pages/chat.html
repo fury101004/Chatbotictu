@@ -1,5 +1,5 @@
 ﻿{% extends "layouts/base.html" %}
-{% block title %}Chat với Hidemium AI – 2025{% endblock %}
+{% block title %}Chat với ICTU AI – 2025{% endblock %}
 
 {% block content %}
 <div class="chat-wrapper">
@@ -16,7 +16,7 @@
                         <span>AI</span>
                     </div>
                     <div class="ai-text">
-                        <h2>Hidemium AI</h2>
+                        <h2>ICTU AI</h2>
                         <div class="status">
                             <span class="status-dot"></span>
                             <span id="typing" class="status-text">Đang online</span>
@@ -24,6 +24,9 @@
                     </div>
                 </div>
                 <div class="header-actions">
+                    <button class="action-btn theme-toggle" id="themeToggle" type="button" title="Đổi giao diện">
+                        <span id="themeToggleLabel">Sáng</span>
+                    </button>
                     <button class="action-btn" title="Cài đặt">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                             <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2"/>
@@ -63,24 +66,51 @@
                             autocomplete="off" 
                             autofocus
                         ></textarea>
-                        <div class="input-actions">
-                            <button type="button" class="action-icon" title="Gửi file">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                    <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5"/>
-                                    <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5"/>
-                                    <path d="M12 18V12" stroke="currentColor" stroke-width="1.5"/>
-                                    <path d="M9 15H15" stroke="currentColor" stroke-width="1.5"/>
-                                </svg>
-                            </button>
-                            <button type="submit" id="sendBtn" class="send-button">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z"/>
-                                </svg>
-                            </button>
+                        <div class="composer-controls">
+                            <div class="model-picker" id="modelPicker">
+                                <button type="button" class="model-plus" id="modelPlus" title="Mở chọn model">+</button>
+                                <div class="model-select">
+                                    <button
+                                        type="button"
+                                        class="model-select-button"
+                                        id="modelSelectButton"
+                                        aria-haspopup="listbox"
+                                        aria-expanded="false"
+                                    >
+                                        <span id="selectedModelLabel">Auto</span>
+                                        <span class="model-caret"></span>
+                                    </button>
+                                    <div class="model-menu" id="modelMenu" role="listbox" aria-label="Chọn model">
+                                        <button type="button" class="model-option active" role="option" data-value="auto" data-label="Auto" aria-selected="true">
+                                            Auto
+                                        </button>
+                                        {% for option in chat_model_options %}
+                                        <button type="button" class="model-option" role="option" data-value="{{ option.value }}" data-label="{{ option.label }}" aria-selected="false">
+                                            {{ option.label }}
+                                        </button>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="input-actions">
+                                <button type="button" class="action-icon" title="Gửi file">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                        <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M12 18V12" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M9 15H15" stroke="currentColor" stroke-width="1.5"/>
+                                    </svg>
+                                </button>
+                                <button type="submit" id="sendBtn" class="send-button">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="input-footer">
-                        <span class="hint-text">Enter để gửi • Shift + Enter để xuống dòng</span>
+                        <span class="hint-text">Enter để gửi, Shift+Enter để xuống dòng</span>
                         <span id="charCount" class="char-count">0/1000</span>
                     </div>
                 </form>
@@ -134,7 +164,7 @@ window.connectToCSKH = function(sessionId, firstMessage) {
     ws.onclose = () => {
         window.cskhConnected = false;
         ws = null;
-        addMessage("system", "Nhân viên đã rời phòng. Hidemium AI tiếp tục hỗ trợ!", "Hệ thống");
+        addMessage("system", "Nhân viên đã rời phòng. ICTU AI tiếp tục hỗ trợ!", "Hệ thống");
         document.getElementById("typing").textContent = "Đang online";
         document.getElementById("userInput").placeholder = "Hỏi đại ca đi...";
     };
@@ -174,7 +204,119 @@ function showFloating() {
     });
 }
 
-function addMessage(sender, text, name = "Hidemium AI", bgColor = null) {
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[char]);
+}
+
+function formatModelName(value) {
+    const labels = {
+        "groq:llama-3.1-8b-instant": "Groq Llama 3.1 8B Instant",
+        "groq:llama-3.3-70b-versatile": "Groq Llama 3.3 70B Versatile",
+        "groq:openai/gpt-oss-20b": "Groq GPT OSS 20B",
+        "groq:openai/gpt-oss-120b": "Groq GPT OSS 120B",
+        "groq:qwen/qwen3-32b": "Groq Qwen 3 32B",
+        "groq:meta-llama/llama-4-scout-17b-16e-instruct": "Groq Llama 4 Scout 17B 16E"
+    };
+    return labels[value] || value;
+}
+
+const modelState = {
+    value: "auto",
+    label: "Auto"
+};
+
+const CHAT_THEME_KEY = "ictu-chat-theme";
+
+function applyChatTheme(theme) {
+    const nextTheme = theme === "light" ? "light" : "dark";
+    const wrapper = document.querySelector(".chat-wrapper");
+    const label = document.getElementById("themeToggleLabel");
+
+    if (wrapper) wrapper.dataset.theme = nextTheme;
+    document.documentElement.dataset.chatTheme = nextTheme;
+    document.body.dataset.chatTheme = nextTheme;
+    if (label) label.textContent = nextTheme === "light" ? "Tối" : "Sáng";
+
+    try {
+        localStorage.setItem(CHAT_THEME_KEY, nextTheme);
+    } catch {
+        // Local storage can be disabled; the theme still applies for this page load.
+    }
+}
+
+function initThemeToggle() {
+    let savedTheme = "dark";
+    try {
+        savedTheme = localStorage.getItem(CHAT_THEME_KEY) || "dark";
+    } catch {
+        savedTheme = "dark";
+    }
+
+    applyChatTheme(savedTheme);
+    document.getElementById("themeToggle")?.addEventListener("click", () => {
+        const current = document.querySelector(".chat-wrapper")?.dataset.theme || "dark";
+        applyChatTheme(current === "dark" ? "light" : "dark");
+    });
+}
+
+function setModelMenuOpen(open) {
+    const picker = document.getElementById("modelPicker");
+    const button = document.getElementById("modelSelectButton");
+    if (!picker || !button) return;
+
+    picker.classList.toggle("open", open);
+    button.setAttribute("aria-expanded", String(open));
+}
+
+function setSelectedModel(value, label) {
+    modelState.value = value || "auto";
+    modelState.label = label || "Auto";
+    document.getElementById("selectedModelLabel").textContent = modelState.label;
+
+    document.querySelectorAll(".model-option").forEach((option) => {
+        const active = option.dataset.value === modelState.value;
+        option.classList.toggle("active", active);
+        option.setAttribute("aria-selected", String(active));
+    });
+}
+
+function initModelPicker() {
+    const picker = document.getElementById("modelPicker");
+    const button = document.getElementById("modelSelectButton");
+    const plus = document.getElementById("modelPlus");
+    if (!picker || !button) return;
+
+    const toggleMenu = () => setModelMenuOpen(!picker.classList.contains("open"));
+    button.addEventListener("click", toggleMenu);
+    plus?.addEventListener("click", toggleMenu);
+
+    document.querySelectorAll(".model-option").forEach((option) => {
+        option.addEventListener("click", () => {
+            setSelectedModel(option.dataset.value, option.dataset.label);
+            setModelMenuOpen(false);
+        });
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!picker.contains(event.target)) {
+            setModelMenuOpen(false);
+        }
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            setModelMenuOpen(false);
+        }
+    });
+}
+
+function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null) {
     const container = document.getElementById("messages");
     const msgElement = document.createElement("div");
     msgElement.className = `message ${sender}`;
@@ -192,6 +334,10 @@ function addMessage(sender, text, name = "Hidemium AI", bgColor = null) {
         /(https?:\/\/[^\s<]+[^\s<.,;:!?])/g,
         '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
     );
+
+    const metaHtml = meta?.llm_model
+        ? `<div class="message-meta">Model: ${escapeHtml(formatModelName(meta.llm_model))}</div>`
+        : "";
     
     msgElement.innerHTML = `
         <div class="message-header">
@@ -199,6 +345,7 @@ function addMessage(sender, text, name = "Hidemium AI", bgColor = null) {
             <span class="message-time">${timestamp}</span>
         </div>
         <div class="message-content">${html}</div>
+        ${metaHtml}
     `;
     
     if (bgColor) {
@@ -244,7 +391,7 @@ document.getElementById("chatForm").onsubmit = async (e) => {
         const res = await fetch("/chat", {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({ message: msg })
+            body: new URLSearchParams({ message: msg, llm_model: modelState.value })
         });
         const data = await res.json();
         thinking.remove();
@@ -256,7 +403,7 @@ document.getElementById("chatForm").onsubmit = async (e) => {
             return;
         }
 
-        if (data.response) addMessage("bot", data.response, "Hidemium AI");
+        if (data.response) addMessage("bot", data.response, "ICTU AI", null, { llm_model: data.llm_model });
     } catch (err) {
         thinking.remove();
         addMessage("system", "Mạng lag rồi đại ca ơi, thử lại đi!", "Hệ thống");
@@ -276,7 +423,7 @@ function updateCharCount(length) {
     } else if (length > 700) {
         charCount.style.color = '#feca57';
     } else {
-        charCount.style.color = '#666';
+        charCount.style.color = '';
     }
 }
 
@@ -314,6 +461,8 @@ userInput.addEventListener('keydown', function(e) {
 });
 
 // Khởi tạo
+initThemeToggle();
+initModelPicker();
 updateCharCount(0);
 sendBtn.disabled = true;
 
@@ -755,6 +904,16 @@ body {
     line-height: 1.6;
 }
 
+.message-meta {
+    margin-top: 0.65rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    color: #8f9ba8;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.72rem;
+    word-break: break-word;
+}
+
 .message-content strong {
     color: #00ff88;
     font-weight: 600;
@@ -768,14 +927,14 @@ body {
 /* Input section */
 .input-section {
     padding: 1rem 1.5rem;
-    background: rgba(26, 26, 46, 0.9);
+    background: #f5f7fb;
     backdrop-filter: blur(10px);
-    border-top: 1px solid #333;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    border-top: 1px solid #d8dfeb;
+    box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.08);
 }
 
 .input-container {
-    max-width: 800px;
+    max-width: 960px;
     margin: 0 auto;
 }
 
@@ -783,23 +942,24 @@ body {
     display: flex;
     align-items: flex-end;
     gap: 0.75rem;
-    background: #1a1a2e;
-    border: 2px solid #333;
-    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #bbc6ff;
+    border-radius: 8px;
     padding: 0.75rem 1rem;
     transition: all 0.3s ease;
+    box-shadow: 0 12px 34px rgba(37, 99, 235, 0.12);
 }
 
 .input-wrapper:focus-within {
-    border-color: #00ff88;
-    box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.1);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12), 0 12px 34px rgba(37, 99, 235, 0.14);
 }
 
 #userInput {
     flex: 1;
     background: transparent;
     border: none;
-    color: #e0e0ff;
+    color: #1f2937;
     font-size: 0.95rem;
     line-height: 1.5;
     resize: none;
@@ -811,7 +971,7 @@ body {
 }
 
 #userInput::placeholder {
-    color: #666;
+    color: #8f9aa8;
 }
 
 .input-actions {
@@ -823,10 +983,10 @@ body {
 .action-icon {
     width: 36px;
     height: 36px;
-    border-radius: 10px;
+    border-radius: 8px;
     background: transparent;
-    border: 1px solid #333;
-    color: #666;
+    border: 1px solid #d7deea;
+    color: #64748b;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -835,18 +995,18 @@ body {
 }
 
 .action-icon:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #aaa;
-    border-color: #00ff88;
+    background: #eef4ff;
+    color: #2563eb;
+    border-color: #a8b9ff;
 }
 
 .send-button {
     width: 44px;
     height: 44px;
-    border-radius: 12px;
-    background: #333;
-    border: 2px solid #333;
-    color: #666;
+    border-radius: 8px;
+    background: #d9e0ea;
+    border: 1px solid #d9e0ea;
+    color: #8f9aa8;
     cursor: not-allowed;
     display: flex;
     align-items: center;
@@ -855,16 +1015,16 @@ body {
 }
 
 .send-button.active {
-    background: linear-gradient(135deg, #00ff88, #00ffff);
+    background: #2563eb;
     border-color: transparent;
-    color: #0f0f1a;
+    color: #ffffff;
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.32);
 }
 
 .send-button:hover.active {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 255, 136, 0.4);
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.38);
 }
 
 .input-footer {
@@ -873,19 +1033,361 @@ body {
     align-items: center;
     margin-top: 0.5rem;
     padding: 0 0.5rem;
+    gap: 1rem;
+    position: relative;
+}
+
+.model-picker {
+    align-items: center;
+    color: #1f2937;
+    display: flex;
+    gap: 0.65rem;
+    min-width: 190px;
+    position: relative;
+}
+
+.model-plus {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: #64748b;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 1.25rem;
+    font-weight: 500;
+    height: 34px;
+    justify-content: center;
+    line-height: 1;
+    width: 34px;
+}
+
+.model-plus:hover {
+    background: #eef4ff;
+    color: #2563eb;
+}
+
+.model-select {
+    position: relative;
+}
+
+.model-select-button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: #1f2937;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    gap: 0.6rem;
+    max-width: 280px;
+    min-height: 34px;
+    padding: 0 0.35rem;
+}
+
+.model-select-button:hover {
+    background: #eef4ff;
+}
+
+#selectedModelLabel {
+    display: inline-block;
+    max-width: 230px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.model-caret {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #2563eb;
+    display: inline-block;
+    transition: transform 0.18s ease;
+}
+
+.model-picker.open .model-caret {
+    transform: rotate(180deg);
+}
+
+.model-menu {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    bottom: calc(100% + 10px);
+    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+    color: #1f2937;
+    display: none;
+    left: -44px;
+    max-height: 280px;
+    min-width: 340px;
+    overflow-y: auto;
+    padding: 0.45rem;
+    position: absolute;
+    z-index: 30;
+}
+
+.model-picker.open .model-menu {
+    display: block;
+}
+
+.model-option {
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: #1f2937;
+    cursor: pointer;
+    display: block;
+    font: inherit;
+    font-size: 0.95rem;
+    padding: 0.85rem 1rem;
+    text-align: left;
+    width: 100%;
+}
+
+.model-option:hover,
+.model-option.active {
+    background: #eef4ff;
+    color: #1d4ed8;
 }
 
 .hint-text {
     font-size: 0.75rem;
-    color: #666;
+    color: #8f9aa8;
     font-family: 'Inter', sans-serif;
+    flex: 1;
+    text-align: center;
 }
 
 .char-count {
     font-size: 0.75rem;
     font-family: 'Roboto Mono', monospace;
-    color: #666;
+    color: #8f9aa8;
     transition: all 0.3s ease;
+}
+
+/* Theme + ChatGPT-style composer overrides */
+body[data-chat-theme="dark"] {
+    background: #080b14;
+    color: #e5e7eb;
+}
+
+body[data-chat-theme="light"] {
+    background: #f6f8fb;
+    color: #111827;
+}
+
+.chat-wrapper {
+    --chat-bg: #080b14;
+    --panel-bg: #0f172a;
+    --panel-border: #1f2937;
+    --text-main: #e5e7eb;
+    --text-muted: #94a3b8;
+    --composer-bg: #111827;
+    --composer-border: #2563eb;
+    --composer-shadow: rgba(37, 99, 235, 0.18);
+    --bot-bg: #111827;
+    --bot-border: #1f2937;
+    --user-bg: #2563eb;
+    --user-text: #ffffff;
+    --menu-bg: #ffffff;
+    --menu-text: #111827;
+    --menu-hover: #eef4ff;
+    --accent: #2563eb;
+    background: var(--chat-bg);
+    color: var(--text-main);
+}
+
+.chat-wrapper[data-theme="light"] {
+    --chat-bg: #f6f8fb;
+    --panel-bg: #ffffff;
+    --panel-border: #dbe3f0;
+    --text-main: #111827;
+    --text-muted: #64748b;
+    --composer-bg: #ffffff;
+    --composer-border: #2563eb;
+    --composer-shadow: rgba(37, 99, 235, 0.18);
+    --bot-bg: #ffffff;
+    --bot-border: #dbe3f0;
+    --user-bg: #2563eb;
+    --user-text: #ffffff;
+    --menu-bg: #ffffff;
+    --menu-text: #111827;
+    --menu-hover: #eef4ff;
+    --accent: #2563eb;
+}
+
+.chat-wrapper .bg-gradient {
+    background:
+        radial-gradient(circle at 20% 80%, rgba(37, 99, 235, 0.08) 0%, transparent 48%),
+        radial-gradient(circle at 80% 15%, rgba(20, 184, 166, 0.07) 0%, transparent 48%);
+}
+
+.chat-wrapper .chat-container,
+.chat-wrapper .chat-header,
+.chat-wrapper .input-section {
+    background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+    border-color: var(--panel-border);
+}
+
+.chat-wrapper .chat-container {
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.16);
+}
+
+.chat-wrapper .ai-text h2,
+.chat-wrapper .sender-name,
+.chat-wrapper .welcome-content h3,
+.chat-wrapper .model-select-button,
+.chat-wrapper .model-picker,
+.chat-wrapper #userInput {
+    color: var(--text-main);
+}
+
+.chat-wrapper .status-text,
+.chat-wrapper .welcome-content p,
+.chat-wrapper .message-time,
+.chat-wrapper .message-meta,
+.chat-wrapper .hint-text,
+.chat-wrapper .char-count,
+.chat-wrapper #userInput::placeholder {
+    color: var(--text-muted);
+}
+
+.chat-wrapper .header-actions .action-btn {
+    background: transparent;
+    border-color: var(--panel-border);
+    color: var(--text-muted);
+}
+
+.chat-wrapper .header-actions .action-btn:hover {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.theme-toggle {
+    font-size: 0.8rem;
+    min-width: 58px;
+    padding: 0 0.7rem;
+}
+
+.chat-wrapper .message.bot,
+.chat-wrapper .message.thinking {
+    background: var(--bot-bg);
+    border-color: var(--bot-border);
+    border-left-color: var(--accent);
+    color: var(--text-main);
+}
+
+.chat-wrapper .message.user {
+    background: var(--user-bg);
+    color: var(--user-text);
+}
+
+.chat-wrapper .message-content strong,
+.chat-wrapper .message-content em,
+.chat-wrapper .message-content a {
+    color: var(--accent) !important;
+}
+
+.chat-wrapper .input-section {
+    box-shadow: 0 -14px 40px rgba(15, 23, 42, 0.12);
+}
+
+.chat-wrapper .input-container {
+    max-width: 960px;
+}
+
+.chat-wrapper .input-wrapper {
+    align-items: stretch;
+    background: var(--composer-bg);
+    border: 1.5px solid var(--composer-border);
+    border-radius: 8px;
+    box-shadow: 0 14px 38px var(--composer-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.85rem 0.95rem 0.7rem;
+}
+
+.chat-wrapper .input-wrapper:focus-within {
+    border-color: var(--composer-border);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15), 0 14px 38px var(--composer-shadow);
+}
+
+.chat-wrapper #userInput {
+    min-height: 28px;
+    padding: 0.15rem 0.1rem;
+    width: 100%;
+}
+
+.composer-controls {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.chat-wrapper .input-actions {
+    align-items: center;
+}
+
+.chat-wrapper .action-icon,
+.chat-wrapper .model-plus,
+.chat-wrapper .model-select-button {
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+}
+
+.chat-wrapper .action-icon:hover,
+.chat-wrapper .model-plus:hover,
+.chat-wrapper .model-select-button:hover {
+    background: rgba(37, 99, 235, 0.09);
+    color: var(--accent);
+}
+
+.chat-wrapper .model-picker {
+    min-width: 0;
+}
+
+.chat-wrapper .model-caret {
+    border-top-color: var(--accent);
+}
+
+.chat-wrapper .model-menu {
+    background: var(--menu-bg);
+    color: var(--menu-text);
+    left: 0;
+    min-width: 320px;
+}
+
+.chat-wrapper .model-option {
+    color: var(--menu-text);
+}
+
+.chat-wrapper .model-option:hover,
+.chat-wrapper .model-option.active {
+    background: var(--menu-hover);
+    color: var(--accent);
+}
+
+.chat-wrapper .send-button {
+    background: #e2e8f0;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+}
+
+.chat-wrapper .send-button.active {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.chat-wrapper .input-footer {
+    justify-content: center;
+    padding: 0 0.4rem;
 }
 
 /* Floating button */
@@ -1056,7 +1558,15 @@ body {
     .send-button {
         width: 40px;
         height: 40px;
-        border-radius: 10px;
+        border-radius: 8px;
+    }
+
+    .input-footer {
+        flex-wrap: wrap;
+    }
+
+    .model-menu {
+        min-width: min(340px, calc(100vw - 2rem));
     }
     
     .floating-btn {
@@ -1078,9 +1588,24 @@ body {
     }
     
     .input-footer {
-        flex-direction: column;
+        flex-direction: row;
         gap: 0.25rem;
         align-items: flex-start;
+    }
+
+    .hint-text {
+        order: 3;
+        text-align: left;
+        width: 100%;
+    }
+
+    #selectedModelLabel {
+        max-width: 180px;
+    }
+
+    .model-menu {
+        left: -38px;
+        width: calc(100vw - 2rem);
     }
     
     .floating-btn {

@@ -22,6 +22,19 @@ from typing import Callable, Iterable
 
 
 SCRIPT_NAME = "convert_datapdf_to_md.py"
+DEFAULT_INPUT_DIR = "datapdf"
+COMMON_INPUT_DIR_CANDIDATES = (
+    DEFAULT_INPUT_DIR,
+    "data/pdfs",
+    "data/pdf",
+    "pdfs",
+    "pdf",
+    "uploads",
+    "data/uploads",
+    "data/rag_uploads",
+    "docs/pdfs",
+    "docs/pdf",
+)
 LOW_TEXT_SCORE = 120
 GOOD_TEXT_SCORE = 320
 SCAN_IMAGE_RATIO = 0.60
@@ -96,9 +109,16 @@ def safe_print(message: str = "", *, error: bool = False) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert PDFs under datapdf/ into Markdown with best-effort full text extraction."
+        description="Convert PDFs into Markdown with best-effort full text extraction."
     )
-    parser.add_argument("--input", default="datapdf", help="Input directory containing PDFs.")
+    parser.add_argument(
+        "--input",
+        default=DEFAULT_INPUT_DIR,
+        help=(
+            "Input directory containing PDFs. Defaults to auto-detecting common folders and "
+            f"falls back to '{DEFAULT_INPUT_DIR}'."
+        ),
+    )
     parser.add_argument("--output", default="clean_data", help="Output directory for Markdown files.")
     parser.add_argument("--force", action="store_true", help="Overwrite existing Markdown files.")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N PDF files.")
@@ -152,6 +172,65 @@ def parse_ocr_psm(raw_value: str) -> list[int]:
             continue
         values.append(int(piece))
     return values or [6]
+
+
+def resolve_user_path(raw_path: str, base_dir: Path) -> Path:
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = base_dir / path
+    return path.resolve()
+
+
+def default_input_candidates(base_dir: Path) -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    for raw_path in COMMON_INPUT_DIR_CANDIDATES:
+        candidate = resolve_user_path(raw_path, base_dir)
+        normalized = str(candidate).lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        candidates.append(candidate)
+
+    return candidates
+
+
+def directory_contains_pdf(input_dir: Path) -> bool:
+    try:
+        return any(input_dir.rglob("*.pdf"))
+    except Exception:
+        return False
+
+
+def resolve_input_dir(raw_input: str, base_dir: Path) -> tuple[Path | None, str | None, bool]:
+    requested_dir = resolve_user_path(raw_input, base_dir)
+    using_default_input = raw_input == DEFAULT_INPUT_DIR
+
+    if requested_dir.exists():
+        if not requested_dir.is_dir():
+            return None, f"Input path is not a directory: {requested_dir}", False
+        return requested_dir, None, False
+
+    if not using_default_input:
+        return None, f"Input directory does not exist: {requested_dir}", False
+
+    for candidate in default_input_candidates(base_dir):
+        if not candidate.exists() or not candidate.is_dir():
+            continue
+        if directory_contains_pdf(candidate):
+            return candidate, None, True
+
+    checked_locations = "\n".join(f"  - {candidate}" for candidate in default_input_candidates(base_dir))
+    message = (
+        f"Input directory does not exist: {requested_dir}\n"
+        "No fallback directory containing PDF files was found.\n"
+        f"Checked common locations under {base_dir}:\n"
+        f"{checked_locations}\n"
+        f"Create '{DEFAULT_INPUT_DIR}' in the project root or run:\n"
+        f"  python {SCRIPT_NAME} --input PATH_TO_YOUR_PDFS"
+    )
+    return None, message, False
 
 
 def discover_extractors() -> list[Extractor]:
@@ -1036,13 +1115,18 @@ def convert_pdf(
 
 def main() -> int:
     args = parse_args()
-    input_dir = Path(args.input).resolve()
+    project_root = Path.cwd().resolve()
+    input_dir, input_error, input_dir_auto_selected = resolve_input_dir(args.input, project_root)
     output_dir = Path(args.output).resolve()
     ocr_psm_values = parse_ocr_psm(args.ocr_psm)
 
-    if not input_dir.exists():
-        safe_print(f"Input directory does not exist: {input_dir}", error=True)
+    if input_error:
+        safe_print(input_error, error=True)
         return 1
+    assert input_dir is not None
+
+    if input_dir_auto_selected:
+        safe_print(f"Using detected input directory: {input_dir}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 

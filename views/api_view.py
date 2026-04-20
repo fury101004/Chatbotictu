@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from models.chat import ChatResponse
+from services.llm_service import PRIMARY_MODEL_NAME
 
 
 
@@ -27,7 +28,7 @@ def build_chat_response(result: dict, session_id: str) -> ChatResponse:
 
 def build_upload_response(result: dict, session_id: Optional[str]) -> dict:
     return {
-        "status": "success",
+        "status": result.get("status", "success"),
         **result,
         "session_id": session_id,
         "timestamp": datetime.now().isoformat(),
@@ -35,13 +36,18 @@ def build_upload_response(result: dict, session_id: Optional[str]) -> dict:
 
 
 
-def build_health_response() -> dict:
+def build_knowledge_base_response(payload: dict) -> dict:
     return {
-        "status": "healthy",
-        "model": "gemini-2.5-flash",
+        **payload,
         "timestamp": datetime.now().isoformat(),
     }
 
 
+def build_health_response() -> dict:
+    return {
+        "status": "healthy",
+        "model": PRIMARY_MODEL_NAME,
+        "timestamp": datetime.now().isoformat(),
+    }
 
 

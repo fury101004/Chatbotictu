@@ -1,4 +1,4 @@
-# vector_store.py
+﻿# vector_store.py
 # • ChromaDB + all-MiniLM-L6-v2 (vector) + BM25 (keyword)
 # • Tốc độ: 1.0–1.6s/query | Cache 100 query | Không crash reload
 # • Lazy rebuild BM25 chỉ khi DB thay đổi → cực nhẹ RAM/CPU
@@ -251,9 +251,9 @@ print("Vectorstore ready – bot-rule luôn top 1 – chiến thôi!")
 
 
 
-Tiếng Trung: Hidemium 中的 API 是什么？
-Tiếng Nga: Что такое API в Hidemium?
-你错了, Hidemium的API是什么？
+Tiếng Trung: ICTU 中的 API 是什么？
+Tiếng Nga: Что такое API в ICTU?
+你错了, ICTU的API是什么？
 
 
 

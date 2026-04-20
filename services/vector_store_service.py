@@ -24,11 +24,13 @@ Rebuild BM25 để hybrid search sẵn sàng.
 Lưu file và metadata vào SQLite (botconfig.db)."""
 import chromadb
 from chromadb.utils import embedding_functions
+import os
 from pathlib import Path
 from rank_bm25 import BM25Okapi
 from typing import List, Tuple, Dict, Any, Optional
 import hashlib
 import re
+import socket
 import time
 import json
 from functools import lru_cache
@@ -46,7 +48,8 @@ ef = None
 client = None
 
 # DĂ¹ng Ä‘á»ƒ Ä‘áº¿m token (ráº¥t quan trá»ng khi chunk vĂ  tĂ­nh context length cho LLM)
-encoding = tiktoken.get_encoding("cl100k_base")
+# Lazy-load tiktoken so the web app can boot even on low-memory machines.
+encoding = None
 
 # ÄÆ°á»ng dáº«n file ná»™i quy bot
 BOT_RULE_PATH = Path("data/bot-rule.md")
@@ -94,12 +97,83 @@ def get_client():
     return client
 
 
+def count_tokens(text: str) -> int:
+    global encoding
+    if encoding is None:
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        except (MemoryError, OSError):
+            # Approximate fallback keeps upload/chunking usable when tiktoken
+            # cannot load its BPE table in the current environment.
+            return max(1, len(text.split()))
+    return len(encoding.encode(text))
+
+
 def get_embedding_function():
     global ef
     if ef is None:
-        print(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
-        ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL_NAME)
+        local_model_path = _resolve_local_embedding_model_path()
+        use_local_model = local_model_path is not None
+        if use_local_model:
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+        model_name = str(local_model_path) if use_local_model else EMBEDDING_MODEL_NAME
+        print(f"Loading embedding model: {model_name}")
+        ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=model_name,
+            local_files_only=use_local_model,
+        )
     return ef
+
+
+def _local_embedding_model_candidates() -> list[Path]:
+    model_slug = EMBEDDING_MODEL_NAME.replace("/", "--")
+    home = Path.home()
+    candidates = [
+        home / ".cache" / "huggingface" / "hub" / f"models--sentence-transformers--{model_slug}",
+        home / ".cache" / "torch" / "sentence_transformers" / EMBEDDING_MODEL_NAME,
+    ]
+    hf_home = os.getenv("HF_HOME", "").strip()
+    if hf_home:
+        candidates.append(Path(hf_home) / "hub" / f"models--sentence-transformers--{model_slug}")
+    return candidates
+
+
+def _has_complete_local_embedding_cache(candidate: Path) -> bool:
+    if not candidate.exists():
+        return False
+
+    has_config = any(candidate.rglob("config.json"))
+    has_tokenizer = any(candidate.rglob("tokenizer.json")) or any(candidate.rglob("tokenizer_config.json"))
+    return has_config and has_tokenizer
+
+
+def _resolve_local_embedding_model_path() -> Optional[Path]:
+    for candidate in _local_embedding_model_candidates():
+        if not _has_complete_local_embedding_cache(candidate):
+            continue
+
+        modules = list(candidate.rglob("modules.json"))
+        if modules:
+            return modules[0].parent
+        return candidate
+    return None
+
+
+@lru_cache(maxsize=1)
+def embedding_backend_ready() -> bool:
+    local_model_path = _resolve_local_embedding_model_path()
+    if local_model_path is not None:
+        print(f"Embedding backend ready via local cache: {local_model_path}")
+        return True
+
+    try:
+        with socket.create_connection(("huggingface.co", 443), timeout=0.75):
+            return True
+    except OSError as exc:
+        print(f"Embedding backend unavailable, skip vector indexing: {exc}")
+        return False
 
 
 _load_bot_rule()
@@ -170,7 +244,7 @@ def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
             buffer.clear()
             return
 
-        token_count = len(encoding.encode(text))
+        token_count = count_tokens(text)
 
         # Phát hiện loại chunk để sau này LLM xử lý đặc biệt
         if in_code_block:
@@ -208,7 +282,7 @@ def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
 
         # Gom dòng vào buffer
         buffer.append(line)
-        buffer_tokens += len(encoding.encode(line + "\n"))
+        buffer_tokens += count_tokens(line + "\n")
 
         # Nếu buffer quá dài và không phải đang trong code block → cắt luôn
         if buffer_tokens > 512 and not in_code_block:
@@ -230,6 +304,7 @@ def add_documents(
     filename: str,
     version: str = "latest",
     source_name: Optional[str] = None,
+    tool_name: Optional[str] = None,
 ) -> None:
     """
     Thêm hoặc cập nhật một file markdown vào vector store
@@ -258,7 +333,8 @@ def add_documents(
         "chunk_type": c["type"],
         "token_count": c["token_count"],
         "created_at": datetime.now().isoformat(),
-        "version": version
+        "version": version,
+        "tool_name": tool_name or "unassigned",
     } for c in chunks]
 
     # Tạo ID duy nhất cho từng chunk:
