@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # Usage:
-#   python convert_datapdf_to_md.py
-#   python convert_datapdf_to_md.py --input datapdf --output clean_data --force
-#   python convert_datapdf_to_md.py --limit 2 --verbose
-#   python convert_datapdf_to_md.py --ocr auto --ocr-lang vie+eng --ocr-psm 6,4,11 --force
-#   python convert_datapdf_to_md.py --debug-ocr --force
+#   python tools/data_pipeline/convert_datapdf_to_md.py
+#   python tools/data_pipeline/convert_datapdf_to_md.py --input datapdf --output clean_data --force
+#   python tools/data_pipeline/convert_datapdf_to_md.py --limit 2 --verbose
+#   python tools/data_pipeline/convert_datapdf_to_md.py --ocr auto --ocr-lang vie+eng --ocr-psm 6,4,11 --force
+#   python tools/data_pipeline/convert_datapdf_to_md.py --debug-ocr --force
 
 from __future__ import annotations
 

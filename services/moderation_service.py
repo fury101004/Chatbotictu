@@ -3,7 +3,7 @@ import random
 import re
 from pathlib import Path
 
-BADWORDS_FILE = Path("data/intents/badwords.md")
+BADWORDS_FILE = Path("data/badwords.md")
 
 # Cache để không phải đọc file mỗi lần
 _badwords_cache = None

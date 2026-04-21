@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # Usage:
-#   python generate_qa_from_markdown.py --input clean_data --output data/qa_generated --force
-#   python generate_qa_from_markdown.py --input clean_data --output data/qa_generated --provider heuristic --mode file
-#   python generate_qa_from_markdown.py --input "clean_data/Bao Hiem Y Te" --output data/qa_generated --mode topdir
+#   python tools/data_pipeline/generate_qa_from_markdown.py --input clean_data --output data/qa_generated --force
+#   python tools/data_pipeline/generate_qa_from_markdown.py --input clean_data --output data/qa_generated --provider heuristic --mode file
+#   python tools/data_pipeline/generate_qa_from_markdown.py --input "clean_data/Bao Hiem Y Te" --output data/qa_generated --mode topdir
 
 from __future__ import annotations
 

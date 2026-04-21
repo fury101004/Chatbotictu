@@ -10,6 +10,9 @@ import json
 import re
 import unicodedata
 
+from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
+
 from config.rag_tools import (
     DEFAULT_RAG_TOOL,
     FALLBACK_RAG_NODE,
@@ -21,7 +24,14 @@ from config.rag_tools import (
 )
 from models.chat import RAGResult, RetrievedChunk
 from services.ictu_scope_service import ICTU_SCOPE_REPLY_VI, is_ictu_related_query
-from services.llm_service import generate_content_with_fallback, get_model, llm_network_available
+from services.langchain_service import invoke_json_prompt_chain
+from services.langchain_retrievers import (
+    CorpusLexicalRetriever,
+    VectorStoreRetriever,
+    WebKnowledgeRetriever,
+    WebSearchRetriever,
+)
+from services.llm_service import get_model, llm_network_available
 from services.vector_store_service import SESSION_MEMORY, embedding_backend_ready, get_collection, inject_bot_rule, query_documents
 from services.web_knowledge_service import search_trusted_web_knowledge
 from services.web_search import search_web_ictu, should_use_web_search
@@ -54,6 +64,63 @@ class RetrievalFlowPlan:
     reason: str
     confidence: float
     route: str
+
+
+_RAG_ROUTER_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "Ban la bo dinh tuyen cho he thong RAG cua truong. "
+            "Khong tra loi noi dung cau hoi. "
+            "Chi tra ve JSON hop le theo format "
+            '{"tool":"<tool_name>","reason":"<1 cau ngan>","confidence":0.0}.',
+        ),
+        (
+            "human",
+            "Chi duoc chon 1 trong cac tool sau:\n"
+            "{tool_descriptions}\n"
+            "- fallback_rag: dung khi cau hoi mo ho, khong chac chan, hoac lien quan nhieu nhom.\n\n"
+            "Cau hoi nguoi dung:\n"
+            "{message}",
+        ),
+    ]
+)
+
+_RETRIEVAL_FLOW_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "Ban la bo lap ke hoach truy xuat truoc khi chatbot tra loi. "
+            "Khong tra loi cau hoi cua nguoi dung. "
+            "Chi tra ve JSON hop le voi cac truong source, priority, reason, confidence.",
+        ),
+        (
+            "human",
+            "Nhom tri thuc RAG da duoc router goi y:\n"
+            "{current_tool}\n\n"
+            "Mo ta cac nhom tri thuc:\n"
+            "{tool_descriptions}\n\n"
+            "Nguon co the chon:\n"
+            "- local_data: dung corpus noi bo da nap, gom so tay sinh vien, quy dinh, FAQ, tai lieu upload va vector store.\n"
+            "- web_search: dung tim kiem web uu tien domain chinh thuc ICTU cho thong tin moi, thong bao, lich, tin tuc, tuyen sinh, deadline, so lieu/co cau co the thay doi.\n"
+            "- hybrid: lay local_data lam nen va bo sung web_search, hoac web_search truoc roi doi chieu local_data.\n\n"
+            "Quy tac quyet dinh:\n"
+            "- Chon local_data/local_first khi cau hoi hoi ve noi dung on dinh trong tai lieu da nap: so tay sinh vien, quy che, quy dinh, dieu kien, dinh nghia, quy trinh, cau hoi Q&A co san.\n"
+            "- Chon web_search/web_first khi cau hoi co dau hieu thoi gian thuc hoac can cap nhat: hom nay, moi nhat, gan day, nam nay, thong bao moi, lich, deadline, tuyen sinh hien tai, chi tieu, hoc phi moi, tin tuc.\n"
+            "- Chon hybrid khi cau hoi can ca quy dinh nen trong tai lieu noi bo va tinh trang/thong bao moi tren website.\n"
+            "- Neu khong chac chan, uu tien local_data/local_first, tru khi cau hoi ro rang can thong tin moi.\n\n"
+            "JSON bat buoc:\n"
+            "{\n"
+            '  "source": "local_data | web_search | hybrid",\n'
+            '  "priority": "local_first | web_first",\n'
+            '  "reason": "mot cau ngan noi ly do",\n'
+            '  "confidence": 0.0\n'
+            "}\n\n"
+            "Cau hoi nguoi dung:\n"
+            "{message}",
+        ),
+    ]
+)
 
 
 
@@ -314,6 +381,68 @@ def _extract_relevant_snippet(doc: CorpusDocument, message: str, query_tokens: l
     return snippet
 
 
+def _documents_to_chunks(documents: list[Document]) -> list[RetrievedChunk]:
+    return [
+        RetrievedChunk(
+            document=document.page_content,
+            metadata=dict(document.metadata or {}),
+        )
+        for document in documents
+    ]
+
+
+def _build_result_from_documents(
+    *,
+    documents: list[Document],
+    tool_name: Optional[str],
+    route_name: str,
+    mode: str,
+    target_file: Optional[str] = None,
+    context_max_chunks: Optional[int] = None,
+) -> RAGResult:
+    chunks = _documents_to_chunks(documents)
+    limited_chunks = chunks[:context_max_chunks] if context_max_chunks is not None else chunks
+
+    context_parts: list[str] = []
+    sources: list[str] = []
+
+    for chunk in limited_chunks:
+        metadata = chunk.metadata
+        source = str(metadata.get("source", "") or "")
+        title = str(metadata.get("title", "") or "").strip()
+        context_entry = str(metadata.get("context_entry", "") or "").strip()
+
+        if source and source != "BOT_RULE":
+            extra_sources = metadata.get("sources")
+            if isinstance(extra_sources, list):
+                sources.extend(str(item) for item in extra_sources if item)
+            else:
+                sources.append(source)
+
+        if context_entry:
+            context_parts.append(context_entry)
+            continue
+
+        text = chunk.document.strip().replace("\n", " ")[:2000]
+        if title and title != "Khong co tieu de":
+            context_parts.append(f"[{title}]\n{text}")
+        else:
+            context_parts.append(text)
+
+    context_text = "\n\n".join(context_parts) if context_parts else "Thong tin dang duoc cap nhat."
+    chunks_used = len(limited_chunks)
+
+    return RAGResult(
+        context_text=context_text,
+        chunks=chunks,
+        target_file=target_file,
+        mode=mode,
+        sources=list(dict.fromkeys(source for source in sources if source)),
+        chunks_used=chunks_used,
+        rag_tool=tool_name,
+        rag_route=route_name,
+    )
+
 
 def _build_result_from_matches(
     *,
@@ -360,39 +489,18 @@ def _build_result_from_matches(
 
 
 def _build_web_search_result(message: str, route_name: str, tool_name: Optional[str]) -> Optional[RAGResult]:
-    web_docs = search_web_ictu(message)
-    if not web_docs:
+    documents = WebSearchRetriever(
+        search_fn=search_web_ictu,
+        tool_name=tool_name or FALLBACK_RAG_NODE,
+    ).invoke(message)
+    if not documents:
         return None
 
-    context_parts: list[str] = []
-    chunks: list[RetrievedChunk] = []
-    sources: list[str] = []
-
-    for doc in web_docs:
-        context_parts.append(f"[Web search ICTU | title: {doc.title} | source: {doc.url}]\n{doc.text}")
-        sources.append(doc.url)
-        chunks.append(
-            RetrievedChunk(
-                document=doc.text,
-                metadata={
-                    "source": doc.url,
-                    "title": doc.title,
-                    "snippet": doc.snippet,
-                    "source_type": "web_search",
-                    "tool_name": tool_name or FALLBACK_RAG_NODE,
-                },
-            )
-        )
-
-    return RAGResult(
-        context_text="\n\n".join(context_parts),
-        chunks=chunks,
-        target_file=None,
+    return _build_result_from_documents(
+        documents=documents,
+        tool_name=tool_name,
+        route_name=route_name,
         mode="web_search",
-        sources=list(dict.fromkeys(sources)),
-        chunks_used=len(chunks),
-        rag_tool=tool_name,
-        rag_route=route_name,
     )
 
 
@@ -426,45 +534,18 @@ def _merge_web_search_result(local_result: RAGResult, web_result: Optional[RAGRe
 
 
 def _build_web_knowledge_result(message: str, route_name: str, tool_name: Optional[str]) -> Optional[RAGResult]:
-    matches = search_trusted_web_knowledge(message)
-    if not matches:
+    documents = WebKnowledgeRetriever(
+        search_fn=search_trusted_web_knowledge,
+        tool_name=tool_name or FALLBACK_RAG_NODE,
+    ).invoke(message)
+    if not documents:
         return None
 
-    context_parts: list[str] = []
-    chunks: list[RetrievedChunk] = []
-    sources: list[str] = []
-
-    for match in matches:
-        source_label = ", ".join(match.sources) if match.sources else "web_knowledge_base"
-        context_parts.append(
-            f"[Trusted web KB | question: {match.question} | score: {match.score} | source: {source_label}]\n"
-            f"{match.answer}\n\nNguon tham khao:\n{match.source_text[:1600]}"
-        )
-        sources.extend(match.sources)
-        chunks.append(
-            RetrievedChunk(
-                document=match.answer,
-                metadata={
-                    "source": source_label,
-                    "title": match.question,
-                    "score": match.score,
-                    "source_type": "web_knowledge",
-                    "web_knowledge_id": match.entry_id,
-                    "expires_at": match.expires_at,
-                    "tool_name": tool_name or FALLBACK_RAG_NODE,
-                },
-            )
-        )
-
-    return RAGResult(
-        context_text="\n\n".join(context_parts),
-        chunks=chunks,
-        target_file=None,
+    return _build_result_from_documents(
+        documents=documents,
+        tool_name=tool_name,
+        route_name=route_name,
         mode="web_knowledge_base",
-        sources=list(dict.fromkeys(source for source in sources if source)),
-        chunks_used=len(chunks),
-        rag_tool=tool_name,
-        rag_route=route_name,
     )
 
 
@@ -554,40 +635,28 @@ def _route_rag_tool_by_llm(message: str) -> Optional[tuple[str, str]]:
         f"- {tool_name}: {profile.get('description', profile.get('label', tool_name))}"
         for tool_name, profile in RAG_TOOL_PROFILES.items()
     )
-    prompt = f"""Ban la bo dinh tuyen cho he thong RAG cua truong.
-
-Nhiem vu:
-- Chon dung 1 tool phu hop nhat cho cau hoi.
-- Chi duoc chon 1 trong cac tool sau:
-{tool_descriptions}
-- fallback_rag: dung khi cau hoi mo ho, khong chac chan, hoac lien quan nhieu nhom.
-
-Yeu cau:
-- Khong tra loi noi dung cau hoi.
-- Chi tra ve JSON hop le theo dung format:
-{{"tool":"<tool_name>","reason":"<1 cau ngan>","confidence":0.0}}
-
-Cau hoi nguoi dung:
-{message}
-"""
 
     try:
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(
-            generate_content_with_fallback,
-            prompt,
+            invoke_json_prompt_chain,
+            _RAG_ROUTER_PROMPT,
+            {
+                "tool_descriptions": tool_descriptions,
+                "message": message,
+            },
             generation_config={"temperature": 0, "max_output_tokens": 180, "response_mime_type": "application/json"},
             request_options={"timeout": 10},
             rotate=False,
         )
         try:
-            response, used_model = future.result(timeout=4)
+            payload, raw_text, used_model = future.result(timeout=4)
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
         primary_model = get_model()
         if primary_model is not None and used_model != primary_model.label:
             print(f"LLM router switched to fallback model: {used_model}")
-        payload = _extract_router_json(getattr(response, "text", "") or "")
+        payload = payload or _extract_router_json(raw_text)
         if not payload:
             return None
 
@@ -718,18 +787,27 @@ def _route_retrieval_flow_by_llm(message: str, rag_tool: Optional[str]) -> Optio
     if get_model() is None or not _llm_router_network_available():
         return None
 
-    prompt = _build_retrieval_flow_prompt(message, rag_tool)
+    tool_descriptions = "\n".join(
+        f"- {tool_name}: {profile.get('description', profile.get('label', tool_name))}"
+        for tool_name, profile in RAG_TOOL_PROFILES.items()
+    )
+    current_tool = rag_tool if rag_tool in RAG_TOOL_PROFILES else FALLBACK_RAG_NODE
     try:
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(
-            generate_content_with_fallback,
-            prompt,
+            invoke_json_prompt_chain,
+            _RETRIEVAL_FLOW_PROMPT,
+            {
+                "current_tool": current_tool,
+                "tool_descriptions": tool_descriptions,
+                "message": message,
+            },
             generation_config={"temperature": 0, "max_output_tokens": 220, "response_mime_type": "application/json"},
             request_options={"timeout": 10},
             rotate=False,
         )
         try:
-            response, used_model = future.result(timeout=4)
+            payload, raw_text, used_model = future.result(timeout=4)
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
 
@@ -737,7 +815,7 @@ def _route_retrieval_flow_by_llm(message: str, rag_tool: Optional[str]) -> Optio
         if primary_model is not None and used_model != primary_model.label:
             print(f"Retrieval flow planner switched to fallback model: {used_model}")
 
-        payload = _extract_router_json(getattr(response, "text", "") or "")
+        payload = payload or _extract_router_json(raw_text)
         if not payload:
             return None
 
@@ -811,10 +889,15 @@ def retrieve_tool_context(
         if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
             return web_result
 
-    documents = _load_tool_corpus(tool_name)
-    matches = _search_documents(documents, message, limit=4)
+    lexical_documents = CorpusLexicalRetriever(
+        document_supplier=lambda: _load_tool_corpus(tool_name),
+        search_fn=_search_documents,
+        snippet_fn=_extract_relevant_snippet,
+        tool_name=tool_name,
+        limit=4,
+    ).invoke(message)
 
-    if not matches:
+    if not lexical_documents:
         if web_result is not None:
             return web_result
         if _plan_allows_web(flow_plan):
@@ -830,9 +913,8 @@ def retrieve_tool_context(
         )
 
     inject_bot_rule(force_full=True)
-    result = _build_result_from_matches(
-        message=message,
-        matches=matches,
+    result = _build_result_from_documents(
+        documents=lexical_documents,
         tool_name=tool_name,
         route_name=planned_route_name,
         mode=tool_name,
@@ -873,15 +955,23 @@ def retrieve_fallback_context(
         if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
             return web_result
 
-    all_matches: list[tuple[int, CorpusDocument]] = []
-    for tool_name in RAG_TOOL_ORDER:
-        documents = _load_tool_corpus(tool_name)
-        all_matches.extend(_search_documents(documents, message, limit=2))
+    def _fallback_search(_: tuple[CorpusDocument, ...], query: str, limit: int = 6) -> list[tuple[int, CorpusDocument]]:
+        all_matches: list[tuple[int, CorpusDocument]] = []
+        for tool in RAG_TOOL_ORDER:
+            documents = _load_tool_corpus(tool)
+            all_matches.extend(_search_documents(documents, query, limit=2))
+        all_matches.sort(key=lambda item: item[0], reverse=True)
+        return all_matches[:limit]
 
-    all_matches.sort(key=lambda item: item[0], reverse=True)
-    top_matches = all_matches[:6]
+    fallback_documents = CorpusLexicalRetriever(
+        document_supplier=_load_all_tool_documents,
+        search_fn=_fallback_search,
+        snippet_fn=_extract_relevant_snippet,
+        tool_name=FALLBACK_RAG_NODE,
+        limit=6,
+    ).invoke(message)
 
-    if not top_matches:
+    if not fallback_documents:
         if web_result is not None:
             return web_result
         if _plan_allows_web(flow_plan):
@@ -897,9 +987,8 @@ def retrieve_fallback_context(
         )
 
     inject_bot_rule(force_full=True)
-    result = _build_result_from_matches(
-        message=message,
-        matches=top_matches,
+    result = _build_result_from_documents(
+        documents=fallback_documents,
         tool_name=FALLBACK_RAG_NODE,
         route_name=planned_route_name,
         mode="multi_tool_fallback_rag",
@@ -1012,11 +1101,16 @@ def _build_general_fallback_result(
         if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
             return web_result
 
-    matches = _search_documents(_load_all_tool_documents(), message, limit=6)
-    if matches:
-        result = _build_result_from_matches(
-            message=message,
-            matches=matches,
+    fallback_documents = CorpusLexicalRetriever(
+        document_supplier=_load_all_tool_documents,
+        search_fn=_search_documents,
+        snippet_fn=_extract_relevant_snippet,
+        tool_name=tool_name or FALLBACK_RAG_NODE,
+        limit=6,
+    ).invoke(message)
+    if fallback_documents:
+        result = _build_result_from_documents(
+            documents=fallback_documents,
             tool_name=tool_name or FALLBACK_RAG_NODE,
             route_name=route_name,
             mode="lexical_fallback",
@@ -1085,37 +1179,29 @@ def retrieve_general_context(
 
     try:
         target_file = _detect_collection_source(message_lower)
-        coll = get_collection()
-
-        if target_file:
-            data = coll.get(where={"source": target_file}, include=["documents", "metadatas"])
-            chunks = [
-                RetrievedChunk(document=doc, metadata=meta)
-                for doc, meta in zip(data.get("documents", []), data.get("metadatas", []))
-            ]
-            mode = "forced_file"
-        else:
-            docs, metas, _ = query_documents(query_for_retrieval, user_id=session_id, n_results=100, alpha=0.7)
-            chunks = [RetrievedChunk(document=doc, metadata=meta) for doc, meta in zip(docs, metas)]
-            mode = "hybrid_search"
+        documents = VectorStoreRetriever(
+            query_fn=query_documents,
+            collection_getter=get_collection,
+            user_id=session_id,
+            n_results=100,
+            alpha=0.7,
+            target_source=target_file,
+        ).invoke(query_for_retrieval)
+        mode = "forced_file" if target_file else "hybrid_search"
     except Exception as exc:
         print(f"Vector retrieval unavailable, using lexical fallback: {exc}")
         return _build_general_fallback_result(message, planned_route_name, tool_name, retrieval_plan=flow_plan)
 
-    context_text, sources = build_context_from_chunks(chunks)
     inject_bot_rule(force_full=True)
-
-    unique_sources = list(dict.fromkeys(source for source in sources if source))
-    result = RAGResult(
-        context_text=context_text,
-        chunks=chunks,
-        target_file=target_file,
+    result = _build_result_from_documents(
+        documents=documents,
+        tool_name=tool_name,
+        route_name=planned_route_name,
         mode=mode,
-        sources=unique_sources,
-        chunks_used=min(len(chunks), 25),
-        rag_tool=tool_name,
-        rag_route=planned_route_name,
+        target_file=target_file,
+        context_max_chunks=25,
     )
+    unique_sources = result.sources
 
     if flow_plan.source == RETRIEVAL_WEB_SEARCH:
         web_result = web_result or _build_planned_web_result(query_for_retrieval, route_name=planned_route_name, tool_name=tool_name)

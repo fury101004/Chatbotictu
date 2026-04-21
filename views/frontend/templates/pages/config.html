@@ -1,7 +1,7 @@
 ﻿{% extends "layouts/base.html" %}
 {% block title %}CẤU HÌNH BOT LẦY{% endblock %}
 {% block page_head %}
-<link rel="stylesheet" href="/static/css/pages/config.css">
+<link rel="stylesheet" href="/static/css/config.css">
 {% endblock %}
 
 {% block content %}
@@ -169,77 +169,6 @@
 }
 </style>
 
-<!-- SCRIPT TOÀN BỘ -->
-<script>
-// Submit form + xử lý reingest
-document.getElementById("configForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const status = document.getElementById("status");
-    const reingest = formData.get("reingest") === "on";
-
-    status.innerHTML = `<div class="info-box">Đang lưu cấu hình...</div>`;
-
-    if (reingest) {
-        status.innerHTML = `<div class="info-box" style="background:#e67e22; color:white;">
-            Đang xóa vectorstore cũ và tái tạo lại toàn bộ... (có thể mất 10-40s tùy dữ liệu)
-        </div>`;
-    }
-
-    try {
-        const res = await fetch("/update-config", { method: "POST", body: formData });
-        if (res.ok) {
-            const data = await res.json();
-            status.innerHTML = `<div class="info-box success">${data.msg}</div>`;
-            setTimeout(() => location.reload(), 2500);
-        } else {
-            status.innerHTML = `<div class="info-box error">Lỗi server rồi bro!</div>`;
-        }
-    } catch (err) {
-        status.innerHTML = `<div class="info-box error">Lỗi mạng rồi đại ca ơi!</div>`;
-    }
-});
-
-// Tải lại prompt từ file
-document.getElementById("reloadPrompt").addEventListener("click", async () => {
-    const res = await fetch("/get-current-prompt");
-    const text = await res.text();
-    document.getElementById("botRulesTextarea").value = text;
-    updateLineNumbers();
-    alert("Đã tải lại system prompt từ file thành công!");
-});
-
-// Đánh số dòng + đồng bộ scroll
-function updateLineNumbers() {
-    const textarea = document.getElementById("botRulesTextarea");
-    const lineNumbers = document.getElementById("lineNumbers");
-    const lines = textarea.value.split('\n').length;
-    let content = '';
-    for (let i = 1; i <= lines + 15; i++) {
-        content += i + '\n';
-    }
-    lineNumbers.textContent = content;
-}
-document.getElementById("botRulesTextarea").addEventListener("input", updateLineNumbers);
-document.getElementById("botRulesTextarea").addEventListener("scroll", () => {
-    document.getElementById("lineNumbers").scrollTop = document.getElementById("botRulesTextarea").scrollTop;
-});
-updateLineNumbers(); // init
-
-// Nút Copy đẹp lung linh
-document.getElementById("copyPrompt").addEventListener("click", () => {
-    const text = document.getElementById("botRulesTextarea").value;
-    navigator.clipboard.writeText(text).then(() => {
-        const btn = document.getElementById("copyPrompt");
-        const oldText = btn.textContent;
-        btn.textContent = "Copied!";
-        btn.style.background = "#27ae60";
-        setTimeout(() => {
-            btn.textContent = oldText;
-            btn.style.background = "";
-        }, 1500);
-    });
-});
-</script>
+<script src="/static/js/config.js"></script>
 {% endblock %}  
 

@@ -9,7 +9,14 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from PIL import Image, ImageDraw, ImageFont
 
 
-ROOT = Path(r"E:\new-test")
+def _find_repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "main.py").exists() and (parent / "services").is_dir():
+            return parent
+    return Path(__file__).resolve().parents[2]
+
+
+ROOT = _find_repo_root()
 PACK_DIR = ROOT / "reports" / "generated" / "diagram_pack_vi"
 SLIDES_DIR = PACK_DIR / "slides"
 SLIDES_DIR.mkdir(parents=True, exist_ok=True)

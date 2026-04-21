@@ -2,12 +2,22 @@
 import re
 import time
 
-from config.db import get_system_prompt
+from config.system_prompt import get_system_prompt
 from config.rag_tools import get_tool_profile, is_valid_rag_tool
-from services.llm_service import generate_content_with_fallback, get_model, resolve_model_choice
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from services.langchain_service import invoke_text_prompt_chain
+from services.llm_service import get_model, resolve_model_choice
 
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 LAST_CALL: Dict[str, float] = {}
+_GENERATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
+    [
+        MessagesPlaceholder("history"),
+        ("user", "{prompt}"),
+    ]
+)
 
 DANGEROUS_KEYWORDS = [
     "multilingual_handler",
@@ -179,6 +189,19 @@ def _empty_context_text(current_lang: str) -> str:
     return "Chưa có thêm ngữ cảnh liên quan."
 
 
+def _session_history_to_lc_messages(history: list[dict[str, str]]):
+    messages = []
+    for item in history[-10:]:
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        if item.get("role") == "user":
+            messages.append(HumanMessage(content=content))
+        else:
+            messages.append(AIMessage(content=content))
+    return messages
+
+
 def _build_final_prompt(
     system_prompt: str,
     current_lang: str,
@@ -292,12 +315,7 @@ def chat_multilingual(
         user_question,
         rag_tool=rag_tool,
     )
-
-    messages = [
-        {"role": "user" if item["role"] == "user" else "model", "parts": [item["content"]]}
-        for item in session["history"][-10:]
-    ]
-    messages.append({"role": "user", "parts": [final_prompt]})
+    history_messages = _session_history_to_lc_messages(session["history"])
 
     if get_model() is None:
         reply = (
@@ -317,18 +335,13 @@ def chat_multilingual(
     for attempt in range(3):
         try:
             preferred_model, rotate_model = resolve_model_choice(selected_model)
-            response, used_model = generate_content_with_fallback(
-                messages,
+            reply, used_model = invoke_text_prompt_chain(
+                _GENERATION_PROMPT_TEMPLATE,
+                {
+                    "history": history_messages,
+                    "prompt": final_prompt,
+                },
                 generation_config={"temperature": 0.1, "max_output_tokens": 1800},
-                safety_settings=[
-                    {"category": category, "threshold": "BLOCK_NONE"}
-                    for category in [
-                        "HARM_CATEGORY_HARASSMENT",
-                        "HARM_CATEGORY_HATE_SPEECH",
-                        "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    ]
-                ],
                 request_options={"timeout": 90},
                 preferred_model=preferred_model,
                 rotate=rotate_model,
@@ -336,14 +349,6 @@ def chat_multilingual(
             primary_model = get_model(preferred_model)
             if not rotate_model and primary_model is not None and used_model != primary_model.label:
                 print(f"chat_multilingual switched to fallback model: {used_model}")
-
-            reply = response.text.strip() if getattr(response, "text", None) else ""
-            if not reply and getattr(response, "candidates", None):
-                reply = "".join(
-                    part.text
-                    for part in response.candidates[0].content.parts
-                    if hasattr(part, "text")
-                ).strip()
 
             if reply:
                 session["history"].extend(

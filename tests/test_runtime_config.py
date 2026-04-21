@@ -37,7 +37,7 @@ class ChatHistorySchemaTests(unittest.TestCase):
 
             with (
                 patch("config.db.DB_PATH", db_path),
-                patch("config.db.SYSTEM_PROMPT_PATH", prompt_path),
+                patch("config.system_prompt.SYSTEM_PROMPT_PATH", prompt_path),
             ):
                 db.init_db()
 

@@ -200,8 +200,8 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
             "total_chunks": get_collection().count(),
         }
 
-    corpus_paths = _iter_importable_paths(root)
-    if not corpus_paths:
+    corpus_records = _iter_seed_source_records()
+    if not corpus_records:
         return {
             "status": "error",
             "msg": f"Thu muc {root} chua co file .md/.txt de import",
@@ -218,9 +218,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     imported_files = 0
     failed_sources: list[str] = []
 
-    for path in corpus_paths:
-        source_name = path.relative_to(root).as_posix()
-        tool_name = detect_tool_from_path(path) or DEFAULT_RAG_TOOL
+    for path, tool_name, source_name in corpus_records:
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
             add_documents(
@@ -239,7 +237,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     status = "success" if imported_files > 0 and not failed_sources else "partial" if imported_files > 0 else "error"
     action = "Reset + import" if reset_first else "Import"
     msg = (
-        f"{action} xong: {imported_files}/{len(corpus_paths)} file tu qa_generated_fixed. "
+        f"{action} xong: {imported_files}/{len(corpus_records)} file tu qa_generated_fixed. "
         f"Vector store hien co {total_chunks} chunks."
     )
     if failed_sources:
@@ -248,7 +246,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     return {
         "status": status,
         "msg": msg,
-        "total_files": len(corpus_paths),
+        "total_files": len(corpus_records),
         "imported_files": imported_files,
         "failed_files": len(failed_sources),
         "failed_sources": failed_sources[:20],
@@ -396,7 +394,7 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
                 "preview": preview_text,
                 "title": meta.get("title", "Khong co tieu de"),
                 "level": meta.get("level", 1),
-                "word_count": len(doc.split()),
+                "word_count": meta.get("word_count", len(doc.split())),
                 "tool_name": meta.get("tool_name", "unassigned"),
             }
         )
@@ -419,6 +417,23 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
     return payload.to_dict()
 
 
+def _iter_seed_source_records() -> list[tuple[Path, str, str]]:
+    records: list[tuple[Path, str, str]] = []
+    root = settings.QA_CORPUS_ROOT
+    if not root.exists():
+        return records
+
+    for path in _iter_importable_paths(root):
+        try:
+            source_name = path.relative_to(root).as_posix()
+        except ValueError:
+            source_name = path.name
+        tool_name = detect_tool_from_path(path) or DEFAULT_RAG_TOOL
+        records.append((path, tool_name, source_name))
+
+    return records
+
+
 def _iter_uploaded_source_records() -> list[tuple[Path, str, str]]:
     records: list[tuple[Path, str, str]] = []
 
@@ -433,8 +448,18 @@ def _iter_uploaded_source_records() -> list[tuple[Path, str, str]]:
 
 
 def reingest_uploaded_documents() -> tuple[int, int]:
-    uploaded_records = _iter_uploaded_source_records()
-    if not uploaded_records:
+    source_records: list[tuple[Path, str, str]] = []
+    seen_sources: set[str] = set()
+
+    for record in [*_iter_seed_source_records(), *_iter_uploaded_source_records()]:
+        path, tool_name, source_name = record
+        normalized_source = str(source_name).replace("\\", "/")
+        if normalized_source in seen_sources:
+            continue
+        seen_sources.add(normalized_source)
+        source_records.append((path, tool_name, normalized_source))
+
+    if not source_records:
         return 0, 0
 
     reset_vectorstore()
@@ -442,7 +467,7 @@ def reingest_uploaded_documents() -> tuple[int, int]:
     total_chunks = 0
     coll = get_collection()
 
-    for path, tool_name, source_name in uploaded_records:
+    for path, tool_name, source_name in source_records:
         try:
             before_count = coll.count()
             text = path.read_text(encoding="utf-8", errors="ignore")

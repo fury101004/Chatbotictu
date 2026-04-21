@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # Usage:
-#   python restore_vietnamese_diacritics.py --input data/qa_generated --in-place --provider repair
-#   python restore_vietnamese_diacritics.py --input clean_data --output data/clean_data_fixed --provider auto --force
-#   python restore_vietnamese_diacritics.py --input "data/qa_generated/Cac Van Ban Phap Quy" --provider gemini --verbose
+#   python tools/data_pipeline/restore_vietnamese_diacritics.py --input data/qa_generated --in-place --provider repair
+#   python tools/data_pipeline/restore_vietnamese_diacritics.py --input clean_data --output data/clean_data_fixed --provider auto --force
+#   python tools/data_pipeline/restore_vietnamese_diacritics.py --input "data/qa_generated/Cac Van Ban Phap Quy" --provider gemini --verbose
 
 from __future__ import annotations
 

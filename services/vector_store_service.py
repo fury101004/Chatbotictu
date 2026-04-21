@@ -38,6 +38,8 @@ from datetime import datetime
 from collections import defaultdict, deque
 import tiktoken  
 
+from config.settings import settings
+
 # Metadata (title, level, source, word_count) được dùng để cho biết chunk đến từ đâu, thuộc phần nào, quan trọng cỡ nào và hiển thị preview
 
 # Vector embeddings chỉ được load khi thật sự cần để app vẫn có thể boot offline.
@@ -219,76 +221,142 @@ def _rebuild_bm25():
     print(f"BM25 rebuilt with {len(docs)} chunks")
 
 # 3. SMART CHUNKING â€“ Chia nhá» file thĂ nh cĂ¡c chunk thĂ´ng minh
+def _detect_chunk_type(text: str) -> str:
+    if "```" in text:
+        return "code"
+    if any(c in text for c in ["│", "┃", "├", "┣", "┳", "═"]):
+        return "table"
+    if re.search(r'^[-*•]\s', text, re.M):
+        return "list"
+    return "text"
+
+
+def _split_text_windows(text: str, max_words: int, overlap_words: int) -> List[str]:
+    words = text.split()
+    if not words:
+        return []
+
+    if max_words <= 0 or len(words) <= max_words:
+        return [text.strip()]
+
+    overlap_words = max(0, min(overlap_words, max_words - 1))
+    step = max(1, max_words - overlap_words)
+    windows: List[str] = []
+    start = 0
+
+    while start < len(words):
+        window = " ".join(words[start : start + max_words]).strip()
+        if window:
+            windows.append(window)
+        if start + max_words >= len(words):
+            break
+        start += step
+
+    return windows
+
+
+def _tail_overlap_text(text: str, overlap_words: int) -> str:
+    if overlap_words <= 0:
+        return ""
+    words = text.split()
+    if not words:
+        return ""
+    return " ".join(words[-overlap_words:]).strip()
+
+
 def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
     """
     Chunk theo:
         • Heading (# ## ### ####)
-        • Không cắt ngang code block (```)
-        • Không vượt quá ~512 token (an toàn cho hầu hết LLM)
-        • Phát hiện table để đánh dấu chunk_type
+        • Khong cat ngang code block (```)
+        • Su dung chunk size/chunk overlap theo cau hinh runtime
+        • Ghi lai level/title de UI va retrieval de khai thac metadata tot hon
     """
     lines = content.split("\n")
-    chunks = []
-    buffer = []                # các dòng đang gom lại thành 1 chunk
-    buffer_tokens = 0
-    current_title = Path(filename).stem
-    in_code_block = False
+    max_words = max(1, int(getattr(settings, "CHUNK_SIZE", 1000) or 1000))
+    overlap_words = max(0, int(getattr(settings, "CHUNK_OVERLAP", 200) or 0))
+    overlap_words = min(overlap_words, max_words - 1) if max_words > 1 else 0
 
-    def flush_buffer():
-        """Äáº©y buffer hiá»‡n táº¡i thĂ nh 1 chunk hoĂ n chá»‰nh"""
-        nonlocal buffer_tokens
+    chunks = []
+    buffer = []
+    buffer_word_count = 0
+    current_title = Path(filename).stem
+    current_level = 1
+    in_code_block = False
+    buffer_is_overlap_seed = False
+
+    def flush_buffer(*, preserve_overlap: bool = False):
+        nonlocal buffer, buffer_word_count, buffer_is_overlap_seed
         if not buffer:
             return
+
         text = "\n".join(buffer).strip()
         if not text:
             buffer.clear()
+            buffer_word_count = 0
+            buffer_is_overlap_seed = False
             return
 
-        token_count = count_tokens(text)
+        if buffer_is_overlap_seed and not preserve_overlap:
+            buffer.clear()
+            buffer_word_count = 0
+            buffer_is_overlap_seed = False
+            return
 
-        # Phát hiện loại chunk để sau này LLM xử lý đặc biệt
-        if in_code_block:
-            chunk_type = "code"
-        elif any(c in text for c in ["â”‚", "â”ƒ", "â”œ", "â”£", "â”³", "â•"]):  # báº£ng markdown thÆ°á»ng dĂ¹ng cĂ¡c kĂ½ tá»± nĂ y
-            chunk_type = "table"
-        elif bullet := re.search(r'^[-*•]\s', text, re.M):
-            chunk_type = "list"
+        chunk_type = _detect_chunk_type(text)
+        if chunk_type in {"code", "table"}:
+            segments = [text]
         else:
-            chunk_type = "text"
+            segments = _split_text_windows(
+                text,
+                max_words=max_words,
+                overlap_words=overlap_words if preserve_overlap else 0,
+            )
 
-        chunks.append({
-            "text": text,
-            "title": current_title,
-            "token_count": token_count,
-            "type": chunk_type
-        })
-        buffer.clear()
-        buffer_tokens = 0
+        for segment in segments:
+            chunks.append(
+                {
+                    "text": segment,
+                    "title": current_title,
+                    "level": current_level,
+                    "token_count": count_tokens(segment),
+                    "word_count": len(segment.split()),
+                    "type": chunk_type,
+                }
+            )
+
+        if preserve_overlap and overlap_words > 0 and chunk_type not in {"code", "table"}:
+            overlap_text = _tail_overlap_text(text, overlap_words)
+            buffer = [overlap_text] if overlap_text else []
+            buffer_word_count = len(overlap_text.split()) if overlap_text else 0
+            buffer_is_overlap_seed = bool(overlap_text)
+        else:
+            buffer.clear()
+            buffer_word_count = 0
+            buffer_is_overlap_seed = False
 
     for line in lines:
         line = line.rstrip()
 
-        # Phát hiện mở/đóng code block → không cắt ngang
         if line.startswith("```"):
             in_code_block = not in_code_block
 
-        # Heading → luôn flush chunk cũ và bắt đầu chunk mới
         if re.match(r'^#{1,4}\s', line):
             flush_buffer()
             heading_level = len(line) - len(line.lstrip('#'))
             current_title = line.lstrip("# ").strip()
+            current_level = heading_level
             if not current_title:
-                current_title = f"Heading cấp {heading_level}"
+                current_title = f"Heading cap {heading_level}"
 
-        # Gom dòng vào buffer
         buffer.append(line)
-        buffer_tokens += count_tokens(line + "\n")
+        buffer_word_count += len(line.split())
+        if buffer_is_overlap_seed and len(buffer) > 1:
+            buffer_is_overlap_seed = False
 
-        # Nếu buffer quá dài và không phải đang trong code block → cắt luôn
-        if buffer_tokens > 512 and not in_code_block:
-            flush_buffer()
+        if buffer_word_count > max_words and not in_code_block:
+            flush_buffer(preserve_overlap=True)
 
-    # Äá»«ng quĂªn chunk cuá»‘i cĂ¹ng
     flush_buffer()
     return chunks
 
@@ -330,8 +398,10 @@ def add_documents(
         "source": clean_name, #Tên file gốc → biết chunk này đến từ file nào, dùng để filter khi user nhắc tới file cụ thể (forced_file mode).
         "title": c["title"], #Tên heading của chunk → dùng để hiển thị, phân loại, biết chunk này thuộc phần nào trong file.
         "title_clean": re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', '', c["title"].lower())).strip(),
+        "level": c.get("level", 1),
         "chunk_type": c["type"],
         "token_count": c["token_count"],
+        "word_count": c.get("word_count", len(c["text"].split())),
         "created_at": datetime.now().isoformat(),
         "version": version,
         "tool_name": tool_name or "unassigned",

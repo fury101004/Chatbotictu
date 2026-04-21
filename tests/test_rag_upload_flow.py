@@ -134,24 +134,34 @@ class RagRouterTests(unittest.TestCase):
 
 class RetrievalFlowPlannerTests(unittest.TestCase):
     def test_llm_planner_can_choose_web_search_before_retrieval(self) -> None:
-        response = SimpleNamespace(
-            text='{"source":"web_search","priority":"web_first","reason":"Thong bao moi can web","confidence":0.91}'
-        )
-
         with (
             patch("services.rag_service.get_model", return_value=SimpleNamespace(label="planner-model")),
             patch("services.rag_service._llm_router_network_available", return_value=True),
-            patch("services.rag_service.generate_content_with_fallback", return_value=(response, "planner-model")) as generate_mock,
+            patch(
+                "services.rag_service.invoke_json_prompt_chain",
+                return_value=(
+                    {
+                        "source": "web_search",
+                        "priority": "web_first",
+                        "reason": "Thong bao moi can web",
+                        "confidence": 0.91,
+                    },
+                    '{"source":"web_search","priority":"web_first","reason":"Thong bao moi can web","confidence":0.91}',
+                    "planner-model",
+                ),
+            ) as chain_mock,
         ):
             plan = route_retrieval_flow("ICTU có thông báo mới nhất gì hôm nay?", "student_faq_rag")
 
         self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
         self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
         self.assertTrue(plan.route.startswith("flow_llm:web_search:web_first"))
-        prompt = generate_mock.call_args.args[0]
-        self.assertIn("local_data", prompt)
-        self.assertIn("web_search", prompt)
-        self.assertIn("hybrid", prompt)
+        prompt_template = chain_mock.call_args.args[0]
+        prompt_input = chain_mock.call_args.args[1]
+        self.assertEqual(prompt_input["current_tool"], "student_faq_rag")
+        self.assertIn("local_data", prompt_template.messages[1].prompt.template)
+        self.assertIn("web_search", prompt_template.messages[1].prompt.template)
+        self.assertIn("hybrid", prompt_template.messages[1].prompt.template)
 
     def test_flow_falls_back_to_web_search_for_realtime_question_without_llm(self) -> None:
         with patch("services.rag_service.get_model", return_value=None):

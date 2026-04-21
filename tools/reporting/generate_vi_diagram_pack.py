@@ -7,7 +7,14 @@ from textwrap import wrap
 from PIL import Image, ImageDraw, ImageFont
 
 
-OUT = Path(r"E:\new-test\reports\generated\diagram_pack_vi")
+def _find_repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "main.py").exists() and (parent / "services").is_dir():
+            return parent
+    return Path(__file__).resolve().parents[2]
+
+
+OUT = _find_repo_root() / "reports" / "generated" / "diagram_pack_vi"
 OUT.mkdir(parents=True, exist_ok=True)
 
 REG = r"C:\Windows\Fonts\segoeui.ttf"

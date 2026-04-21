@@ -8,7 +8,14 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 from PIL import Image, ImageDraw, ImageFont
 
-out = Path(r'E:\new-test\reports\generated\ai_agent_diagrams')
+def _find_repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "main.py").exists() and (parent / "services").is_dir():
+            return parent
+    return Path(__file__).resolve().parents[2]
+
+
+out = _find_repo_root() / 'reports' / 'generated' / 'ai_agent_diagrams'
 out.mkdir(parents=True, exist_ok=True)
 
 REG = r'C:\Windows\Fonts\segoeui.ttf'

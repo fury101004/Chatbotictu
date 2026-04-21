@@ -34,7 +34,7 @@ from views.web_view import (
     render_vector_manager_page,
     unauthorized_response,
 )
-from config.db import get_system_prompt
+from config.system_prompt import get_system_prompt
 from services.vector_store_service import get_collection
 
 router = APIRouter()

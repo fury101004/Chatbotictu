@@ -31,11 +31,15 @@ logs/
 
 # Local app data
 data/uploads/
+data/rag_uploads/
+data/all_questions.md
 data/api.log
 data/bot_config.db
 data/qa_generated/
 data/qa_generated_fixed/
 clean_data/
+evaluation/
+reports/
 vectorstore/
 *.db
 *.sqlite3

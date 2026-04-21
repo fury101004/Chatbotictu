@@ -12,9 +12,16 @@ from xml.sax.saxutils import escape
 from PIL import Image
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS_DIR = ROOT / "scripts"
-for candidate in [ROOT, SCRIPTS_DIR]:
+def _find_repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "main.py").exists() and (parent / "services").is_dir():
+            return parent
+    return Path(__file__).resolve().parents[2]
+
+
+ROOT = _find_repo_root()
+REPORTING_DIR = Path(__file__).resolve().parent
+for candidate in [ROOT, REPORTING_DIR]:
     if str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 
@@ -410,7 +417,7 @@ def _framework_section_lines() -> list[str]:
         "- Retrieval và evidence: `services/rag_service.py`, `services/vector_store_service.py`, `services/web_search.py`, `services/web_knowledge_service.py`.",
         "- Prompt và generation: `services/multilingual_service.py`, `services/llm_service.py`.",
         "- Quản trị dữ liệu: `services/document_service.py`, `services/knowledge_base_service.py`.",
-        "- Đo lường chất lượng: `scripts/evaluate_chatbot.py`, `scripts/analyze_dataset.py`, unittest trong `tests/`.",
+        "- Đo lường chất lượng: `tools/evaluation/evaluate_chatbot.py`, `tools/evaluation/analyze_dataset.py`, unittest trong `tests/`.",
         "",
         "### 8.3 Input, output và fallback của framework",
         "",

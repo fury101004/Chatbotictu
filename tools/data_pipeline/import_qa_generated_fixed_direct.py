@@ -2,6 +2,19 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
+
+
+def _find_repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "main.py").exists() and (parent / "services").is_dir():
+            return parent
+    return Path(__file__).resolve().parents[2]
+
+
+PROJECT_ROOT = _find_repo_root()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import settings
 from services.vector_store_service import add_documents, get_collection, reset_vectorstore

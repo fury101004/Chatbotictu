@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # Usage:
-#   python sync_clean_data_to_qa.py
-#   python sync_clean_data_to_qa.py --source-root clean_data --target-root data/qa_generated_fixed
-#   python sync_clean_data_to_qa.py --apply
-#   python sync_clean_data_to_qa.py --apply --yes --limit 10 --verbose
+#   python tools/data_pipeline/sync_clean_data_to_qa.py
+#   python tools/data_pipeline/sync_clean_data_to_qa.py --source-root clean_data --target-root data/qa_generated_fixed
+#   python tools/data_pipeline/sync_clean_data_to_qa.py --apply
+#   python tools/data_pipeline/sync_clean_data_to_qa.py --apply --yes --limit 10 --verbose
 
 from __future__ import annotations
 

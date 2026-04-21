@@ -1,15 +1,12 @@
-﻿Frontend da duoc gom ve day de follow cung kieu to chuc voi backend.
+Frontend lives here so the UI is grouped separately from backend code.
 
-Cau truc:
-- templates/layouts: layout dung chung
-- templates/pages: tung man hinh Jinja
-- assets/css: CSS dung chung
-- assets/css/pages: CSS rieng cho tung page neu can
+Structure:
+- `templates/layouts`: shared Jinja layouts
+- `templates/pages`: Jinja page templates
+- `assets/css`: global and screen-specific stylesheets
+- `assets/js`: browser JavaScript files
+- `assets/images`: static UI images
 
-Entry hien tai:
-- Jinja templates root: views/frontend/templates
-- Static root: views/frontend/assets
-
-- assets/js: JS dung chung
-- assets/js/pages: JS rieng cho tung page neu can
-
+Current entry points:
+- Jinja templates root: `views/frontend/templates`
+- Static root: `views/frontend/assets`

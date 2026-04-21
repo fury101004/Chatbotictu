@@ -87,7 +87,9 @@
 - `data/rag_uploads/`: tài liệu upload theo tool.
 - `vectorstore/`: Chroma persistent store.
 - `logs/api.log`: access/application log.
-- `reports/`, `docs/`, `scripts/`: báo cáo, tài liệu nội bộ, script phân tích/evaluate.
+- `docs/`: tài liệu nội bộ, prompt tham khảo và ghi chú thiết kế.
+- `tools/`: script xử lý dữ liệu, benchmark, báo cáo và tiện ích thủ công.
+- `reports/`: kết quả báo cáo sinh ra cục bộ, không cần commit.
 
 ## Biến Môi Trường Cần Lưu Ý
 
@@ -174,7 +176,7 @@ Sau khi chạy:
 Đã chạy benchmark router/retrieval bằng lệnh:
 
 ```powershell
-.\venv\Scripts\python.exe scripts\evaluate_chatbot.py
+.\venv\Scripts\python.exe tools\evaluation\evaluate_chatbot.py
 ```
 
 Kết quả sau đợt review và cleanup ngày `16/04/2026`:
@@ -214,10 +216,10 @@ Chưa thấy integration/smoke test rõ ràng cho:
 - Đổi `SessionMiddleware` sang secret ổn định qua `settings`, hỗ trợ `SESSION_SECRET`.
 - Dọn `Dockerfile`, bỏ phần cài `torch` trùng lặp.
 - Đồng bộ `docker-compose.yml` với đường dẫn template/static thật của app.
-- Cắt một liên kết legacy không cần thiết: `scripts/evaluate_chatbot.py` không còn phụ thuộc vào `gemini_service`.
+- Cắt một liên kết legacy không cần thiết: `tools/evaluation/evaluate_chatbot.py` không còn phụ thuộc vào `gemini_service`.
 - Làm `gemini_service` lazy-import hơn để giảm noise khi luồng chính không dùng Gemini.
 - Mở rộng bộ benchmark lên `31` câu hỏi, trong đó `25` câu có nhãn nguồn để đo router/retrieval.
-- Viết lại `scripts/evaluate_chatbot.py` theo nội dung sạch hơn và sinh `reports/generated/eval_results.*` mới.
+- Viết lại `tools/evaluation/evaluate_chatbot.py` theo nội dung sạch hơn và sinh `reports/generated/eval_results.*` mới.
 - Đồng bộ lại tài liệu tổng hợp để không còn số liệu cũ `13` câu benchmark.
 
 ## Đánh Giá Tiến Độ Theo Đề Cương
