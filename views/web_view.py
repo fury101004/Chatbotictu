@@ -19,7 +19,7 @@ PAGE_TEMPLATES = {
 
 def _render_template(request: Request, template_name: str, context: dict):
     templates = request.app.state.templates
-    return templates.TemplateResponse(template_name, {"request": request, **context})
+    return templates.TemplateResponse(request, template_name, context)
 
 
 
@@ -105,6 +105,7 @@ def render_config_page(
     chunk_overlap: int,
     bot_rules: str,
     model_name: str,
+    csrf_token: str,
     model_names: list[str] | None = None,
     model_rotation: str = "round_robin",
 ):
@@ -116,6 +117,7 @@ def render_config_page(
             "chunk_overlap": chunk_overlap,
             "bot_rules": bot_rules,
             "model_name": model_name,
+            "csrf_token": csrf_token,
             "model_names": model_names or [],
             "model_rotation": model_rotation,
         },

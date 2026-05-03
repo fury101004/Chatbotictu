@@ -33,6 +33,27 @@ class SmartChunkTests(unittest.TestCase):
         self.assertTrue(all(chunk["level"] == 1 for chunk in chunks))
         self.assertTrue(all(chunk["word_count"] == len(chunk["text"].split()) for chunk in chunks))
 
+    def test_smart_chunk_resets_overlap_when_new_heading_starts(self) -> None:
+        text = """
+# So tay 2024-2025
+alpha1 alpha2 alpha3 alpha4 alpha5 alpha6
+
+## Hoc bong
+beta1 beta2 beta3 beta4 beta5 beta6
+""".strip()
+
+        with (
+            patch.object(vector_store_service.settings, "CHUNK_SIZE", 5),
+            patch.object(vector_store_service.settings, "CHUNK_OVERLAP", 2),
+            patch("services.vector_store_service.count_tokens", side_effect=lambda value: len(value.split())),
+        ):
+            chunks = smart_chunk(text, "handbook.md")
+
+        section_two = [chunk for chunk in chunks if chunk["title"] == "Hoc bong"]
+        self.assertTrue(section_two)
+        self.assertTrue(all(chunk["level"] == 2 for chunk in section_two))
+        self.assertTrue(all("alpha5" not in chunk["text"] and "alpha6" not in chunk["text"] for chunk in section_two))
+
 
 class _FakeCollection:
     def __init__(self) -> None:

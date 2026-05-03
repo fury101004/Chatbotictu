@@ -5,21 +5,74 @@ from typing import Any
 
 from fastapi import FastAPI, Query
 
+from services.ictu_scope_service import is_ictu_related_query, normalize_scope_text
+
 
 logger = logging.getLogger("searxng")
 
-_NEWS_KEYWORDS = ["báo", "tin tức", "news", "chiến sự", "xung đột", "iran", "israel", "ukraine"]
-_REALTIME_KEYWORDS = ["giá vàng", "tỷ giá", "tỉ giá", "usd", "vnd", "thời tiết", "weather", "gold", "sjc", "exchange"]
+_ICTU_NEWS_KEYWORDS = (
+    "tin tuc",
+    "tin moi",
+    "thong bao",
+    "thong bao moi",
+    "su kien",
+    "hoi thao",
+)
+_ICTU_DYNAMIC_KEYWORDS = (
+    "hom nay",
+    "hien tai",
+    "moi nhat",
+    "gan day",
+    "cap nhat",
+    "nam nay",
+    "tin tuc",
+    "tin moi",
+    "tuyen sinh",
+    "xet tuyen",
+    "diem chuan",
+    "diem san",
+    "diem trung tuyen",
+    "chi tieu",
+    "hoc phi",
+    "le phi",
+    "thong bao moi",
+    "thong bao tuyen sinh",
+    "lich tuyen sinh",
+    "lich nhap hoc",
+    "lich thi",
+    "lich hoc",
+    "lich nghi",
+    "han nop",
+    "deadline",
+    "nop ho so",
+    "nhap hoc",
+    "de an tuyen sinh",
+    "phuong thuc xet tuyen",
+    "nguyen vong",
+    "hoc bong",
+    "su kien",
+    "hoi thao",
+    "tuyen dung",
+    "viec lam",
+)
+
+
+def _normalize_query(query: str) -> str:
+    return normalize_scope_text(query or "")
 
 
 def _is_news_query(query: str) -> bool:
-    q = query.lower().strip()
-    return any(keyword in q for keyword in _NEWS_KEYWORDS)
+    q = _normalize_query(query)
+    if not q:
+        return False
+    return is_ictu_related_query(q) and any(keyword in q for keyword in _ICTU_NEWS_KEYWORDS)
 
 
 def _is_realtime_query(query: str) -> bool:
-    q = query.lower().strip()
-    return any(keyword in q for keyword in _REALTIME_KEYWORDS)
+    q = _normalize_query(query)
+    if not q:
+        return False
+    return is_ictu_related_query(q) and any(keyword in q for keyword in _ICTU_DYNAMIC_KEYWORDS)
 
 
 def _item_to_result(item: dict, url_key: str = "href") -> dict | None:

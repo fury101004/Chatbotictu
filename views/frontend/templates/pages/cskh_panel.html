@@ -1,49 +1,49 @@
-﻿{% extends "layouts/base.html" %}
-{% block title %}CSKH Live – Tu Tiên Doanh Nghiệp 2025{% endblock %}
+{% extends "layouts/base.html" %}
+{% block title %}CSKH Live  Tu Tin Doanh Nghip 2025{% endblock %}
 
 {% block content %}
 <div class="cskh-wrapper">
     <div class="cskh-header">
         <h1>
             <span class="icon">CSKH</span> CSKH LIVE SUPPORT
-            <span class="badge" id="count">0</span> khách đang chờ
+            <span class="badge" id="count">0</span> khch ang ch
         </h1>
-        <p class="subtitle">Nhân viên chăm sóc khách hàng – Hệ Thống Tu Tiên Doanh Nghiệp 2025</p>
+        <p class="subtitle">Nhn vin chm sc khch hng  H Thng Tu Tin Doanh Nghip 2025</p>
     </div>
 
     <div class="cskh-body">
         <div class="sidebar">
-            <h2><span>Khách đang chờ</span></h2>
+            <h2><span>Khch ang ch</span></h2>
             <div id="customers" class="customer-list">
                 <div class="empty-state">
-                    <p>Chưa có khách nào cần hỗ trợ</p>
-                    <p>Uống trà chờ đạo hữu giá lâm thôi</p>
+                    <p>Cha c khch no cn h tr</p>
+                    <p>Ung tr ch o hu gi lm thi</p>
                 </div>
             </div>
         </div>
 
         <div class="main-chat">
             <div class="chat-header" id="chat-header">
-                <span>Chọn một khách để bắt đầu hỗ trợ</span>
+                <span>Chn mt khch  bt u h tr</span>
             </div>
 
             <div id="chat" class="chat-messages">
                 <div class="welcome-msg">
-                    <p>Chào mừng đại hiệp đã đến với Thiên Cơ Các</p>
-                    <p>Chọn đạo hữu bên trái để hộ đạo</p>
+                    <p>Cho mng i hip  n vi Thin C Cc</p>
+                    <p>Chn o hu bn tri  h o</p>
                 </div>
             </div>
 
             <div class="chat-input">
-                <input type="text" id="msg" placeholder="Gõ tin nhắn trả lời khách (Enter để gửi)" autocomplete="off">
-                <button onclick="send()" id="sendBtn">Gửi</button>
+                <input type="text" id="msg" placeholder="G tin nhn tr li khch (Enter  gi)" autocomplete="off">
+                <button onclick="send()" id="sendBtn">Gi</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-// ============== WEBSOCKET CSKH – ĐÃ FIX KHÔNG NGẮT NỮA ==============
+// ============== WEBSOCKET CSKH   FIX KHNG NGT NA ==============
 let currentSession = null;
 let ws;
 
@@ -51,7 +51,7 @@ function connectWS() {
     ws = new WebSocket(`ws://${location.host}/ws-cskh`);
 
     ws.onopen = () => {
-        console.log("CSKH WebSocket đã kết nối HOÀN HẢO");
+        console.log("CSKH WebSocket  kt ni HON HO");
     };
 
     ws.onmessage = function(e) {
@@ -71,18 +71,18 @@ function connectWS() {
     };
 
     ws.onclose = () => {
-        console.log("CSKH WebSocket bị ngắt → TỰ ĐỘNG KẾT NỐI LẠI SAU 2 GIÂY");
-        setTimeout(connectWS, 2000); // QUAN TRỌNG NHẤT: TỰ ĐỘNG KẾT NỐI LẠI!
+        console.log("CSKH WebSocket b ngt  T NG KT NI LI SAU 2 GIY");
+        setTimeout(connectWS, 2000); // QUAN TRNG NHT: T NG KT NI LI!
     };
 
     ws.onerror = (err) => {
-        console.error("CSKH WS lỗi:", err);
+        console.error("CSKH WS li:", err);
     };
 }
 
-connectWS(); // GỌI NGAY KHI MỞ TRANG
+connectWS(); // GI NGAY KHI M TRANG
 
-// Thêm khách
+// Thm khch
 function addCustomer(session_id, firstMsg) {
     const list = document.getElementById("customers");
     const empty = list.querySelector(".empty-state");
@@ -93,8 +93,8 @@ function addCustomer(session_id, firstMsg) {
     div.dataset.id = session_id;
     div.innerHTML = `
         <div class="cust-info">
-            <strong>Khách ${session_id.slice(-6)}</strong>
-            <span class="time">Vừa xong</span>
+            <strong>Khch ${session_id.slice(-6)}</strong>
+            <span class="time">Va xong</span>
         </div>
         <div class="preview">${firstMsg.substring(0,60)}${firstMsg.length > 60 ? "..." : ""}</div>
     `;
@@ -103,7 +103,7 @@ function addCustomer(session_id, firstMsg) {
         document.querySelectorAll(".customer-item").forEach(c => c.classList.remove("active"));
         div.classList.add("active");
         currentSession = session_id;
-        document.getElementById("chat-header").innerHTML = `<strong>Đang chat với Khách ${session_id.slice(-6)}</strong>`;
+        document.getElementById("chat-header").innerHTML = `<strong>ang chat vi Khch ${session_id.slice(-6)}</strong>`;
         document.getElementById("chat").innerHTML = `<div class="msg customer">${firstMsg}</div>`;
     };
 
@@ -111,7 +111,7 @@ function addCustomer(session_id, firstMsg) {
     if (!currentSession) div.click();
 }
 
-// Thêm tin nhắn
+// Thm tin nhn
 function addMessage(text, from) {
     const chat = document.getElementById("chat");
     const div = document.createElement("div");
@@ -121,7 +121,7 @@ function addMessage(text, from) {
     div.scrollIntoView({ behavior: "smooth" });
 }
 
-// Gửi tin nhắn
+// Gi tin nhn
 function send() {
     const input = document.getElementById("msg");
     const text = input.value.trim();
@@ -137,12 +137,12 @@ function send() {
     input.value = "";
 }
 
-// Enter để gửi
+// Enter  gi
 document.getElementById("msg").addEventListener("keypress", e => {
     if (e.key === "Enter") send();
 });
 
-// Âm thanh thông báo
+// m thanh thng bo
 function playNotify() {
     new Audio("https://assets.mixkit.co/sfx/preview/mixkit-bell-notification-933.mp3").play().catch(()=>{});
 }

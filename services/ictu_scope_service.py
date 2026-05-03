@@ -27,6 +27,7 @@ ICTU_EXPLICIT_MARKERS = (
 
 ICTU_CONTEXT_MARKERS = (
     "sinh vien",
+    "nguoi hoc",
     "hoc vien",
     "tan sinh vien",
     "phu huynh",
@@ -92,12 +93,20 @@ def normalize_scope_text(text: str) -> str:
     return re.sub(r"\s+", " ", stripped).strip()
 
 
+def _contains_any_marker(normalized_text: str, markers: tuple[str, ...]) -> bool:
+    for marker in markers:
+        marker_normalized = normalize_scope_text(marker)
+        if marker_normalized and marker_normalized in normalized_text:
+            return True
+    return False
+
+
 def is_ictu_related_query(text: str) -> bool:
     normalized = normalize_scope_text(text or "")
     if not normalized:
         return True
 
-    if any(marker in normalized for marker in ICTU_EXPLICIT_MARKERS):
+    if _contains_any_marker(normalized, ICTU_EXPLICIT_MARKERS):
         return True
 
-    return any(marker in normalized for marker in ICTU_CONTEXT_MARKERS)
+    return _contains_any_marker(normalized, ICTU_CONTEXT_MARKERS)

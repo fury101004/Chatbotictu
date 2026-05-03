@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from config.settings import settings
+from services.rate_limit_monitor import record_429
 
 
 APP_LOG_FORMAT = (
@@ -141,20 +142,33 @@ def create_template_engine(directory: str = "templates") -> Jinja2Templates:
     return templates
 
 
-def register_middleware(app: FastAPI) -> None:
-    app.add_exception_handler(
-        RateLimitExceeded,
-        lambda request, exc: JSONResponse(
-            status_code=429,
-            content={"detail": "Qua nhieu request, thu lai sau nhe!"},
-        ),
+def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    client_ip = request.client.host if request.client else "-"
+    record_429(
+        "api_rate_limiter",
+        detail=str(exc),
+        metadata={
+            "path": request.url.path,
+            "method": request.method,
+            "client_ip": client_ip,
+        },
     )
+    response = JSONResponse(
+        status_code=429,
+        content={"detail": "Qua nhieu request, thu lai sau nhe!"},
+    )
+    response.headers["Retry-After"] = "60"
+    return response
+
+
+def register_middleware(app: FastAPI) -> None:
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -27,6 +27,11 @@ class _FakeCollection:
                     "title": "So tay",
                     "level": 2,
                     "tool_name": "student_handbook_rag",
+                    "academic_year": "2025-2026",
+                    "chapter": "So tay sinh vien",
+                    "section": "So tay sinh vien > Hoc bong",
+                    "page_number": 24,
+                    "document_type": "student_handbook",
                 },
                 {
                     "source": "congvanquyetdinh/policy.md",
@@ -64,6 +69,12 @@ class VectorManagerPayloadTests(unittest.TestCase):
         self.assertEqual(handbook_group["total_chunks"], 1)
         self.assertEqual(handbook_group["files"][0]["display_name"], "handbook.md")
         self.assertTrue(handbook_group["files"][0]["is_upload_source"])
+        handbook_chunk = handbook_group["files"][0]["chunks"][0]
+        self.assertEqual(handbook_chunk["academic_year"], "2025-2026")
+        self.assertEqual(handbook_chunk["chapter"], "So tay sinh vien")
+        self.assertEqual(handbook_chunk["section"], "So tay sinh vien > Hoc bong")
+        self.assertEqual(handbook_chunk["page_number"], 24)
+        self.assertEqual(handbook_chunk["document_type"], "student_handbook")
 
         self.assertEqual(policy_group["name"], "school_policy_rag")
         self.assertEqual(policy_group["files"][0]["source_label"], "congvanquyetdinh/policy.md")

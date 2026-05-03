@@ -1,16 +1,16 @@
-﻿{% extends "layouts/base.html" %}
+{% extends "layouts/base.html" %}
 {% block title %}Data Loader{% endblock %}
 
 {% block content %}
 <div class="loader-page">
     <h1 class="page-title">DATA LOADER</h1>
-    <p class="page-desc">Chọn đúng nhóm dữ liệu trước khi upload để mỗi tool RAG đọc đúng loại tài liệu.</p>
+    <p class="page-desc">Chn ng nhm d liu trc khi upload  mi tool RAG c ng loi ti liu.</p>
 
     <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
 
     <div class="settings-grid top-grid">
         <div class="setting-item select-card">
-            <label for="toolSelect">Nhóm dữ liệu</label>
+            <label for="toolSelect">Nhm d liu</label>
             <select id="toolSelect" class="tool-select">
                 {% for tool in tool_options %}
                 <option value="{{ tool.name }}" {% if tool.name == default_tool %}selected{% endif %}>
@@ -21,32 +21,32 @@
             <p id="toolDescription" class="tool-description"></p>
         </div>
         <div class="setting-item">
-            <label>Chunk Size: <span id="chunkValue">{{ chunk_size }}</span> từ</label>
+            <label>Chunk Size: <span id="chunkValue">{{ chunk_size }}</span> t</label>
             <input type="range" min="500" max="3000" step="100" value="{{ chunk_size }}" id="chunkSize">
         </div>
         <div class="setting-item">
-            <label>Chunk Overlap: <span id="overlapValue">{{ chunk_overlap }}</span> từ</label>
+            <label>Chunk Overlap: <span id="overlapValue">{{ chunk_overlap }}</span> t</label>
             <input type="range" min="0" max="800" step="50" value="{{ chunk_overlap }}" id="chunkOverlap">
         </div>
     </div>
 
     <div class="drop-zone" id="dropZone">
-        <p>Kéo thả file vào đây<br><small>Hoặc click để chọn • Hỗ trợ .md, .markdown, .txt • Tối đa 200MB</small></p>
+        <p>Ko th file vo y<br><small>Hoc click  chn  H tr .md, .markdown, .txt  Ti a 200MB</small></p>
         <input type="file" id="fileInput" name="files" multiple accept=".md,.markdown,.txt" hidden>
     </div>
 
     <div id="fileList" class="file-preview"></div>
 
     <div class="action-buttons">
-        <button id="uploadBtn" class="btn-large teal" disabled>UPLOAD THEO NHÓM</button>
+        <button id="uploadBtn" class="btn-large teal" disabled>UPLOAD THEO NHM</button>
         <button id="resetBtn" class="btn-large red">RESET VECTOR STORE</button>
     </div>
 
     <div id="status" class="status-box"></div>
 
     <div class="nav-buttons">
-        <a href="/history" class="btn-nav">Xem lịch sử & file</a>
-        <a href="/chat" class="btn-nav purple">Chat với bot</a>
+        <a href="/history" class="btn-nav">Xem lch s & file</a>
+        <a href="/chat" class="btn-nav purple">Chat vi bot</a>
     </div>
 </div>
 
@@ -75,17 +75,17 @@ function formatFiles(items) {
 
 function renderResult(result) {
     const tone = result.status === "error" ? "error" : result.status === "partial" ? "warning" : "success";
-    const speedText = result.real_speed ? `<div class="meta-line">Tốc độ thực tế: ${result.real_speed} MB/s</div>` : "";
+    const speedText = result.real_speed ? `<div class="meta-line">Tc  thc t: ${result.real_speed} MB/s</div>` : "";
     const warningBlock = result.detail?.warnings?.length
-        ? `<div class="detail-block"><strong>Cảnh báo</strong><ul>${formatFiles(result.detail.warnings)}</ul></div>`
+        ? `<div class="detail-block"><strong>Cnh bo</strong><ul>${formatFiles(result.detail.warnings)}</ul></div>`
         : "";
     const failedBlock = result.detail?.failed?.length
-        ? `<div class="detail-block"><strong>Lỗi</strong><ul>${formatFiles(result.detail.failed)}</ul></div>`
+        ? `<div class="detail-block"><strong>Li</strong><ul>${formatFiles(result.detail.failed)}</ul></div>`
         : "";
 
     status.innerHTML = `
         <div class="info-box ${tone}">
-            <div class="status-title">${result.msg || "Đã xử lý xong."}</div>
+            <div class="status-title">${result.msg || " x l xong."}</div>
             ${speedText}
             ${warningBlock}
             ${failedBlock}
@@ -123,7 +123,7 @@ function renderFileList() {
     }
 
     fileList.innerHTML = `
-        <div class="preview-header">ĐÃ CHỌN ${selectedFiles.length} FILE</div>
+        <div class="preview-header"> CHN ${selectedFiles.length} FILE</div>
         ${selectedFiles.map(file => `
             <div class="preview-item">
                 <span>${file.name}</span>
@@ -144,8 +144,9 @@ uploadBtn.addEventListener("click", async () => {
     formData.append("tool_name", toolSelect.value);
     formData.append("client_start_time", uploadStartTime);
     formData.append("client_total_size", totalClientSize);
+    formData.append("csrf_token", csrfToken.value);
 
-    status.innerHTML = `<div class="info-box loading">Đang upload và gán tài liệu vào nhóm <strong>${toolSelect.value}</strong>...</div>`;
+    status.innerHTML = `<div class="info-box loading">ang upload v gn ti liu vo nhm <strong>${toolSelect.value}</strong>...</div>`;
     uploadBtn.disabled = true;
 
     try {
@@ -166,16 +167,16 @@ uploadBtn.addEventListener("click", async () => {
         uploadBtn.disabled = true;
     } catch (err) {
         console.error(err);
-        status.innerHTML = `<div class="info-box error">Lỗi mạng hoặc backend chưa phản hồi.</div>`;
+        status.innerHTML = `<div class="info-box error">Li mng hoc backend cha phn hi.</div>`;
         uploadBtn.disabled = false;
     }
 });
 
 resetBtn.addEventListener("click", async () => {
-    if (!confirm("Xóa sạch vector store và file upload hiện tại?")) return;
-    if (!confirm("Xác nhận lần 2: thao tác này không thể hoàn tác.")) return;
+    if (!confirm("Xa sch vector store v file upload hin ti?")) return;
+    if (!confirm("Xc nhn ln 2: thao tc ny khng th hon tc.")) return;
 
-    status.innerHTML = `<div class="info-box loading">Đang reset vector store...</div>`;
+    status.innerHTML = `<div class="info-box loading">ang reset vector store...</div>`;
     const formData = new FormData();
     formData.append("csrf_token", csrfToken.value);
 
@@ -185,16 +186,16 @@ resetBtn.addEventListener("click", async () => {
             body: formData,
         });
         if (!response.ok) {
-            throw new Error("Reset thất bại");
+            throw new Error("Reset tht bi");
         }
 
-        status.innerHTML = `<div class="info-box success">Đã reset vector store và toàn bộ file upload.</div>`;
+        status.innerHTML = `<div class="info-box success"> reset vector store v ton b file upload.</div>`;
         selectedFiles = [];
         renderFileList();
         uploadBtn.disabled = true;
     } catch (err) {
         console.error(err);
-        status.innerHTML = `<div class="info-box error">Không reset được vector store.</div>`;
+        status.innerHTML = `<div class="info-box error">Khng reset c vector store.</div>`;
     }
 });
 

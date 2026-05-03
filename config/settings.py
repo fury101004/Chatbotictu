@@ -5,6 +5,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    ENVIRONMENT: str = Field(
+        default="development",
+        validation_alias=AliasChoices("ENVIRONMENT", "APP_ENV", "ENV"),
+    )
     GEMINI_API_KEY: str = Field(
         default="",
         validation_alias=AliasChoices("GEMINI_API_KEY"),
@@ -20,6 +24,14 @@ class Settings(BaseSettings):
     SESSION_SECRET: str = Field(
         default="",
         validation_alias=AliasChoices("SESSION_SECRET", "SESSION_MIDDLEWARE_SECRET"),
+    )
+    CORS_ALLOW_ORIGINS: str = Field(
+        default="http://127.0.0.1:8000,http://localhost:8000",
+        validation_alias=AliasChoices("CORS_ALLOW_ORIGINS", "ALLOWED_ORIGINS"),
+    )
+    CORS_ALLOW_CREDENTIALS: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("CORS_ALLOW_CREDENTIALS"),
     )
 
     CHUNK_SIZE: int = 1000
@@ -43,8 +55,51 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() in {"production", "prod"}
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOW_ORIGINS.split(",")
+            if origin.strip()
+        ]
+
+
+def _validate_production_security_config(settings_obj: Settings) -> None:
+    if not settings_obj.is_production:
+        return
+
+    insecure_partner_key = settings_obj.PARTNER_API_KEY.strip() in {"", "dev-partner-key"}
+    insecure_jwt_secret = settings_obj.JWT_SECRET.strip() in {"", "dev-jwt-secret"}
+    insecure_session_secret = settings_obj.SESSION_SECRET.strip() in {"", "dev-jwt-secret"}
+
+    if insecure_partner_key or insecure_jwt_secret or insecure_session_secret:
+        raise RuntimeError(
+            "Production security config invalid: PARTNER_API_KEY/JWT_SECRET/SESSION_SECRET must be set "
+            "to non-default values."
+        )
+
+    origins = settings_obj.cors_allowed_origins
+    if not origins:
+        raise RuntimeError("Production security config invalid: CORS_ALLOW_ORIGINS must not be empty.")
+    if "*" in origins:
+        raise RuntimeError("Production security config invalid: wildcard CORS origin '*' is not allowed.")
+    if any(
+        origin.startswith("http://localhost")
+        or origin.startswith("https://localhost")
+        or "127.0.0.1" in origin
+        for origin in origins
+    ):
+        raise RuntimeError(
+            "Production security config invalid: localhost/127.0.0.1 origins are not allowed in production."
+        )
+
 
 settings = Settings()
+_validate_production_security_config(settings)
 if not settings.SESSION_SECRET:
     settings.SESSION_SECRET = settings.JWT_SECRET
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

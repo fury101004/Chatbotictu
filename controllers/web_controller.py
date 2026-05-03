@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from config.rag_tools import DEFAULT_RAG_TOOL, get_upload_tool_options
 from config.settings import settings
+from config.limiter import limiter
 from services.chat_service import process_chat_message
 from services.config_service import get_config_page_payload, update_runtime_config
 from services.document_service import (
@@ -47,16 +48,27 @@ async def home(request: Request):
 
 @router.get("/chat")
 async def chat_page(request: Request):
+    if "chat_session_id" not in request.session:
+        request.session["chat_session_id"] = secrets.token_hex(16)
     return render_chat_page(request, chat_model_options=get_chat_model_options())
 
 
 @router.post("/chat")
+@limiter.limit(settings.API_RATE_CHAT)
 async def chat_web(
+    request: Request,
     message: str = Form(...),
     session_id: str = Form("default"),
     llm_model: str = Form("auto"),
 ):
-    return await process_chat_message(message, session_id, llm_model=llm_model)
+    current_session_id = (session_id or "").strip()
+    if not current_session_id or current_session_id == "default":
+        current_session_id = str(request.session.get("chat_session_id") or "").strip()
+    if not current_session_id:
+        current_session_id = secrets.token_hex(16)
+        request.session["chat_session_id"] = current_session_id
+
+    return await process_chat_message(message, current_session_id, llm_model=llm_model)
 
 
 @router.post("/delete-file")
@@ -90,12 +102,18 @@ async def data_loader_page(request: Request):
 
 
 @router.post("/upload")
+@limiter.limit(settings.API_RATE_UPLOAD)
 async def upload_files(
+    request: Request,
     files: list[UploadFile] = File(...),
     tool_name: str = Form(DEFAULT_RAG_TOOL),
     client_start_time: float = Form(None),
     client_total_size: int = Form(None),
+    csrf_token: str = Form(...),
 ):
+    if request.session.get("csrf_token") != csrf_token:
+        return JSONResponse({"status": "error", "msg": "CSRF Invalid!"}, status_code=403)
+
     result = await upload_markdown_files(
         files=files,
         tool_name=tool_name,
@@ -106,6 +124,7 @@ async def upload_files(
 
 
 @router.post("/import-qa-corpus")
+@limiter.limit(settings.API_RATE_ADMIN)
 async def import_qa_corpus(request: Request, csrf_token: str = Form(...), reset_first: bool = Form(False)):
     if request.session.get("csrf_token") != csrf_token:
         return JSONResponse({"status": "error", "msg": "CSRF Invalid!"}, status_code=403)
@@ -124,6 +143,7 @@ async def import_qa_corpus(request: Request, csrf_token: str = Form(...), reset_
 
 
 @router.post("/reset-vectorstore")
+@limiter.limit(settings.API_RATE_ADMIN)
 async def reset_vs(request: Request, csrf_token: str = Form(...)):
     if request.session.get("csrf_token") != csrf_token:
         return unauthorized_response()
@@ -165,6 +185,7 @@ async def knowledge_base_page(
 
 
 @router.post("/knowledge-base/approve-chat")
+@limiter.limit(settings.API_RATE_ADMIN)
 async def approve_chat_to_knowledge_base(
     request: Request,
     entry_id: str = Form(...),
@@ -196,17 +217,25 @@ async def approve_chat_to_knowledge_base(
 
 @router.get("/config")
 async def config_page(request: Request):
+    if "csrf_token" not in request.session:
+        request.session["csrf_token"] = secrets.token_hex(16)
     payload = get_config_page_payload()
-    return render_config_page(request, **payload)
+    return render_config_page(request, csrf_token=request.session["csrf_token"], **payload)
 
 
 @router.post("/update-config")
+@limiter.limit(settings.API_RATE_ADMIN)
 async def update_config(
+    request: Request,
     chunk_size: int = Form(...),
     chunk_overlap: int = Form(...),
     bot_rules: str = Form(...),
     reingest: bool = Form(False),
+    csrf_token: str = Form(...),
 ):
+    if request.session.get("csrf_token") != csrf_token:
+        return JSONResponse({"msg": "CSRF Invalid!"}, status_code=403)
+
     result = update_runtime_config(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -218,7 +247,11 @@ async def update_config(
 
 
 @router.post("/delete-chunk")
-async def delete_chunk(chunk_id: str = Form(...)):
+@limiter.limit(settings.API_RATE_ADMIN)
+async def delete_chunk(request: Request, chunk_id: str = Form(...), csrf_token: str = Form(...)):
+    if request.session.get("csrf_token") != csrf_token:
+        return JSONResponse({"status": "error", "error": "CSRF Invalid!"}, status_code=403)
+
     try:
         get_collection().delete(ids=[chunk_id])
         return {"status": "ok"}

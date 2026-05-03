@@ -1,29 +1,29 @@
-﻿{% extends "layouts/base.html" %}
-{% block title %}LỊCH SỬ TRÒ CHUYỆN{% endblock %}
+{% extends "layouts/base.html" %}
+{% block title %}LCH S TR CHUYN{% endblock %}
 
 {% block content %}
 <div class="history-page">
 
     <!-- Header -->
     <div class="page-header">
-        <h1 class="hero-title">📜 LỊCH SỬ TRÒ CHUYỆN</h1>
-        <p class="hero-subtitle">Tất cả cuộc trò chuyện giữa bạn và AI</p>
+        <h1 class="hero-title"> LCH S TR CHUYN</h1>
+        <p class="hero-subtitle">Tt c cuc tr chuyn gia bn v AI</p>
     </div>
 
     <div class="history-grid">
 
-        <!-- CỘT TRÁI: LỊCH SỬ CHAT -->
+        <!-- CT TRI: LCH S CHAT -->
         <div class="panel chat-panel">
             <div class="panel-header">
                 <div class="header-content">
-                    <h2><i class="fas fa-comments yellow"></i> Lịch sử Chat</h2>
+                    <h2><i class="fas fa-comments yellow"></i> Lch s Chat</h2>
                     <div class="conversation-info">
                         <div class="user-badge">
-                            <span class="user-avatar">👤</span>
-                            <span class="orange">Bạn</span>
+                            <span class="user-avatar"></span>
+                            <span class="orange">Bn</span>
                         </div>
                         <div class="ai-badge">
-                            <span class="ai-avatar">🤖</span>
+                            <span class="ai-avatar"></span>
                             <span class="teal">AI Assistant</span>
                         </div>
                     </div>
@@ -46,8 +46,8 @@
                     <div class="empty-icon">
                         <i class="fas fa-comment-slash"></i>
                     </div>
-                    <h3>Chưa có lịch sử trò chuyện</h3>
-                    <p>Bắt đầu trò chuyện với AI để tạo lịch sử!</p>
+                    <h3>Cha c lch s tr chuyn</h3>
+                    <p>Bt u tr chuyn vi AI  to lch s!</p>
                     <a href="/chat" class="btn-large red">
                         <i class="fas fa-comment"></i> Chat ngay
                     </a>
@@ -63,7 +63,7 @@
                                     <div class="avatar-circle user-avatar orange-bg">
                                         <i class="fas fa-user"></i>
                                     </div>
-                                    <span class="sender-name orange">Bạn</span>
+                                    <span class="sender-name orange">Bn</span>
                                 </div>
                                 {% else %}
                                 <div class="sender-badge ai">
@@ -84,9 +84,9 @@
                         </div>
                         <div class="message-footer">
                             {% if msg.role == 'user' %}
-                            <span class="message-tag orange-tag">Người dùng</span>
+                            <span class="message-tag orange-tag">Ngi dng</span>
                             {% else %}
-                            <span class="message-tag teal-tag">AI trả lời</span>
+                            <span class="message-tag teal-tag">AI tr li</span>
                             {% endif %}
                         </div>
                     </div>
@@ -95,16 +95,16 @@
                 {% endif %}
             </div>
 
-            <!-- Phân trang -->
+            <!-- Phn trang -->
             {% if total_pages > 1 %}
             <div class="pagination">
                 <div class="pagination-info">
-                    <span>Hiển thị {{ history|length }} tin nhắn</span>
+                    <span>Hin th {{ history|length }} tin nhn</span>
                 </div>
                 <div class="pagination-controls">
                     {% if has_prev %}
                     <a href="?page={{ page - 1 }}" class="page-link prev purple">
-                        <i class="fas fa-chevron-left"></i> Trước
+                        <i class="fas fa-chevron-left"></i> Trc
                     </a>
                     {% endif %}
 
@@ -135,15 +135,15 @@
             {% endif %}
         </div>
 
-        <!-- CỘT PHẢI: FILE ĐÃ NẠP -->
+        <!-- CT PHI: FILE  NP -->
         <div class="panel files-panel">
             <div class="panel-header">
                 <div class="header-content">
-                    <h2><i class="fas fa-file-alt purple"></i> File .md đã nạp</h2>
-                    <p class="panel-subtitle">Tài liệu AI đã học</p>
+                    <h2><i class="fas fa-file-alt purple"></i> File .md  np</h2>
+                    <p class="panel-subtitle">Ti liu AI  hc</p>
                 </div>
                 <a href="/data-loader" class="btn-upload yellow">
-                    <i class="fas fa-upload"></i> Upload mới
+                    <i class="fas fa-upload"></i> Upload mi
                 </a>
             </div>
 
@@ -153,8 +153,8 @@
                     <div class="empty-icon">
                         <i class="fas fa-folder-open"></i>
                     </div>
-                    <h3>Chưa có file nào</h3>
-                    <p>Upload file .md để AI học thêm kiến thức!</p>
+                    <h3>Cha c file no</h3>
+                    <p>Upload file .md  AI hc thm kin thc!</p>
                     <a href="/data-loader" class="btn-large purple">
                         <i class="fas fa-upload"></i> Upload ngay
                     </a>
@@ -167,7 +167,7 @@
                     </div>
                     <div class="file-stat teal">
                         <i class="fas fa-database"></i>
-                        <span>Đã nạp vào vector</span>
+                        <span> np vo vector</span>
                     </div>
                 </div>
                 
@@ -188,7 +188,7 @@
                                     <i class="far fa-clock"></i> {{ f.time }}
                                 </span>
                                 <span class="file-size teal">
-                                    <i class="fas fa-hdd"></i> Đã xử lý
+                                    <i class="fas fa-hdd"></i>  x l
                                 </span>
                             </div>
                         </div>
@@ -197,8 +197,8 @@
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="filename" value="{{ f.storage_path or f.filename }}">
                                 <button type="submit" class="btn-delete red"
-                                        onclick="return confirm('Xóa file {{ f.filename }}? AI sẽ quên kiến thức từ file này!')"
-                                        title="Xóa file">
+                                        onclick="return confirm('Xa file {{ f.filename }}? AI s qun kin thc t file ny!')"
+                                        title="Xa file">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </form>
@@ -211,13 +211,13 @@
         </div>
     </div>
 
-    <!-- Nút điều hướng -->
+    <!-- Nt iu hng -->
     <div class="nav-buttons bottom-actions">
         <a href="/" class="nav-btn">
-            <i class="fas fa-home"></i> Trang chủ
+            <i class="fas fa-home"></i> Trang ch
         </a>
         <a href="/chat" class="nav-btn teal">
-            <i class="fas fa-comment-dots"></i> Chat tiếp
+            <i class="fas fa-comment-dots"></i> Chat tip
         </a>
         <a href="/vector-manager" class="nav-btn purple">
             <i class="fas fa-brain"></i> Vector Store
@@ -226,13 +226,13 @@
             <i class="fas fa-layer-group"></i> Knowledge Base
         </a>
         <a href="/data-loader" class="nav-btn yellow">
-            <i class="fas fa-file-upload"></i> Nạp file
+            <i class="fas fa-file-upload"></i> Np file
         </a>
     </div>
 </div>
 
 <style>
-/* ===== Biến màu theo style của bạn ===== */
+/* ===== Bin mu theo style ca bn ===== */
 :root {
     --primary-gradient: linear-gradient(90deg, #00ff88, #00ffff);
     --user-gradient: linear-gradient(90deg, #ff6b6b, #ff8e8e);
@@ -245,7 +245,7 @@
     --text-secondary: #aaa;
     --text-muted: #777;
     
-    /* Màu đặc trưng */
+    /* Mu c trng */
     --orange: #ff6b6b;
     --teal: #4ecdc4;
     --purple: #a29bfe;
@@ -255,7 +255,7 @@
     --blue: #74b9ff;
 }
 
-/* ===== Cấu trúc chính ===== */
+/* ===== Cu trc chnh ===== */
 .history-page { 
     padding: 2rem; 
     background: #0f0f1a;
@@ -404,7 +404,7 @@
     border: 1px solid rgba(78, 205, 196, 0.3);
 }
 
-/* ===== Màu đặc trưng ===== */
+/* ===== Mu c trng ===== */
 .orange { color: var(--orange) !important; }
 .teal { color: var(--teal) !important; }
 .purple { color: var(--purple) !important; }
@@ -417,7 +417,7 @@
 .yellow-bg { background: var(--yellow) !important; }
 .red-bg { background: var(--red) !important; }
 
-/* ===== Container tin nhắn ===== */
+/* ===== Container tin nhn ===== */
 .messages-container, .files-container {
     height: 65vh;
     overflow-y: auto;
@@ -438,7 +438,7 @@
     border-radius: 4px;
 }
 
-/* ===== Tin nhắn ===== */
+/* ===== Tin nhn ===== */
 .message {
     margin-bottom: 1.5rem;
     animation: slideIn 0.4s ease-out;
@@ -552,7 +552,7 @@
     border: 1px solid rgba(78, 205, 196, 0.3);
 }
 
-/* ===== Phân trang ===== */
+/* ===== Phn trang ===== */
 .pagination {
     background: var(--panel-bg);
     padding: 1.5rem;
@@ -779,7 +779,7 @@
     transform: scale(1.1);
 }
 
-/* ===== Nút điều hướng ===== */
+/* ===== Nt iu hng ===== */
 .nav-buttons.bottom-actions {
     display: flex;
     justify-content: center;
@@ -872,7 +872,7 @@
 </style>
 
 <script>
-// Auto refresh phần file mỗi 8 giây
+// Auto refresh phn file mi 8 giy
 setInterval(() => {
     fetch(location.href)
         .then(r => r.text())
@@ -883,7 +883,7 @@ setInterval(() => {
             const currentFiles = document.getElementById('files-container');
             
             if (newFiles && newFiles.innerHTML !== currentFiles.innerHTML) {
-                // Thêm hiệu ứng fade
+                // Thm hiu ng fade
                 currentFiles.style.opacity = '0.5';
                 currentFiles.style.transition = 'opacity 0.3s';
                 
@@ -891,7 +891,7 @@ setInterval(() => {
                     currentFiles.innerHTML = newFiles.innerHTML;
                     currentFiles.style.opacity = '1';
                     
-                    // Thêm hiệu ứng cho các file item mới
+                    // Thm hiu ng cho cc file item mi
                     const newFileItems = currentFiles.querySelectorAll('.file-item');
                     newFileItems.forEach((item, index) => {
                         item.style.animationDelay = `${index * 0.1}s`;
@@ -903,7 +903,7 @@ setInterval(() => {
         .catch(err => console.log('Auto-refresh error:', err));
 }, 8000);
 
-// Hiệu ứng cho tin nhắn khi cuộn
+// Hiu ng cho tin nhn khi cun
 const observerOptions = {
     root: null,
     rootMargin: '0px',
@@ -920,7 +920,7 @@ const observer = new IntersectionObserver((entries) => {
 }, observerOptions);
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Áp dụng hiệu ứng cho các tin nhắn
+    // p dng hiu ng cho cc tin nhn
     document.querySelectorAll('.message').forEach((msg, index) => {
         msg.style.opacity = '0';
         msg.style.transform = 'translateY(20px)';
@@ -928,12 +928,12 @@ document.addEventListener('DOMContentLoaded', function() {
         observer.observe(msg);
     });
     
-    // Thêm hiệu ứng cho các file item
+    // Thm hiu ng cho cc file item
     document.querySelectorAll('.file-item').forEach((item, index) => {
         item.style.animationDelay = `${index * 0.1}s`;
     });
     
-    // Hiệu ứng hover cho các card
+    // Hiu ng hover cho cc card
     document.querySelectorAll('.panel').forEach(panel => {
         panel.addEventListener('mouseenter', () => {
             panel.style.transform = 'translateY(-5px)';

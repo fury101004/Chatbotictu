@@ -29,10 +29,29 @@ RAG_TOOL_PROFILES = {
             "danh hieu sinh vien",
             "danh hiệu cá nhân",
             "danh hieu ca nhan",
+            "nguoi hoc",
+            "hanh vi",
+            "khong duoc lam",
+            "danh hieu",
             "khá giỏi xuất sắc",
             "kha gioi xuat sac",
             "xuất sắc",
             "xuat sac",
+            "chuong trinh hoc",
+            "chuong trinh dao tao",
+            "ctdt",
+            "tong so tin chi",
+            "bao nhieu tin chi",
+            "khoa 20",
+            "khoa 21",
+            "khoa 22",
+            "khoa 23",
+            "khoa 24",
+            "k20",
+            "k21",
+            "k22",
+            "k23",
+            "k24",
         ],
     },
     "school_policy_rag": {
@@ -149,7 +168,16 @@ def resolve_upload_source_path(source_name: str) -> Path:
     normalized = PurePosixPath(str(source_name).replace("\\", "/"))
     if len(normalized.parts) >= 3 and normalized.parts[0] == UPLOAD_SOURCE_PREFIX:
         tool_name = normalized.parts[1]
-        return get_tool_upload_dir(tool_name).joinpath(*normalized.parts[2:])
+        base_dir = get_tool_upload_dir(tool_name).resolve()
+        safe_parts = [part for part in normalized.parts[2:] if part not in {"", ".", ".."}]
+        candidate = base_dir.joinpath(*safe_parts) if safe_parts else base_dir
+        try:
+            resolved_candidate = candidate.resolve()
+            resolved_candidate.relative_to(base_dir)
+            return resolved_candidate
+        except (OSError, ValueError):
+            fallback_name = Path(str(source_name)).name
+            return base_dir / fallback_name
     return settings.UPLOAD_DIR / Path(str(source_name)).name
 
 

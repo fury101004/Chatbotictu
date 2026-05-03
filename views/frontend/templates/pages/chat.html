@@ -326,7 +326,8 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null)
         minute: '2-digit'
     });
     
-    const html = String(text || "")
+    const safeText = escapeHtml(String(text || ""));
+    const html = safeText
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')

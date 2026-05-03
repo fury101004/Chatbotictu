@@ -202,6 +202,17 @@ def _session_history_to_lc_messages(history: list[dict[str, str]]):
     return messages
 
 
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
+_THINK_TAG_RE = re.compile(r"</?think>", flags=re.IGNORECASE)
+
+
+def _sanitize_model_reply(reply: str) -> str:
+    cleaned = str(reply or "")
+    cleaned = _THINK_BLOCK_RE.sub("", cleaned)
+    cleaned = _THINK_TAG_RE.sub("", cleaned)
+    return cleaned.strip()
+
+
 def _build_final_prompt(
     system_prompt: str,
     current_lang: str,
@@ -346,6 +357,7 @@ def chat_multilingual(
                 preferred_model=preferred_model,
                 rotate=rotate_model,
             )
+            reply = _sanitize_model_reply(reply)
             primary_model = get_model(preferred_model)
             if not rotate_model and primary_model is not None and used_model != primary_model.label:
                 print(f"chat_multilingual switched to fallback model: {used_model}")

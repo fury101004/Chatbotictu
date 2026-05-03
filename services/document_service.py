@@ -396,6 +396,11 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
                 "level": meta.get("level", 1),
                 "word_count": meta.get("word_count", len(doc.split())),
                 "tool_name": meta.get("tool_name", "unassigned"),
+                "academic_year": meta.get("academic_year", ""),
+                "chapter": meta.get("chapter", ""),
+                "section": meta.get("section", ""),
+                "page_number": meta.get("page_number", -1),
+                "document_type": meta.get("document_type", ""),
             }
         )
 

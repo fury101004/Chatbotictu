@@ -42,6 +42,13 @@ from config.settings import settings
 
 # Metadata (title, level, source, word_count) được dùng để cho biết chunk đến từ đâu, thuộc phần nào, quan trọng cỡ nào và hiển thị preview
 
+_ACADEMIC_YEAR_RE = re.compile(r"\b(20\d{2})\s*[-/]\s*(20\d{2})\b")
+_SINGLE_YEAR_RE = re.compile(r"\b(20\d{2})\b")
+_PAGE_PATTERNS = (
+    re.compile(r"^(?:trang|page)\s*[:\-]?\s*(\d{1,4})(?:\b|/)", re.IGNORECASE),
+    re.compile(r"^\[\s*(?:trang|page)\s*(\d{1,4})\s*\]", re.IGNORECASE),
+)
+
 # Vector embeddings chỉ được load khi thật sự cần để app vẫn có thể boot offline.
 EMBEDDING_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 ef = None
@@ -264,7 +271,62 @@ def _tail_overlap_text(text: str, overlap_words: int) -> str:
     return " ".join(words[-overlap_words:]).strip()
 
 
-def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
+def _extract_page_number(line: str) -> Optional[int]:
+    candidate = line.strip()
+    if not candidate:
+        return None
+
+    for pattern in _PAGE_PATTERNS:
+        match = pattern.search(candidate)
+        if match:
+            try:
+                return int(match.group(1))
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _extract_academic_year(source_name: str, filename: str, content: str) -> Optional[str]:
+    combined = f"{source_name}\n{filename}\n{content[:8000]}"
+    matches = [
+        (int(match.group(1)), int(match.group(2)))
+        for match in _ACADEMIC_YEAR_RE.finditer(combined)
+    ]
+    if matches:
+        start, end = max(matches, key=lambda pair: (pair[1], pair[0]))
+        return f"{start}-{end}"
+
+    years = sorted({int(match.group(1)) for match in _SINGLE_YEAR_RE.finditer(combined)})
+    if len(years) >= 2:
+        for index in range(len(years) - 1, 0, -1):
+            prev_year = years[index - 1]
+            current_year = years[index]
+            if current_year - prev_year == 1:
+                return f"{prev_year}-{current_year}"
+    return None
+
+
+def _infer_document_type(source_name: str, filename: str, tool_name: Optional[str], content: str) -> str:
+    haystack = f"{source_name} {filename}".casefold()
+    content_lower = content.casefold()
+
+    if haystack.endswith(".questions.md") or "**question:**" in content_lower or "**q:**" in content_lower:
+        return "qa_pair"
+    if tool_name == "student_handbook_rag":
+        return "student_handbook"
+    if tool_name == "school_policy_rag":
+        return "school_policy"
+    if tool_name == "student_faq_rag":
+        return "student_faq"
+
+    if any(keyword in haystack for keyword in ["quyet dinh", "quy dinh", "quy che", "thong tu", "nghi dinh", "luat"]):
+        return "policy_document"
+    if any(keyword in haystack for keyword in ["so tay", "handbook", "cam nang"]):
+        return "handbook_document"
+    return "general_document"
+
+
+def smart_chunk(content: str, filename: str, source_name: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Chunk theo:
         • Heading (# ## ### ####)
@@ -280,8 +342,13 @@ def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
     chunks = []
     buffer = []
     buffer_word_count = 0
-    current_title = Path(filename).stem
+    default_title = Path(source_name or filename).stem
+    current_title = default_title
     current_level = 1
+    current_chapter = default_title
+    current_section = default_title
+    current_page_number: Optional[int] = None
+    heading_stack: Dict[int, str] = {1: default_title}
     in_code_block = False
     buffer_is_overlap_seed = False
 
@@ -319,6 +386,9 @@ def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
                     "text": segment,
                     "title": current_title,
                     "level": current_level,
+                    "chapter": current_chapter,
+                    "section": current_section,
+                    "page_number": current_page_number,
                     "token_count": count_tokens(segment),
                     "word_count": len(segment.split()),
                     "type": chunk_type,
@@ -337,6 +407,9 @@ def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
 
     for line in lines:
         line = line.rstrip()
+        detected_page_number = _extract_page_number(line)
+        if detected_page_number is not None:
+            current_page_number = detected_page_number
 
         if line.startswith("```"):
             in_code_block = not in_code_block
@@ -348,6 +421,13 @@ def smart_chunk(content: str, filename: str) -> List[Dict[str, Any]]:
             current_level = heading_level
             if not current_title:
                 current_title = f"Heading cap {heading_level}"
+
+            heading_stack[heading_level] = current_title
+            for level in list(heading_stack):
+                if level > heading_level:
+                    del heading_stack[level]
+            current_chapter = heading_stack.get(1) or heading_stack.get(2) or default_title
+            current_section = " > ".join(heading_stack[level] for level in sorted(heading_stack))
 
         buffer.append(line)
         buffer_word_count += len(line.split())
@@ -388,7 +468,10 @@ def add_documents(
     # Xóa toàn bộ chunk cũ của file này (nếu có)
     coll.delete(where={"source": clean_name})
     # Xử lý chunk b3
-    chunks = smart_chunk(file_content, filename)
+    selected_tool_name = str(tool_name or "unassigned")
+    academic_year = _extract_academic_year(clean_name, filename, file_content)
+    document_type = _infer_document_type(clean_name, filename, selected_tool_name, file_content)
+    chunks = smart_chunk(file_content, filename, source_name=clean_name)
     if not chunks:
         print(f"No chunks generated from {filename}")
         return
@@ -402,9 +485,15 @@ def add_documents(
         "chunk_type": c["type"],
         "token_count": c["token_count"],
         "word_count": c.get("word_count", len(c["text"].split())),
+        "file_name": Path(clean_name).name,
+        "academic_year": academic_year or "",
+        "chapter": c.get("chapter", ""),
+        "section": c.get("section", c.get("title", "")),
+        "page_number": c.get("page_number") if c.get("page_number") is not None else -1,
+        "document_type": document_type,
         "created_at": datetime.now().isoformat(),
         "version": version,
-        "tool_name": tool_name or "unassigned",
+        "tool_name": selected_tool_name,
     } for c in chunks]
 
     # Tạo ID duy nhất cho từng chunk:

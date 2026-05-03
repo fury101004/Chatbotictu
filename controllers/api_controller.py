@@ -19,6 +19,7 @@ from views.api_view import (
     build_upload_response,
 )
 from config.limiter import limiter
+from services.rate_limit_monitor import reset_429_stats, snapshot_429_stats
 
 router = APIRouter(prefix="/api/v1", tags=["chat"])
 
@@ -67,6 +68,22 @@ async def api_knowledge_base(
 @router.get("/health")
 async def health():
     return build_health_response()
+
+
+@router.get("/metrics/rate-limit-429")
+async def rate_limit_metrics(
+    token=Depends(verify_token),
+    limit_recent: int = 40,
+):
+    del token
+    return snapshot_429_stats(limit_recent=limit_recent)
+
+
+@router.post("/metrics/rate-limit-429/reset")
+async def reset_rate_limit_metrics(token=Depends(verify_token)):
+    del token
+    reset_429_stats()
+    return {"status": "ok"}
 
 
 

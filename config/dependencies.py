@@ -20,11 +20,14 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
         )
 
     try:
-        jwt.decode(credentials.credentials, settings.JWT_SECRET, algorithms=["HS256"])
+        payload = jwt.decode(credentials.credentials, settings.JWT_SECRET, algorithms=["HS256"])
     except jwt.ExpiredSignatureError as exc:
         raise HTTPException(status_code=401, detail="Token expired") from exc
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+    if payload.get("sub") != "partner":
+        raise HTTPException(status_code=401, detail="Invalid token subject")
 
     return credentials
 

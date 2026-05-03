@@ -29,6 +29,7 @@
         </div>
 
         <form id="configForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-group">
                 <label>Chunk Size <small>(500 - 3000)</small></label>
                 <input type="number" name="chunk_size" value="{{ chunk_size }}" min="500" max="3000" required>

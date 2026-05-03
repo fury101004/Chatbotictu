@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 
+from services.rate_limit_monitor import record_429
+
 load_dotenv()
 
 PRIMARY_MODEL_NAME = "llama-3.1-8b-instant"
@@ -277,6 +279,14 @@ def _generation_options(generation_config: Optional[dict]) -> dict[str, Any]:
     return options
 
 
+def _is_rate_limited_error(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        return exc.response.status_code == 429
+
+    normalized = str(exc).casefold()
+    return "429" in normalized or "rate limit" in normalized or "too many requests" in normalized
+
+
 def _call_groq(
     *,
     model: str,
@@ -380,6 +390,12 @@ def generate_content_with_fallback(
                 continue
             return response, candidate.label
         except Exception as exc:
+            if _is_rate_limited_error(exc):
+                record_429(
+                    "llm_provider",
+                    detail=str(exc),
+                    metadata={"model": candidate.label},
+                )
             errors.append(f"{candidate.label}: {exc}")
             print(f"LLM backend {candidate.label} failed, trying fallback: {exc}")
 

@@ -27,6 +27,7 @@ from services.rag_service import (
     route_rag_tool,
     route_retrieval_flow,
 )
+from services.rag_prompts import _RAW_TEXT_PROMPT, _build_rag_router_prompt, _build_retrieval_flow_prompt
 from models.chat import RAGResult
 
 
@@ -114,6 +115,14 @@ class EmbeddingBackendTests(unittest.TestCase):
 
 
 class RagRouterTests(unittest.TestCase):
+    def test_rag_router_prompt_with_json_example_formats_as_plain_text(self) -> None:
+        prompt_text = _build_rag_router_prompt("hoc phi ICTU nam nay la bao nhieu?")
+
+        formatted = _RAW_TEXT_PROMPT.invoke({"prompt": prompt_text})
+
+        self.assertEqual(_RAW_TEXT_PROMPT.input_variables, ["prompt"])
+        self.assertIn('"tool": "<tool_name>"', formatted.messages[0].content)
+
     def test_keyword_router_is_used_when_llm_is_unavailable(self) -> None:
         with patch("services.rag_service.get_model", return_value=None):
             tool_name, route_name = route_rag_tool("quy che hoc phi")
@@ -122,7 +131,17 @@ class RagRouterTests(unittest.TestCase):
         self.assertTrue(route_name.startswith("router_keyword_score:"))
 
     def test_strong_handbook_keyword_route_skips_llm_router(self) -> None:
-        question = "Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?"
+        question = "Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?"
+
+        with patch("services.rag_service._route_rag_tool_by_llm") as llm_router:
+            tool_name, route_name = route_rag_tool(question)
+
+        self.assertEqual(tool_name, "student_handbook_rag")
+        self.assertTrue(route_name.startswith("router_keyword_score:"))
+        llm_router.assert_not_called()
+
+    def test_keyword_router_prefers_handbook_for_nguoi_hoc_behavior_question(self) -> None:
+        question = "Nguoi hoc khong duoc lam nhung hanh vi nao?"
 
         with patch("services.rag_service._route_rag_tool_by_llm") as llm_router:
             tool_name, route_name = route_rag_tool(question)
@@ -133,6 +152,17 @@ class RagRouterTests(unittest.TestCase):
 
 
 class RetrievalFlowPlannerTests(unittest.TestCase):
+    def test_retrieval_flow_prompt_with_json_example_formats_as_plain_text(self) -> None:
+        prompt_text = _build_retrieval_flow_prompt(
+            "ICTU co thong bao moi nhat gi hom nay?",
+            "student_faq_rag",
+        )
+
+        formatted = _RAW_TEXT_PROMPT.invoke({"prompt": prompt_text})
+
+        self.assertEqual(_RAW_TEXT_PROMPT.input_variables, ["prompt"])
+        self.assertIn('"source": "local_data | web_search | hybrid"', formatted.messages[0].content)
+
     def test_llm_planner_can_choose_web_search_before_retrieval(self) -> None:
         with (
             patch("services.rag_service.get_model", return_value=SimpleNamespace(label="planner-model")),
@@ -149,30 +179,31 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
                     '{"source":"web_search","priority":"web_first","reason":"Thong bao moi can web","confidence":0.91}',
                     "planner-model",
                 ),
-            ) as chain_mock,
+        ) as chain_mock,
         ):
-            plan = route_retrieval_flow("ICTU có thông báo mới nhất gì hôm nay?", "student_faq_rag")
+            plan = route_retrieval_flow("ICTU co thong bao moi nhat gi hom nay?", "student_faq_rag")
 
         self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
         self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
         self.assertTrue(plan.route.startswith("flow_llm:web_search:web_first"))
         prompt_template = chain_mock.call_args.args[0]
         prompt_input = chain_mock.call_args.args[1]
-        self.assertEqual(prompt_input["current_tool"], "student_faq_rag")
-        self.assertIn("local_data", prompt_template.messages[1].prompt.template)
-        self.assertIn("web_search", prompt_template.messages[1].prompt.template)
-        self.assertIn("hybrid", prompt_template.messages[1].prompt.template)
+        self.assertEqual(prompt_template.input_variables, ["prompt"])
+        self.assertIn("student_faq_rag", prompt_input["prompt"])
+        self.assertIn("local_data", prompt_input["prompt"])
+        self.assertIn("web_search", prompt_input["prompt"])
+        self.assertIn("hybrid", prompt_input["prompt"])
 
     def test_flow_falls_back_to_web_search_for_realtime_question_without_llm(self) -> None:
         with patch("services.rag_service.get_model", return_value=None):
-            plan = route_retrieval_flow("ICTU có thông báo mới nhất gì hôm nay?", "student_faq_rag")
+            plan = route_retrieval_flow("ICTU co thong bao moi nhat gi hom nay?", "student_faq_rag")
 
         self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
         self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
 
     def test_flow_falls_back_to_local_data_for_stable_handbook_question_without_llm(self) -> None:
         with patch("services.rag_service.get_model", return_value=None):
-            plan = route_retrieval_flow("Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?", "student_handbook_rag")
+            plan = route_retrieval_flow("Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?", "student_handbook_rag")
 
         self.assertEqual(plan.source, RETRIEVAL_LOCAL_DATA)
         self.assertEqual(plan.priority, RETRIEVAL_LOCAL_FIRST)
@@ -200,7 +231,7 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
             patch("services.rag_service._load_tool_corpus") as load_corpus_mock,
         ):
             result = retrieve_tool_context(
-                "ICTU có thông báo mới nhất gì hôm nay?",
+                "ICTU cĂ³ thĂ´ng bĂ¡o má»›i nháº¥t gĂ¬ hĂ´m nay?",
                 "test-web-plan",
                 "student_faq_rag",
                 "router_test",
@@ -212,55 +243,68 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
 
 
 class RagLexicalQaTests(unittest.TestCase):
-    def _doc(self, name: str, text: str) -> CorpusDocument:
+    def _doc(
+        self,
+        name: str,
+        text: str,
+        *,
+        source: str | None = None,
+        cohort_tags: frozenset[str] = frozenset(),
+        year_values: frozenset[int] = frozenset(),
+        max_year: int = 0,
+    ) -> CorpusDocument:
         title = Path(name).stem
-        source = f"Sổ tay sinh viên các năm/{name}"
+        source_name = source or f"So tay sinh vien cac nam/{name}"
+        highest_year = max_year or max(year_values, default=0)
         return CorpusDocument(
             path=Path(name),
-            source=source,
+            source=source_name,
             title=title,
             text=text,
             text_lower=text.casefold(),
             normalized_text=_normalize_for_match(text),
             normalized_title=_normalize_for_match(title),
-            normalized_source=_normalize_for_match(source),
-            token_set=frozenset(_tokenize(f"{title}\n{source}\n{text}")),
+            normalized_source=_normalize_for_match(source_name),
+            token_set=frozenset(_tokenize(f"{title}\\n{source_name}\\n{text}")),
+            cohort_tags=cohort_tags,
+            year_values=year_values,
+            max_year=highest_year,
         )
 
     def test_exact_question_block_is_extracted_from_question_file(self) -> None:
         text = """
 # Question Set
 
-**Question:** Tài liệu Sổ tay sinh viên dùng để làm gì?
-**Answer:** Tài liệu dùng để cung cấp thông tin chung cho sinh viên.
+**Question:** Tai lieu so tay sinh vien dung de lam gi?
+**Answer:** Tai lieu dung de cung cap thong tin chung cho sinh vien.
 
 ## Question 14
 
-**Question:** Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?
-**Answer:** Sinh viên Khá cần kết quả học tập từ 2,50 đến 3,19 theo thang điểm 4 và rèn luyện từ khá trở lên; sinh viên Giỏi cần kết quả học tập từ 3,20 đến 3,59 và rèn luyện từ tốt trở lên; sinh viên Xuất sắc cần kết quả học tập từ 3,60 trở lên và rèn luyện xuất sắc.
+**Question:** Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?
+**Answer:** Sinh vien Kha can ket qua hoc tap tu 2,50 den 3,19; sinh vien Gioi can tu 3,20 den 3,59; sinh vien Xuat sac can tu 3,60 tro len.
 """
-        question = "Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?"
+        question = "Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?"
         snippet = _extract_relevant_snippet(self._doc("handbook.questions.md", text), question, _tokenize(question))
 
-        self.assertIn("2,50 đến 3,19", snippet)
-        self.assertIn("3,60 trở lên", snippet)
-        self.assertNotIn("Tài liệu dùng để cung cấp", snippet)
+        self.assertIn("2,50 den 3,19", snippet)
+        self.assertIn("3,60 tro len", snippet)
+        self.assertNotIn("cung cap thong tin chung", snippet)
 
     def test_question_files_are_ranked_ahead_of_raw_context_for_exact_qa(self) -> None:
-        question = "Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?"
+        question = "Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?"
         raw_doc = self._doc(
             "handbook.md",
             """
-### Q14. Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?
+### Q14. Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?
 
-Sinh viên Khá cần kết quả học tập từ 2,50 đến 3,19.
+Sinh vien Kha can ket qua hoc tap tu 2,50 den 3,19.
 """,
         )
         question_doc = self._doc(
             "handbook.questions.md",
             """
-**Question:** Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?
-**Answer:** Sinh viên Khá cần kết quả học tập từ 2,50 đến 3,19; sinh viên Giỏi cần từ 3,20 đến 3,59; sinh viên Xuất sắc cần từ 3,60 trở lên.
+**Question:** Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?
+**Answer:** Sinh vien Kha can ket qua hoc tap tu 2,50 den 3,19; sinh vien Gioi can tu 3,20 den 3,59; sinh vien Xuat sac can tu 3,60 tro len.
 """,
         )
 
@@ -268,6 +312,67 @@ Sinh viên Khá cần kết quả học tập từ 2,50 đến 3,19.
 
         self.assertEqual(matches[0][1].path.name, "handbook.questions.md")
 
+    def test_year_specific_query_prefers_matching_handbook_file(self) -> None:
+        question = "So tay sinh vien 2024-2025 la tai lieu nao?"
+        handbook_2425 = self._doc(
+            "SO TAY SINH VIEN 2024-2025.md",
+            "Tai lieu so tay sinh vien cho nam hoc 2024-2025.",
+            year_values=frozenset({2024, 2025}),
+            max_year=2025,
+        )
+        handbook_2526 = self._doc(
+            "SO TAY SINH VIEN 2025-2026.md",
+            "Tai lieu so tay sinh vien cho nam hoc 2025-2026.",
+            year_values=frozenset({2025, 2026}),
+            max_year=2026,
+        )
 
+        matches = _search_documents((handbook_2526, handbook_2425), question, limit=2)
+
+        self.assertTrue(matches)
+        self.assertEqual(matches[0][1].path.name, "SO TAY SINH VIEN 2024-2025.md")
+
+    def test_year_range_query_prefers_exact_year_pair(self) -> None:
+        question = "So tay sinh vien 2025-2026 ap dung cho doi tuong nao?"
+        handbook_2425 = self._doc(
+            "SO TAY SINH VIEN 2024-2025.questions.md",
+            "So tay sinh vien 2024-2025 ap dung cho sinh vien khoa 23.",
+            year_values=frozenset({2024, 2025}),
+            max_year=2025,
+        )
+        handbook_2526 = self._doc(
+            "SO TAY SINH VIEN 2025-2026.questions.md",
+            "So tay sinh vien 2025-2026 ap dung cho sinh vien khoa 24.",
+            year_values=frozenset({2025, 2026}),
+            max_year=2026,
+        )
+
+        matches = _search_documents((handbook_2425, handbook_2526), question, limit=2)
+
+        self.assertTrue(matches)
+        self.assertEqual(matches[0][1].path.name, "SO TAY SINH VIEN 2025-2026.questions.md")
+
+    def test_cohort_query_prefers_matching_handbook_cohort(self) -> None:
+        question = "So tay sinh vien khoa 24 ap dung cho nam hoc nao?"
+        handbook_k23 = self._doc(
+            "SO TAY SINH VIEN 2024-2025.md",
+            "Thong tin huong dan cho sinh vien khoa 23.",
+            cohort_tags=frozenset({"k23"}),
+            year_values=frozenset({2024, 2025}),
+            max_year=2025,
+        )
+        handbook_k24 = self._doc(
+            "SO TAY SINH VIEN 2025-2026.md",
+            "Thong tin huong dan cho sinh vien khoa 24.",
+            cohort_tags=frozenset({"k24"}),
+            year_values=frozenset({2025, 2026}),
+            max_year=2026,
+        )
+
+        matches = _search_documents((handbook_k23, handbook_k24), question, limit=2)
+
+        self.assertTrue(matches)
+        self.assertEqual(matches[0][1].path.name, "SO TAY SINH VIEN 2025-2026.md")
 if __name__ == "__main__":
     unittest.main()
+

@@ -548,6 +548,21 @@ def _build_report_markdown(
             "- Sơ đồ mới giúp phần 'bản thiết kế chatbot tổng quát' trực quan hơn, bám theo bố cục ảnh tham chiếu nhưng đã chuyển thành đúng hệ thống ICTU hiện tại.",
             "- Framework từng bước giúp đối chiếu mỗi bước xử lý với hàm/module thật trong repo, rất hợp để đưa vào báo cáo và slide bảo vệ.",
             "",
+            "## 12. Đoạn kết luận dùng để nộp",
+            "",
+            "### 12.1 Bản dùng cho báo cáo",
+            "",
+            "Qua quá trình đối chiếu giữa tài liệu thiết kế, mã nguồn triển khai, sơ đồ hệ thống, kết quả benchmark và bộ unit test, có thể kết luận rằng hai nhiệm vụ \"bản thiết kế chatbot tổng quát\" và \"framework hỗ trợ cho từng bước xử lý chatbot\" đã được hoàn thành ở mức có thể sử dụng trực tiếp trong báo cáo và buổi bảo vệ. Bản thiết kế chatbot tổng quát đã mô tả rõ các thành phần chính của hệ thống, bao gồm lớp giao tiếp Web/API, lớp điều phối hội thoại, lớp truy xuất tri thức, lớp sinh câu trả lời và lớp lưu vết bộ nhớ; đồng thời thể hiện được mối liên hệ giữa người dùng, AI Agent, RAG pipeline, vector store, SQLite, web knowledge cache và LLM. Nhờ đó, chatbot không còn được trình bày như một hàm trả lời đơn lẻ mà đã được mô hình hóa như một hệ thống hoàn chỉnh, có kiến trúc rõ ràng và có khả năng mở rộng.",
+            "",
+            "Ở nhiệm vụ thứ hai, framework xử lý chatbot đã được mô tả theo đúng chuỗi bước thực thi của hệ thống hiện tại: tiếp nhận request, chuẩn hóa input, lưu lịch sử hội thoại, guardrail, định tuyến nhóm tri thức, tạo retrieval query, kiểm tra phạm vi ICTU, truy xuất ngữ cảnh, sinh câu trả lời, lưu phản hồi và cập nhật session memory. Điểm quan trọng là mỗi bước đều đã được gắn với hàm hoặc module cụ thể trong codebase để chứng minh đây là framework đang vận hành thật, không chỉ là sơ đồ ý tưởng. Bên cạnh đó, benchmark và unit test đóng vai trò minh chứng định lượng cho chất lượng router, retrieval, fallback và prompt pipeline. Vì vậy, trong phạm vi hai nhiệm vụ được giao, có thể chốt rằng sản phẩm đã hoàn thành phần nội dung cốt lõi, đủ cơ sở để đưa vào báo cáo học phần, thuyết trình demo và làm nền cho các bước mở rộng tiếp theo như Clarification Agent, Ingestion Agent hoặc Evaluation Agent.",
+            "",
+            "### 12.2 Bản rút gọn cho slide hoặc phần trình bày miệng",
+            "",
+            "- Hai nhiệm vụ đã hoàn thành không chỉ ở mức mô tả ý tưởng mà đã có tài liệu, sơ đồ, code triển khai và kết quả test để minh chứng.",
+            "- Bản thiết kế chatbot tổng quát đã thể hiện được đầy đủ kiến trúc hệ thống và mối liên kết giữa Web/API, RAG, vector store, memory, logging và LLM.",
+            "- Framework xử lý chatbot đã bám sát luồng chạy thực tế của hệ thống, mỗi bước đều map được với module hoặc hàm cụ thể trong repo.",
+            "- Với trạng thái hiện tại, phần nội dung này đã đủ dùng cho báo cáo và bảo vệ; các phần còn lại chủ yếu là nâng cấp thêm để hoàn thiện hơn chứ không còn là thiếu đầu việc chính.",
+            "",
         ]
     )
 
