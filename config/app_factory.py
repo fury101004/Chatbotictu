@@ -5,8 +5,8 @@ from fastapi.staticfiles import StaticFiles
 
 from config.middleware import configure_logging, create_template_engine, register_middleware
 from controllers.api_controller import register_api_routes
-from controllers.web_controller import router as web_router
-from services.cskh_service import register_cskh_routes
+from controllers.cskh_controller import register_cskh_routes
+from controllers.web_controller import register_web_routes
 from config.limiter import limiter
 
 
@@ -25,7 +25,7 @@ def create_app() -> FastAPI:
     register_middleware(app)
     app.mount("/static", StaticFiles(directory=FRONTEND_ASSET_DIR), name="static")
 
-    app.include_router(web_router)
+    register_web_routes(app)
     register_api_routes(app)
 
     @app.on_event("startup")

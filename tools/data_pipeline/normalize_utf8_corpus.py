@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import unicodedata
 from pathlib import Path
 
@@ -14,9 +15,21 @@ DEFAULT_TARGETS = [
     "views/frontend/templates",
     "views/frontend/assets",
 ]
-MOJIBAKE_MARKERS = [
-    "Ã", "Ä", "Â", "â€", "â€”", "â€“", "á»", "áº", "áƒ", "á€“", "Ä‘", "Äƒ",
+MOJIBAKE_PATTERNS = [
+    re.compile(r"Ã[\x80-\xBFÀ-ÿ]"),
+    re.compile(r"áº."),
+    re.compile(r"á»."),
+    re.compile(r"â€."),
+    re.compile(r"â†."),
+    re.compile(r"Ä[‘ƒ]"),
+    re.compile(r"Æ°"),
+    re.compile(r"ðŸ"),
 ]
+VIETNAMESE_CHARS = (
+    "ăâđêôơưĂÂĐÊÔƠƯ"
+    "áàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ"
+    "ÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ"
+)
 
 
 def _iter_text_files(path: Path):
@@ -39,27 +52,42 @@ def _decode_bytes(raw: bytes) -> str:
     return raw.decode("utf-8", errors="ignore")
 
 
+def _roundtrip_variant(text: str, source_encoding: str) -> str | None:
+    try:
+        return text.encode(source_encoding).decode("utf-8")
+    except UnicodeError:
+        return None
+
+
 def _repair_variants(text: str) -> list[str]:
     variants = [text]
-    for source_encoding in ("cp1252", "latin-1"):
-        try:
-            variants.append(text.encode(source_encoding, errors="ignore").decode("utf-8", errors="ignore"))
-        except Exception:
-            continue
-    # one more pass helps with doubly-mangled strings
-    repaired_once = variants[-1]
-    for source_encoding in ("cp1252", "latin-1"):
-        try:
-            variants.append(repaired_once.encode(source_encoding, errors="ignore").decode("utf-8", errors="ignore"))
-        except Exception:
-            continue
+    frontier = [text]
+
+    for _ in range(2):
+        next_frontier: list[str] = []
+        for current in frontier:
+            for source_encoding in ("cp1252", "latin-1", "cp1258"):
+                candidate = _roundtrip_variant(current, source_encoding)
+                if not candidate or candidate in variants:
+                    continue
+                variants.append(candidate)
+                next_frontier.append(candidate)
+        if not next_frontier:
+            break
+        frontier = next_frontier
+
     return variants
 
 
+def _mojibake_marker_count(text: str) -> int:
+    return sum(len(pattern.findall(text)) for pattern in MOJIBAKE_PATTERNS)
+
+
 def _score_text(text: str) -> tuple[int, int]:
-    marker_count = sum(text.count(marker) for marker in MOJIBAKE_MARKERS)
-    vietnamese_count = sum(1 for ch in text if ch in "ăâđêôơưĂÂĐÊÔƠƯáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệóòỏõọốồổỗộớờởỡợúùủũụứừửữựíìỉĩịýỳỷỹỵ")
-    return marker_count, -vietnamese_count
+    marker_count = _mojibake_marker_count(text)
+    vietnamese_count = sum(1 for ch in text if ch in VIETNAMESE_CHARS)
+    c1_control_count = sum(1 for ch in text if 0x80 <= ord(ch) <= 0x9F)
+    return marker_count + c1_control_count, -vietnamese_count
 
 
 def _normalize_text(text: str) -> str:
@@ -81,7 +109,10 @@ def normalize_file(path: Path, *, dry_run: bool) -> dict[str, object]:
             best = candidate
             best_score = score
 
-    current = raw.decode("utf-8", errors="ignore")
+    try:
+        current = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        current = decoded
     current_normalized = _normalize_text(current)
     changed = best != current_normalized
 

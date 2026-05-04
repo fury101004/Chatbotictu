@@ -1,13 +1,13 @@
 ﻿# syntax=docker/dockerfile:1
 FROM python:3.11-slim-bookworm
 
-# CĂ i compiler nháº¹, trĂ¡nh cĂ¡c gĂ³i náº·ng
+# Cài compiler nhẹ, tránh các gói nặng
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ make libgomp1 curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean && apt-get autoremove -y
 
-# Táº¡o user khĂ´ng pháº£i root
+# Tạo user không phải root
 RUN useradd -m -s /bin/bash appuser
 WORKDIR /app
 RUN chown appuser:appuser /app
@@ -15,12 +15,12 @@ USER appuser
 
 ENV PATH="/home/appuser/.local/bin:${PATH}"
 
-# Copy requirements vĂ  cĂ i Ä‘áº·t
+# Copy requirements và cài đặt
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy toĂ n bá»™ code vĂ o container
+# Copy toàn bộ code vào container
 COPY --chown=appuser:appuser . .
 
 EXPOSE 8000

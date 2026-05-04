@@ -1,13 +1,13 @@
-﻿# HÆ°á»›ng dáº«n scale chatbot API trĂªn chĂ­nh mĂ¡y cĂ¡ nhĂ¢n (VPS/Server) -- KhĂ´ng tá»‘n thĂªm tiá»n
+﻿# Hướng dẫn scale chatbot API trên chính máy cá nhân (VPS/Server) -- Không tốn thêm tiền
 
-### YĂªu cáº§u
+### Yêu cầu
 
--   MĂ¡y Ä‘Ă£ cĂ i Docker + Docker Compose
--   Chatbot Ä‘ang cháº¡y tá»‘t trong Docker
+-   Máy đã cài Docker + Docker Compose
+-   Chatbot đang chạy tốt trong Docker
 
-### 1. TÄƒng worker ngay trong container (nhanh nháº¥t)
+### 1. Tăng worker ngay trong container (nhanh nhất)
 
-Sá»­a lá»‡nh cháº¡y container thĂ nh:
+Sửa lệnh chạy container thành:
 
 ``` bash
 docker run -d \
@@ -18,28 +18,28 @@ docker run -d \
   uvicorn config.asgi:app --host 0.0.0.0 --port 8000 --workers 8
 ```
 
-â†’ Äáº·t **--workers = sá»‘ CPU core** cá»§a báº¡n (xem báº±ng `nproc`).
+→ Đặt **--workers = số CPU core** của bạn (xem bằng `nproc`).
 
 ------------------------------------------------------------------------
 
-### 2. CĂ i Nginx lĂ m reverse proxy + load balancer
+### 2. Cài Nginx làm reverse proxy + load balancer
 
 ``` bash
 sudo apt update && sudo apt install nginx -y
 ```
 
-Táº¡o file config:
+Tạo file config:
 
 ``` bash
 sudo nano /etc/nginx/sites-available/chatbot
 ```
 
-DĂ¡n ná»™i dung sau:
+Dán nội dung sau:
 
 ``` nginx
 upstream chatbot_backend {
     server 127.0.0.1:8000;
-    # Náº¿u muá»‘n cháº¡y nhiá»u container thĂ¬ thĂªm dĂ²ng dÆ°á»›i
+    # Nếu muốn chạy nhiều container thì thêm dòng dưới
     # server 127.0.0.1:8001;
     # server 127.0.0.1:8002;
 }
@@ -55,7 +55,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # Náº¿u cĂ³ WebSocket (chat realtime)
+    # Nếu có WebSocket (chat realtime)
     location /ws {
         proxy_pass http://chatbot_backend;
         proxy_http_version 1.1;
@@ -65,7 +65,7 @@ server {
 }
 ```
 
-KĂ­ch hoáº¡t vĂ  restart:
+Kích hoạt và restart:
 
 ``` bash
 sudo ln -s /etc/nginx/sites-available/chatbot /etc/nginx/sites-enabled/
@@ -74,7 +74,7 @@ sudo nginx -t && sudo systemctl restart nginx
 
 ------------------------------------------------------------------------
 
-### 3. (Tuá»³ chá»n) Cháº¡y nhiá»u container cĂ¹ng lĂºc Ä‘á»ƒ tÄƒng gáº¥p Ä‘Ă´i throughput
+### 3. (Tuỳ chọn) Chạy nhiều container cùng lúc để tăng gấp đôi throughput
 
 ``` yaml
 # docker-compose.yml
@@ -101,7 +101,7 @@ services:
       - chatbot2
 ```
 
-Sau Ä‘Ă³ cháº¡y:
+Sau đó chạy:
 
 ``` bash
 docker compose up -d
@@ -109,7 +109,7 @@ docker compose up -d
 
 ------------------------------------------------------------------------
 
-### 4. ThĂªm Redis cache (giáº£m táº£i DB 80--90%)
+### 4. Thêm Redis cache (giảm tải DB 80--90%)
 
 ``` bash
 docker run -d --name redis -p 6379:6379 redis:7-alpine
@@ -124,10 +124,10 @@ r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 ------------------------------------------------------------------------
 
-### Káº¿t quáº£
+### Kết quả
 
-Chá»‰ vá»›i **4 bÆ°á»›c**, mĂ¡y cá»§a báº¡n cĂ³ thá»ƒ chá»‹u Ä‘Æ°á»£c **gáº¥p 5--20 láº§n lÆ°á»£ng
-user** hiá»‡n táº¡i mĂ  khĂ´ng cáº§n mua thĂªm server.
+Chỉ với **4 bước**, máy của bạn có thể chịu được **gấp 5--20 lần lượng
+user** hiện tại mà không cần mua thêm server.
 
-đŸ€ *ChĂºc báº¡n scale ngon lĂ nh!*
+*Chúc bạn scale ngon lành!*
 

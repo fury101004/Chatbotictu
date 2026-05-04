@@ -231,7 +231,7 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
             patch("services.rag_service._load_tool_corpus") as load_corpus_mock,
         ):
             result = retrieve_tool_context(
-                "ICTU cĂ³ thĂ´ng bĂ¡o má»›i nháº¥t gĂ¬ hĂ´m nay?",
+                "ICTU có thông báo mới nhất gì hôm nay?",
                 "test-web-plan",
                 "student_faq_rag",
                 "router_test",

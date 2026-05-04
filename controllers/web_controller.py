@@ -68,7 +68,9 @@ async def chat_web(
         current_session_id = secrets.token_hex(16)
         request.session["chat_session_id"] = current_session_id
 
-    return await process_chat_message(message, current_session_id, llm_model=llm_model)
+    result = await process_chat_message(message, current_session_id, llm_model=llm_model)
+    result["session_id"] = current_session_id
+    return result
 
 
 @router.post("/delete-file")
@@ -267,4 +269,8 @@ async def history_page(request: Request, page: int = 1):
     payload = get_history_page_data(page=page, per_page=50)
     payload["csrf_token"] = request.session["csrf_token"]
     return render_history_page(request, payload=payload)
+
+
+def register_web_routes(app) -> None:
+    app.include_router(router)
 

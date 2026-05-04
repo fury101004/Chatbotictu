@@ -7,6 +7,7 @@ from typing import Optional
 import json
 import re
 
+from config.db import get_chat_history
 from config.rag_tools import DEFAULT_RAG_TOOL, FALLBACK_RAG_NODE, RAG_TOOL_ORDER, RAG_TOOL_PROFILES
 from models.chat import RAGResult
 from services.ictu_scope_service import is_ictu_related_query
@@ -446,12 +447,49 @@ def _detect_collection_source(message_lower: str) -> Optional[str]:
     return None
 
 
+def _normalize_message_key(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip().casefold()
+
+
+def _get_previous_user_message_from_db(session_id: str, current_message: str) -> str:
+    try:
+        history = get_chat_history(session_id=session_id)
+    except Exception:
+        return ""
+
+    user_messages = [
+        str(item.get("content") or "").strip()
+        for item in history
+        if str(item.get("role") or "").strip().casefold() == "user"
+    ]
+    if not user_messages:
+        return ""
+
+    current_key = _normalize_message_key(current_message)
+    for candidate in reversed(user_messages):
+        normalized_candidate = _normalize_message_key(candidate)
+        if normalized_candidate and normalized_candidate != current_key:
+            return candidate
+    return ""
+
+
 def build_retrieval_query(session_id: str, message: str) -> str:
-    history = SESSION_MEMORY[session_id]
+    current_message = str(message or "").strip()
+    if not current_message:
+        return ""
+
+    previous_q = ""
+    history = SESSION_MEMORY.get(session_id)
     if history:
-        previous_q = history[-1]["query"]
-        return f"{previous_q} {message}"
-    return message
+        previous_q = str(history[-1].get("query") or "").strip()
+    if not previous_q:
+        previous_q = _get_previous_user_message_from_db(session_id, current_message)
+
+    if not previous_q:
+        return current_message
+    if _normalize_message_key(previous_q) == _normalize_message_key(current_message):
+        return current_message
+    return f"{previous_q} {current_message}"
 
 
 def _build_general_fallback_result(

@@ -6,10 +6,10 @@
 #   • Bot-rule luôn top 1 (bất tử)
 #   • Chunk thông minh theo heading + bảo vệ code/table
 #   • Session memory per user (multi-turn conversation)
-#   â€¢ Hybrid score chuáº©n hĂ³a + Ä‘iá»u chá»‰nh trá»ng sá»‘
+#   • Hybrid score chuẩn hóa + điều chỉnh trọng số
 #   • Logging + thống kê chi tiết
 """ luồng xử lý Data Ingestion & Chunking:
-File upload â†’ Ä‘á»c ná»™i dung.
+File upload → đọc nội dung.
 
 Nếu file đã có → xóa chunk cũ.
 
@@ -56,18 +56,18 @@ ef = None
 # Chroma client cũng được khởi tạo lazy để tránh side effects lúc import module.
 client = None
 
-# DĂ¹ng Ä‘á»ƒ Ä‘áº¿m token (ráº¥t quan trá»ng khi chunk vĂ  tĂ­nh context length cho LLM)
+# Dùng để đếm token (rất quan trọng khi chunk và tính context length cho LLM)
 # Lazy-load tiktoken so the web app can boot even on low-memory machines.
 encoding = None
 
-# ÄÆ°á»ng dáº«n file ná»™i quy bot
+# Đường dẫn file nội quy bot
 BOT_RULE_PATH = Path("data/bot-rule.md")
 BOT_RULE_ID = "BOT_RULE_001"                     # ID cố định để dễ tìm và ép lên đầu
 BOT_RULE_FULL = ""                               # Bản đầy đủ (dùng khi context còn dư token)
-BOT_RULE_SHORT = "# Quy táº¯c bot\nTráº£ lá»i ngáº¯n gá»n, tiáº¿ng Viá»‡t, chĂ­nh xĂ¡c, khĂ´ng thĂªm tháº¯t."
+BOT_RULE_SHORT = "# Quy tắc bot\nTrả lời ngắn gọn, tiếng Việt, chính xác, không thêm thắt."
 
-# Memory ngáº¯n háº¡n cho tá»«ng user â†’ há»— trá»£ há»i follow-up thĂ¬ bot nhá»›
-# user_id â†’ deque(maxlen=6) tá»©c nhá»› tá»‘i Ä‘a 3 lÆ°á»£t há»i-Ä‘Ă¡p (6 tin nháº¯n)
+# Memory ngắn hạn cho từng user → hỗ trợ hỏi follow-up thì bot nhớ
+# user_id → deque(maxlen=6) tức nhớ tối đa 3 lượt hỏi-đáp (6 tin nhắn)
 SESSION_MEMORY: Dict[str, deque] = defaultdict(lambda: deque(maxlen=6))
 
 # Thống kê hiệu năng để sau này làm dashboard
@@ -76,18 +76,18 @@ STATS = {
     "cache_hits": 0,
     "avg_time": 0.0,
     "start_time": time.time(),
-    "popular_files": defaultdict(int)  # file nĂ o Ä‘Æ°á»£c retrieve nhiá»u nháº¥t
+    "popular_files": defaultdict(int)  # file nào được retrieve nhiều nhất
 }
 
 # 0.1 Load nội quy bot từ file (nếu chưa có thì tạo default)
 def _load_bot_rule():
-    """Äá»c bot-rule.md, náº¿u chÆ°a cĂ³ thĂ¬ táº¡o file vá»›i ná»™i dung máº·c Ä‘á»‹nh"""
+    """Đọc bot-rule.md, nếu chưa có thì tạo file với nội dung mặc định"""
     global BOT_RULE_FULL
     if BOT_RULE_PATH.exists():
         BOT_RULE_FULL = BOT_RULE_PATH.read_text(encoding="utf-8").strip()
         print("bot-rule.md loaded from file")
     else:
-        BOT_RULE_FULL = "# Ná»™i quy Bot\nBáº¡n lĂ  trá»£ lĂ½ AI chuyĂªn nghiá»‡p, thĂ¢n thiá»‡n vĂ  cá»±c ká»³ chĂ­nh xĂ¡c.\nTráº£ lá»i ngáº¯n gá»n, dĂ¹ng tiáº¿ng Viá»‡t, khĂ´ng ba hoa, khĂ´ng thĂªm tháº¯t thĂ´ng tin ngoĂ i tĂ i liá»‡u."
+        BOT_RULE_FULL = "# Nội quy Bot\nBạn là trợ lý AI chuyên nghiệp, thân thiện và cực kỳ chính xác.\nTrả lời ngắn gọn, dùng tiếng Việt, không ba hoa, không thêm thắt thông tin ngoài tài liệu."
         BOT_RULE_PATH.parent.mkdir(parents=True, exist_ok=True)
         BOT_RULE_PATH.write_text(BOT_RULE_FULL, encoding="utf-8")
         print("Created default bot-rule.md")
@@ -211,7 +211,7 @@ def _rebuild_bm25():
     coll = get_collection()
     current = coll.count()
 
-    # Náº¿u sá»‘ lÆ°á»£ng khĂ´ng Ä‘á»•i vĂ  Ä‘Ă£ cĂ³ BM25 rá»“i â†’ bá» qua
+    # Nếu số lượng không đổi và đã có BM25 rồi → bỏ qua
     if current == _last_count and _bm25 is not None:
         return
 
@@ -227,7 +227,7 @@ def _rebuild_bm25():
     _last_count = current
     print(f"BM25 rebuilt with {len(docs)} chunks")
 
-# 3. SMART CHUNKING â€“ Chia nhá» file thĂ nh cĂ¡c chunk thĂ´ng minh
+# 3. SMART CHUNKING – Chia nhỏ file thành các chunk thông minh
 def _detect_chunk_type(text: str) -> str:
     if "```" in text:
         return "code"
@@ -458,7 +458,7 @@ def add_documents(
     Thêm hoặc cập nhật một file markdown vào vector store
     - Xóa hết chunk cũ của file đó trước
     - Chunk thông minh
-    - Add tá»«ng batch nhá» Ä‘á»ƒ trĂ¡nh treo khi file siĂªu to
+    - Add từng batch nhỏ để tránh treo khi file siêu to
     """
     coll = get_collection()
     clean_name = (source_name or Path(filename).name).strip()
@@ -514,7 +514,7 @@ def add_documents(
     inject_bot_rule()        # đảm bảo rule vẫn sống
 
 
-# b5. INJECT BOT RULE dá»±a vĂ o file bot-rule.md Ä‘á»ƒ Äáº£m báº£o khi LLM láº¥y context, rule luĂ´n Ä‘Æ°á»£c Æ°u tiĂªn 
+# b5. INJECT BOT RULE dựa vào file bot-rule.md để Đảm bảo khi LLM lấy context, rule luôn được ưu tiên 
 def inject_bot_rule(force_full: bool = False):
     """
     Chèn/cập nhật nội quy bot vào Chroma
@@ -533,7 +533,7 @@ def inject_bot_rule(force_full: bool = False):
         documents=[rule_text],
         metadatas=[{
             "source": "BOT_RULE",
-            "title": "Ná»™i quy & giá»ng Ä‘iá»‡u bot",
+            "title": "Nội quy & giọng điệu bot",
             "priority": 999999,
             "is_rule": True,
             "created_at": datetime.now().isoformat()
@@ -543,18 +543,18 @@ def inject_bot_rule(force_full: bool = False):
 # 6. HYBRID SEARCH dùng để truy vấn tài liệu với hybrid search (vector + BM25) và ép bot-rule lên đầu.
 @lru_cache(maxsize=500)
 def _cached_embedding(query: str):
-    """Cache embedding cá»§a query â†’ vector search nhanh hÆ¡n ráº¥t nhiá»u"""
+    """Cache embedding của query → vector search nhanh hơn rất nhiều"""
     return get_embedding_function()([query])[0]
 # b4 Truy vấn tài liệu với hybrid search (vector + BM25) và ép bot-rule lên đầu.
 def query_documents(
     query: str,
     user_id: str = "default",
     n_results: int = 8,
-    alpha: float = 0.75  # 0.0 = chá»‰ BM25, 1.0 = chá»‰ vector. 0.75 thÆ°á»ng ngon nháº¥t
+    alpha: float = 0.75  # 0.0 = chỉ BM25, 1.0 = chỉ vector. 0.75 thường ngon nhất
 ) -> Tuple[List[str], List[dict], Dict]:
     """
     Hybrid search + ép bot-rule lên đầu + lưu session
-    Tráº£ vá»:
+    Trả về:
         docs, metas, extra_info (session, stats, sources)
     """
     start = time.time()
@@ -668,7 +668,7 @@ def reset_vectorstore():
     STATS["total_queries"] = 0
     print("Da reset toan bo vector store!")
     inject_bot_rule()          # rule vẫn sống sau reset
-# 8. Láº¤Y THá»NG KĂ
+# 8. LẤY THỐNG KÊ
 def get_stats():
     """Lấy thống kê để hiển thị dashboard"""
     uptime = time.time() - STATS["start_time"]
@@ -678,10 +678,10 @@ def get_stats():
         "qps": round(STATS["total_queries"] / max(uptime, 1), 2)
     }
 
-# KHá»I Táº O AN TOĂ€N KHI CẦN
+# KHỞI TẠO AN TOÀN KHI CẦN
 def initialize_vectorstore():
     coll = get_collection()
-    # Äáº£m báº£o load bot rule
+    # Đảm bảo load bot rule
     inject_bot_rule()
     print("Bot-rule da duoc inject - luon dung top 1")
     if coll.count() > 0:

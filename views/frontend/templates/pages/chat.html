@@ -132,6 +132,7 @@
 // ==================== GIỮ NGUYÊN CHỨC NĂNG CSKH + WEBSOCKET ====================
 let ws = null;
 window.cskhConnected = false;
+let activeChatSessionId = "";
 
 function safeParse(data) {
     if (typeof data === "object") return data;
@@ -392,10 +393,15 @@ document.getElementById("chatForm").onsubmit = async (e) => {
         const res = await fetch("/chat", {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({ message: msg, llm_model: modelState.value })
+            body: new URLSearchParams({
+                message: msg,
+                llm_model: modelState.value,
+                session_id: activeChatSessionId || "default",
+            })
         });
         const data = await res.json();
         thinking.remove();
+        if (data.session_id) activeChatSessionId = data.session_id;
 
         if (data.is_cskh) {
             document.getElementById("messages").insertAdjacentHTML("beforeend", data.response || "");
