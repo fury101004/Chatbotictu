@@ -5,15 +5,20 @@ from typing import Optional
 
 from config.settings import settings
 
-QA_ROOT = settings.QA_CORPUS_ROOT
-RAG_UPLOAD_ROOT = settings.RAG_UPLOAD_ROOT
+
+QA_ROOT = Path(settings.QA_CORPUS_ROOT)
+RAG_UPLOAD_ROOT = Path(settings.RAG_UPLOAD_ROOT)
 UPLOAD_SOURCE_PREFIX = "uploads"
 
 RAG_TOOL_PROFILES = {
     "student_handbook_rag": {
         "label": "Sổ tay sinh viên",
-        "description": "Sổ tay, cẩm nang tân sinh viên, thông tin tổng quan theo khóa, khóa học, chương trình, danh hiệu sinh viên Khá/Giỏi/Xuất sắc.",
+        "description": (
+            "Sổ tay, cẩm nang tân sinh viên, thông tin tổng quan theo khóa, "
+            "chương trình đào tạo và các quy định dành cho người học."
+        ),
         "corpus_paths": [
+            QA_ROOT / "student_handbooks",
             QA_ROOT / "Sổ tay sinh viên các năm",
         ],
         "route_keywords": [
@@ -22,31 +27,30 @@ RAG_TOOL_PROFILES = {
             "cẩm nang",
             "cam nang",
             "handbook",
-            "sinh viên khóa",
             "tân sinh viên",
             "tan sinh vien",
+            "người học",
+            "nguoi hoc",
+            "hành vi",
+            "hanh vi",
+            "không được làm",
+            "khong duoc lam",
             "danh hiệu sinh viên",
             "danh hieu sinh vien",
-            "danh hiệu cá nhân",
-            "danh hieu ca nhan",
-            "nguoi hoc",
-            "hanh vi",
-            "khong duoc lam",
-            "danh hieu",
             "khá giỏi xuất sắc",
             "kha gioi xuat sac",
-            "xuất sắc",
-            "xuat sac",
+            "chương trình học",
             "chuong trinh hoc",
+            "chương trình đào tạo",
             "chuong trinh dao tao",
             "ctdt",
-            "tong so tin chi",
-            "bao nhieu tin chi",
-            "khoa 20",
-            "khoa 21",
-            "khoa 22",
-            "khoa 23",
-            "khoa 24",
+            "tín chỉ",
+            "tin chi",
+            "khóa 20",
+            "khóa 21",
+            "khóa 22",
+            "khóa 23",
+            "khóa 24",
             "k20",
             "k21",
             "k22",
@@ -56,7 +60,10 @@ RAG_TOOL_PROFILES = {
     },
     "school_policy_rag": {
         "label": "Quy định và chính sách",
-        "description": "Quy chế, quy định, quyết định, thông tư, học phí, học bổng, kỷ luật, điểm rèn luyện, chế độ chính sách.",
+        "description": (
+            "Quy chế, quy định, quyết định, thông tư, học phí, học bổng, "
+            "điểm rèn luyện và các chế độ chính sách."
+        ),
         "corpus_paths": [
             QA_ROOT / "Các Văn Bản Pháp Quy",
             QA_ROOT / "Các Văn Bản Quản Lý Nội Bộ",
@@ -82,17 +89,26 @@ RAG_TOOL_PROFILES = {
             "miễn giảm",
             "mghp",
             "trợ cấp",
+            "hoc bong",
             "học bổng",
             "học phí",
+            "hoc phi",
             "điểm rèn luyện",
+            "diem ren luyen",
             "đrl",
+            "drl",
             "kỷ luật",
+            "ky luat",
             "khen thưởng",
+            "khen thuong",
         ],
     },
     "student_faq_rag": {
         "label": "FAQ sinh viên",
-        "description": "Câu hỏi thường gặp về quy trình, email, hồ sơ, tốt nghiệp, việc làm, bảo hiểm, đăng ký, hỏi đáp tác vụ.",
+        "description": (
+            "Câu hỏi thường gặp về quy trình, email, hồ sơ, tốt nghiệp, việc làm, "
+            "bảo hiểm, đăng ký học và hỏi đáp tác vụ."
+        ),
         "corpus_paths": [
             QA_ROOT / "congvanxettn",
             QA_ROOT / "congvanvieclam",

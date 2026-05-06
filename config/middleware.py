@@ -4,10 +4,12 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -132,14 +134,28 @@ def configure_logging() -> None:
         _ensure_file_handler(logger, log_path, formatter, request_context_filter)
 
 
-def escapejs_filter(value):
+def escapejs_filter(value: Any) -> str:
     return json.dumps(value)[1:-1]
 
 
-def create_template_engine(directory: str = "templates") -> Jinja2Templates:
-    templates = Jinja2Templates(directory=directory)
+def create_template_engine(directory: str | Path = "templates") -> Jinja2Templates:
+    templates = Jinja2Templates(directory=str(directory))
     templates.env.filters["escapejs"] = escapejs_filter
     return templates
+
+
+def _is_api_request(request: Request) -> bool:
+    return request.url.path.startswith("/api") or request.url.path == "/health"
+
+
+def _error_payload(message: str, *, code: str, status_code: int) -> dict[str, Any]:
+    return {
+        "status": "error",
+        "code": code,
+        "detail": message,
+        "status_code": status_code,
+        "timestamp": datetime.now().isoformat(),
+    }
 
 
 def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
@@ -155,14 +171,49 @@ def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JS
     )
     response = JSONResponse(
         status_code=429,
-        content={"detail": "Qua nhieu request, thu lai sau nhe!"},
+        content=_error_payload("Quá nhiều request, thử lại sau nhé.", code="rate_limit_exceeded", status_code=429),
     )
     response.headers["Retry-After"] = "60"
     return response
 
 
+async def _http_exception_handler(request: Request, exc: HTTPException):
+    if _is_api_request(request):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_error_payload(str(exc.detail), code="http_error", status_code=exc.status_code),
+            headers=exc.headers,
+        )
+    return HTMLResponse(str(exc.detail), status_code=exc.status_code)
+
+
+async def _validation_exception_handler(request: Request, exc: RequestValidationError):
+    if _is_api_request(request):
+        return JSONResponse(
+            status_code=422,
+            content={
+                **_error_payload("Dữ liệu gửi lên chưa hợp lệ.", code="validation_error", status_code=422),
+                "errors": exc.errors(),
+            },
+        )
+    return HTMLResponse("Dữ liệu không hợp lệ.", status_code=422)
+
+
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    app_logger.exception("unhandled exception", extra={"url": str(request.url), "method": request.method})
+    if _is_api_request(request):
+        return JSONResponse(
+            status_code=500,
+            content=_error_payload("Hệ thống gặp lỗi nội bộ.", code="internal_server_error", status_code=500),
+        )
+    return HTMLResponse("Hệ thống gặp lỗi nội bộ.", status_code=500)
+
+
 def register_middleware(app: FastAPI) -> None:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_exception_handler(HTTPException, _http_exception_handler)
+    app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+    app.add_exception_handler(Exception, _unhandled_exception_handler)
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
     app.add_middleware(

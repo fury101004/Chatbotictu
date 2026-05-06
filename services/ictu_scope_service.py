@@ -18,10 +18,7 @@ ICTU_EXPLICIT_MARKERS = (
     "dai hoc cntt&tt",
     "dh cntt va tt",
     "dhcntt",
-    "dhcntt va tt",
     "cntt va tt thai nguyen",
-    "cntt&tt thai nguyen",
-    "dai hoc thai nguyen",
     "thai nguyen university",
 )
 
@@ -34,9 +31,7 @@ ICTU_CONTEXT_MARKERS = (
     "giang vien",
     "co van hoc tap",
     "nha truong",
-    "truong minh",
     "phong dao tao",
-    "phong cong tac sinh vien",
     "ctsv",
     "so tay sinh vien",
     "so tay",
@@ -54,7 +49,6 @@ ICTU_CONTEXT_MARKERS = (
     "chuan dau ra",
     "nganh dao tao",
     "khoa dao tao",
-    "lop hoc phan",
     "dang ky hoc",
     "dang ky tin chi",
     "lich hoc",
@@ -79,9 +73,6 @@ ICTU_CONTEXT_MARKERS = (
     "tuyen dung",
     "viec lam",
     "huong nghiep",
-    "hoi thao nghe nghiep",
-    "fpt software",
-    "canon",
 )
 
 

@@ -1,282 +1,310 @@
 # ICTU AI Chatbot
 
- Mục tiêu là mô tả đúng trạng thái thực tế của dự án, tập trung vào kiến trúc, luồng xử lý, cách chạy và các điểm còn cần hoàn thiện.
+Hệ thống hỏi đáp tự động hỗ trợ sinh viên ICTU, xây dựng trên `FastAPI` và kiến trúc `RAG` nhiều tầng. Dự án tập trung vào việc trả lời bám sát Knowledge Base nội bộ, hạn chế bịa thông tin, có khả năng route theo nhóm tri thức và hiển thị nguồn tham khảo cho người dùng.
 
-## Tổng Quan
+## 1. Giới thiệu
 
-Đây là ứng dụng FastAPI cho chatbot hỗ trợ người học trong phạm vi ICTU. Hệ thống hiện đã vượt ra ngoài một chatbot FAQ đơn giản và gồm các khối chính sau:
+### Bài toán
 
-- Chat web và REST API.
-- RAG theo 3 nhóm tri thức: `student_handbook_rag`, `school_policy_rag`, `student_faq_rag`.
-- Vector store dùng ChromaDB kết hợp BM25/hybrid retrieval.
-- Upload tài liệu Markdown/TXT theo từng nhóm RAG.
-- Knowledge Base hợp nhất từ:
-  - tài liệu đã index trong vector store;
-  - cặp hỏi đáp chatbot đã duyệt thủ công;
-  - web knowledge cache đáng tin cậy từ kết quả tìm kiếm ICTU.
-- Web search ưu tiên domain chính thức của ICTU, có cơ chế cache và TTL.
-- Trang quản trị: `chat`, `data-loader`, `vector-manager`, `knowledge-base`, `config`, `history`, `cskh-panel`.
+Sinh viên thường hỏi lặp lại các nội dung như:
 
-## Kiến Trúc Thực Tế
+- học phí, học bổng, miễn giảm;
+- chương trình đào tạo, số tín chỉ;
+- email sinh viên, hồ sơ, tốt nghiệp;
+- sổ tay sinh viên, chính sách, quy định nhà trường.
 
-### Entry Points
+Mục tiêu của dự án là xây một chatbot có thể:
 
-- `main.py`: re-export `config.asgi:app`.
-- `config/asgi.py`: tạo `app = create_app()`.
-- `config/app_factory.py`: khởi tạo FastAPI, middleware, static files, web routes, API routes và CSKH websocket routes.
+- trả lời nhanh;
+- ưu tiên dữ liệu trong tài liệu đã nạp;
+- biết hỏi lại khi câu hỏi thiếu mốc áp dụng;
+- hỗ trợ quản trị Knowledge Base ngay trên web.
 
-### Các Lớp Chính
+### Điểm nổi bật của bản nâng cấp
 
-- `controllers/`
-  - `web_controller.py`: route giao diện web.
-  - `api_controller.py`: route API `/api/v1/...`.
-- `services/`
-  - `chat_service.py`: điều phối luồng chat.
-  - `graph_service.py`: wrapper cho LangGraph, có fallback sequential.
-  - `rag_service.py`: router RAG, lexical fallback, vector retrieval, web search merge.
-  - `vector_store_service.py`: ChromaDB + BM25 + smart chunking.
-  - `multilingual_service.py`: prompt builder, chọn ngôn ngữ, gọi LLM.
-  - `knowledge_base_service.py`: hợp nhất vector data và chat Q&A, duyệt Q&A vào KB.
-  - `document_service.py`: upload/import/xóa/reset tài liệu và payload cho Vector Manager.
-  - `web_search.py`: tìm web ICTU, ưu tiên site chính thức.
-  - `web_knowledge_service.py`: cache câu trả lời web đáng tin cậy.
-  - `llm_service.py`: rotation Groq/Ollama.
-  - `gemini_service.py`: service cũ/thử nghiệm, hiện không phải luồng chat chính.
-- `config/`
-  - `settings.py`: một phần cấu hình qua `.env`.
-  - `db.py`: SQLite, config, prompt, chat history, approved chat, web knowledge.
-  - `middleware.py`: logging, rate limit, session, CORS.
-- `views/`
-  - Jinja templates và API/web response builders.
-- `tests/`
-  - Unit tests cho LLM rotation, RAG upload, knowledge base, web search, web knowledge, prompt builder và scope detection.
+- Chuẩn hóa cấu hình bằng `pydantic-settings` và `pathlib`.
+- Bỏ phụ thuộc vào đường dẫn tuyệt đối kiểu `E:\new-test`.
+- Tách rõ pipeline agent: `normalize_input -> classify_intent -> route_rag_tool -> retrieve_context -> generate_answer -> save_history`.
+- Cải thiện hybrid retrieval giữa vector search và BM25.
+- Thêm fallback an toàn khi không có context phù hợp.
+- Bổ sung endpoint mới: `/health`, `/api/health`, `/api/chat`.
+- UI chat hiển thị nguồn tham khảo và thời gian phản hồi.
+- Bổ sung test cho agent pipeline, chat API và health API.
 
-## Luồng Xử Lý Chat
+## 2. Công nghệ sử dụng
 
-1. Request đi vào `/chat` hoặc `/api/v1/chat`.
-2. `services/chat_service.py` chuẩn hóa input, lưu tin nhắn user vào SQLite.
-3. `services/rag_service.py` chọn nhóm tri thức bằng LLM router hoặc keyword router.
-4. Hệ thống truy xuất theo thứ tự ưu tiên:
-   - trusted web knowledge cache;
-   - corpus local theo tool;
-   - vector search / hybrid search;
+- `Python 3.11+`
+- `FastAPI`
+- `Uvicorn`
+- `Jinja2`
+- `SQLite`
+- `ChromaDB`
+- `rank-bm25`
+- `sentence-transformers`
+- `langchain-core`
+- `langgraph`
+- `slowapi`
+- `httpx`
+
+## 3. Kiến trúc tổng thể
+
+### Luồng xử lý chính
+
+1. Người dùng gửi câu hỏi từ Web UI hoặc API.
+2. Agent chuẩn hóa input và phân loại intent.
+3. Hệ thống route câu hỏi sang nhóm tri thức phù hợp:
+   - `student_handbook_rag`
+   - `school_policy_rag`
+   - `student_faq_rag`
+   - `fallback_rag`
+4. Retriever lấy context từ:
+   - vector store ChromaDB;
+   - BM25 keyword search;
    - lexical fallback;
-   - web search ICTU khi cần dữ liệu mới.
-5. `services/multilingual_service.py` tạo final prompt và gọi `services/llm_service.py`.
-6. Bot lưu câu trả lời, cập nhật `SESSION_MEMORY`; nếu câu trả lời đến từ web search thì có thể đưa vào `web_search_knowledge`.
+   - trusted web knowledge / web search khi cần dữ liệu mới.
+5. Prompt builder tạo prompt bám sát context hiện tại.
+6. LLM sinh câu trả lời hoặc bot hỏi lại nếu thiếu dữ kiện.
+7. Hệ thống lưu lịch sử chat và metadata phục vụ truy vết.
 
-## Tính Năng Nổi Bật
+### Các tầng mã nguồn chính
 
-- RAG chia nhóm dữ liệu thay vì nhét tất cả vào một kho duy nhất.
-- Có cơ chế fallback khi:
-  - không có embedding backend;
-  - không có LLM network;
-  - vector retrieval lỗi;
-  - web search không khả dụng.
-- Knowledge Base có chức năng duyệt thủ công câu trả lời từ lịch sử chat để đưa ngược vào retrieval.
-- Model chat có UI chọn model và hỗ trợ rotation `round-robin`/`fixed`.
-- Web search có chiến lược official-first cho ICTU.
-- Có websocket CSKH cho trường hợp cần chuyển sang người thật.
+- `config/`
+  - cấu hình môi trường, DB, middleware, app factory, prompt.
+- `controllers/`
+  - định nghĩa route web và API.
+- `services/`
+  - chứa logic chat agent, RAG, retrieval, vector store, web knowledge, moderation.
+- `models/`
+  - request/response model và dataclass kết quả retrieval.
+- `views/`
+  - response builder và giao diện Jinja2.
+- `tests/`
+  - unit test và smoke test cho các phần chính.
+- `tools/`
+  - script xử lý dữ liệu và hỗ trợ import corpus.
 
-## Thư Mục Và Dữ Liệu Quan Trọng
+## 4. Cấu trúc thư mục
 
-- `data/bot_config.db`: SQLite runtime.
-- `data/systemprompt.md`: system prompt hiện hành.
-- `data/bot-rule.md`: bot rule chèn vào retrieval.
-- `data/qa_generated_fixed/`: seed corpus.
-- `data/rag_uploads/`: tài liệu upload theo tool.
-- `vectorstore/`: Chroma persistent store.
-- `logs/api.log`: access/application log.
-- `docs/`: tài liệu nội bộ, prompt tham khảo và ghi chú thiết kế.
-- `tools/`: script xử lý dữ liệu, benchmark, báo cáo và tiện ích thủ công.
-- `reports/`: kết quả báo cáo sinh ra cục bộ, không cần commit.
+```text
+.
+├── config/
+├── controllers/
+├── data/
+│   ├── bot-rule.md
+│   ├── intents/
+│   ├── qa_generated_fixed/
+│   ├── rag_uploads/
+│   └── systemprompt.md
+├── docs/
+├── models/
+├── services/
+├── tests/
+├── tools/
+├── views/
+├── main.py
+├── readme.md
+└── requirements.txt
+```
 
-## Biến Môi Trường Cần Lưu Ý
+## 5. Cài đặt
 
-### Bắt Buộc Cho Production
+### Tạo môi trường ảo
+
+```powershell
+py -3.11 -m venv venv
+.\venv\Scripts\activate
+```
+
+### Cài dependencies
+
+```powershell
+pip install -r requirements.txt
+```
+
+Nếu bạn dùng tính năng web search riêng:
+
+```powershell
+pip install -r requirements-search.txt
+```
+
+## 6. Cấu hình `.env`
+
+### Bước 1: tạo file `.env`
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### Bước 2: điền các biến cần thiết
+
+Các biến quan trọng nhất:
 
 - `PARTNER_API_KEY`
 - `JWT_SECRET`
 - `SESSION_SECRET`
+- `GROQ_API_KEY` hoặc cấu hình `OLLAMA_BASE_URL`
+- `DB_PATH`
+- `QA_CORPUS_ROOT`
+- `RAG_UPLOAD_ROOT`
+- `VECTORSTORE_DIR`
 
-### LLM
+### Ghi chú về path
 
-- `GROQ_API_KEY`
-- `LLM_PROVIDER_ORDER`
-- `GROQ_MODEL_ORDER`
-- `OLLAMA_MODEL` hoặc `OLLAMA_MODEL_ORDER`
-- `OLLAMA_BASE_URL`
-- `LLM_MODEL_ROTATION`
+- Mọi path trong `.env` có thể để tương đối.
+- Path tương đối sẽ được resolve từ thư mục gốc dự án.
+- Dự án không còn phụ thuộc vào đường dẫn tuyệt đối trên máy cá nhân.
 
-### Web Search / Web Knowledge
+## 7. Chạy dự án
 
-- `SEARXNG_URL` hoặc `SEARXNG_API`
-- `TRAFILATURA_URL` hoặc `TRAFILATURA_API`
-- `WEB_KB_TRUSTED_THRESHOLD`
-- `WEB_KB_MIN_SCORE`
-- `WEB_KB_TTL_DAYS`
-- `WEB_KB_REALTIME_TTL_DAYS`
-
-### Legacy / Chưa Phải Luồng Chat Chính
-
-- `GEMINI_API_KEY`
-
-## Cách Chạy Local
-
-Ví dụ trên Windows PowerShell:
+Lệnh chạy chuẩn:
 
 ```powershell
-py -3.11 -m venv venv
-.\venv\Scripts\pip.exe install -r requirements.txt
-.\venv\Scripts\python.exe -m uvicorn config.asgi:app --reload
-```
-
-Nếu cần bộ web search phụ trợ:
-
-```powershell
-.\venv\Scripts\pip.exe install -r requirements-search.txt
+python -m uvicorn config.asgi:app --reload
 ```
 
 Sau khi chạy:
 
 - Web UI: `http://127.0.0.1:8000/`
-- API health: `http://127.0.0.1:8000/api/v1/health`
+- Chat page: `http://127.0.0.1:8000/chat`
+- Health: `http://127.0.0.1:8000/health`
+- API health: `http://127.0.0.1:8000/api/health`
 
-## API Và Màn Hình Chính
+## 8. API chính
 
-### API
+### Public / tiện ích
 
-- `POST /api/v1/auth/token`
+- `GET /health`
+- `GET /api/health`
+
+### Chat API
+
+- `POST /api/chat`
 - `POST /api/v1/chat`
+
+Request body:
+
+```json
+{
+  "message": "Học phí năm học 2025-2026 là bao nhiêu?",
+  "session_id": "demo-session",
+  "llm_model": "auto"
+}
+```
+
+### Auth
+
+- `POST /api/auth/token`
+- `POST /api/v1/auth/token`
+
+### Admin / dữ liệu
+
 - `POST /api/v1/upload`
 - `GET /api/v1/knowledge-base`
-- `GET /api/v1/health`
+- `GET /api/v1/metrics/rate-limit-429`
 
-### Web Pages
+## 9. Nạp Knowledge Base
 
-- `/`
+### Cách 1: nạp seed corpus có sẵn
+
+Trên giao diện:
+
+- vào `/data-loader`
+- dùng chức năng import corpus
+
+Hoặc dùng script hiện có nếu cần:
+
+```powershell
+python tools\data_pipeline\import_qa_generated_fixed.py
+```
+
+### Cách 2: upload file mới
+
+Hệ thống hỗ trợ:
+
+- `.md`
+- `.markdown`
+- `.txt`
+
+File sẽ được:
+
+1. lưu vào thư mục upload theo nhóm RAG;
+2. chunk bằng chiến lược heading-aware;
+3. index vào vector store;
+4. rebuild BM25 để hybrid retrieval dùng ngay.
+
+## 10. Giao diện và quản trị
+
+### Trang người dùng
+
 - `/chat`
+
+Hiện tại giao diện chat hiển thị:
+
+- câu hỏi người dùng;
+- câu trả lời bot;
+- nguồn tham khảo;
+- thời gian phản hồi;
+- model đã dùng.
+
+### Trang quản trị
+
 - `/data-loader`
 - `/vector-manager`
 - `/knowledge-base`
 - `/config`
 - `/history`
-- `/cskh-panel`
 
-## Kết Quả Verify Khi Review
+## 11. Chạy test
 
-Đã đọc các nhóm file: `config/`, `controllers/`, `services/`, `views/`, `tests/`, `Dockerfile`, `docker-compose.yml`, `Caddyfile`, `docs/`.
+### Lệnh chuẩn
 
-Đã chạy unit test bằng lệnh:
+```powershell
+pytest
+```
+
+### Lệnh đã xác minh trong môi trường hiện tại
 
 ```powershell
 .\venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
 ```
 
-Đã chạy benchmark router/retrieval bằng lệnh:
+Test hiện bao phủ:
 
-```powershell
-.\venv\Scripts\python.exe tools\evaluation\evaluate_chatbot.py
-```
+- routing intent / RAG;
+- retrieval và lexical fallback;
+- upload / re-ingest pipeline;
+- knowledge base;
+- health API;
+- chat API alias mới;
+- security / CSRF / auth;
+- config / middleware / DB migration.
 
-Kết quả sau đợt review và cleanup ngày `16/04/2026`:
+## 12. Ảnh cần chụp để đưa vào báo cáo
 
-- `29 tests`
-- `OK`
-- benchmark: `31` câu hỏi, `25` câu có nhãn nguồn
-- route accuracy: `100%`
-- source hit rate: `100%`
-- source top-1 hit rate: `96%`
-- source MRR: `0.9733`
-- avg latency: `1061.65 ms`
-- không còn failing case benchmark
+Khuyến nghị chụp các màn hình sau:
 
-Phạm vi test hiện có:
+1. Trang `/chat` với một câu hỏi có nguồn tham khảo.
+2. Trang `/chat` với câu hỏi thiếu thông tin và bot hỏi lại.
+3. Trang `/knowledge-base`.
+4. Trang `/vector-manager`.
+5. Trang `/config`.
+6. Trang `/history`.
 
-- LLM rotation và model selection.
-- DB schema migration.
-- Session middleware config.
-- Prompt builder.
-- Upload/index fallback.
-- Knowledge base merge và approve chat.
-- Vector manager payload.
-- ICTU scope detection.
-- Web search.
-- Web knowledge cache.
+Bạn có thể đặt ảnh vào:
 
-Chưa thấy integration/smoke test rõ ràng cho:
+- `assets/`
+- hoặc `docs/images/` nếu muốn quản lý riêng cho báo cáo.
 
-- Docker deployment path mapping trong container thật.
-- Web UI end-to-end.
-- Startup smoke test sau migration trên DB thực tế có dữ liệu lớn.
+## 13. Lưu ý triển khai
 
-## Đã Xử Lý Trong Đợt Này
+- Không commit `.env` thật lên repo.
+- Production bắt buộc phải thay `PARTNER_API_KEY`, `JWT_SECRET`, `SESSION_SECRET`.
+- Nếu không có backend LLM, chatbot vẫn có thể boot, nhưng sẽ trả lời fallback an toàn thay vì sinh nội dung từ model.
 
-- Thêm migration tự động cho `chat_history.session_id` và index theo session.
-- Đổi `SessionMiddleware` sang secret ổn định qua `settings`, hỗ trợ `SESSION_SECRET`.
-- Dọn `Dockerfile`, bỏ phần cài `torch` trùng lặp.
-- Đồng bộ `docker-compose.yml` với đường dẫn template/static thật của app.
-- Cắt một liên kết legacy không cần thiết: `tools/evaluation/evaluate_chatbot.py` không còn phụ thuộc vào `gemini_service`.
-- Làm `gemini_service` lazy-import hơn để giảm noise khi luồng chính không dùng Gemini.
-- Mở rộng bộ benchmark lên `31` câu hỏi, trong đó `25` câu có nhãn nguồn để đo router/retrieval.
-- Viết lại `tools/evaluation/evaluate_chatbot.py` theo nội dung sạch hơn và sinh `reports/generated/eval_results.*` mới.
-- Đồng bộ lại tài liệu tổng hợp để không còn số liệu cũ `13` câu benchmark.
+## 14. Tài liệu liên quan
 
-## Đánh Giá Tiến Độ Theo Đề Cương
-
-Theo lịch trong PDF, kế hoạch 10 tuần chạy từ `09/03/2026` đến `22/05/2026`. Tính theo mốc thời gian thực, ngày review `16/04/2026` đang nằm trong tuần 6 của kế hoạch.
-
-Nếu tính theo mức độ hoàn thành deliverable, dự án đã vượt mức tuần 6:
-
-- Tuần 1-5: đã có phần phân tích, thu thập tri thức, kho dữ liệu và retrieval.
-- Tuần 6-8: đã có router, graph orchestration, prompt builder, tích hợp model và 3 nhóm tri thức.
-- Tuần 9: đã có Web chat, API, trang quản trị dữ liệu và benchmark có thể demo.
-- Tuần 10: đã có bộ test >= 30 câu hỏi, tài liệu tổng hợp, kết quả benchmark và minh chứng unit test.
-
-Kết luận thẳng:
-
-- Nếu chấm theo deliverable để demo/báo cáo: dự án đang ở mức `week 9 hoàn thành` và `week 10 đang hoàn thiện`.
-- Nếu đối chiếu rất sát đề cương PDF: chưa khớp 100% vì vector store vẫn là `ChromaDB` thay vì `FAISS`, và nhóm tool nghiệp vụ chưa tách đúng tên như đề cương.
-
-## Vấn Đề Còn Tồn Đọng
-
-### 1. Mức Độ Trung Bình: Repo Đang Có Lỗi Encoding Ở Nhiều Nơi
-
-README cũ, một số template, script, `config/rag_tools.py` và một số nội dung hiển thị bị lỗi dấu tiếng Việt.
-
-Tác động:
-
-- Giao diện và tài liệu không nhất quán.
-- Keyword routing/cố định danh corpus có thể khó debug hơn.
-- Khó bàn giao và khó bảo trì.
-
-### 2. Mức Độ Trung Bình: Cấu Hình Security Vẫn Mang Tính Dev
-
-Code đang cho phép default:
-
-- `PARTNER_API_KEY = "dev-partner-key"`
-- `JWT_SECRET = "dev-jwt-secret"`
-- `SESSION_SECRET` sẽ fallback về `JWT_SECRET` nếu chưa khai báo.
-- CORS `allow_origins=["*"]` kèm `allow_credentials=True`.
-
-Nếu đem lên môi trường thật mà chưa harden, ranh giới xác thực và truy cập API sẽ yếu.
-
-### 3. Mức Độ Trung Bình: Còn Dấu Vết Service Cũ
-
-`services/gemini_service.py` và dependency `google.generativeai` vẫn tồn tại, nhưng luồng chat chính hiện đi qua `services/llm_service.py`.
-
-Tác động:
-
-- Dễ gây nhầm service nào đang là service chính.
-- Tăng chi phí bảo trì dependency.
-
-## Ưu Tiên Xử Lý Tiếp Theo
-
-1. Chuẩn hóa encoding UTF-8 cho README, templates, script và metadata corpus.
-2. Siết CORS theo domain thật và bắt buộc set secret production riêng cho JWT/session.
-3. Tách rõ code active vs legacy, đặc biệt quanh Gemini và các script cũ.
-4. Bổ sung smoke test cho app startup và UI chính.
-
-## Đánh Giá Tổng Kết
-
-Dự án có hướng đi tốt, đã có nhiều năng lực thực dụng hơn một chatbot demo thông thường: RAG chia nhóm, hybrid retrieval, web search cache, knowledge base duyệt thủ công và test unit cho các feature mới. Sau đợt cleanup này, các điểm nghẽn vận hành rõ nhất quanh session schema, session secret và deploy config đã được xử lý; phần còn lại chủ yếu là hardening, encoding và tách legacy cho gọn repo.
+- `CHANGELOG.md`
+- `docs/technical_summary.md`
+- `docs/demo_script.md`
+- `docs/ai_agent_design.md`
+- `docs/rag_regression_and_ops.md`

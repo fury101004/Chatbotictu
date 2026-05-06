@@ -16,6 +16,7 @@ PROJECT_ROOT = _find_repo_root()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from config.rag_tools import DEFAULT_RAG_TOOL, detect_tool_from_path
 from config.settings import settings
 from services.vector_store_service import add_documents, get_collection, reset_vectorstore
 
@@ -54,10 +55,12 @@ def import_corpus(root: Path, *, reset_first: bool = False, dry_run: bool = Fals
     for path in files:
         text = path.read_text(encoding="utf-8", errors="ignore")
         source_name = path.relative_to(root).as_posix()
+        tool_name = detect_tool_from_path(path) or DEFAULT_RAG_TOOL
         add_documents(
             file_content=text,
             filename=path.name,
             source_name=source_name,
+            tool_name=tool_name,
         )
         imported += 1
         print(f"Imported: {source_name}")
@@ -68,13 +71,13 @@ def import_corpus(root: Path, *, reset_first: bool = False, dry_run: bool = Fals
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Bulk import data/qa_generated_fixed vao Chroma vector store.",
+        description="Bulk import seed corpus markdown vao Chroma vector store.",
     )
     parser.add_argument(
         "--root",
         type=Path,
         default=settings.QA_CORPUS_ROOT,
-        help="Thu muc corpus can import. Mac dinh: data/qa_generated_fixed",
+        help="Thu muc corpus can import. Mac dinh: data/primary_corpus",
     )
     parser.add_argument(
         "--reset",

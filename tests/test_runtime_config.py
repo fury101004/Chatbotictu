@@ -14,7 +14,7 @@ import config.middleware as middleware
 
 class ChatHistorySchemaTests(unittest.TestCase):
     def test_init_db_migrates_chat_history_to_include_session_id(self) -> None:
-        with tempfile.TemporaryDirectory(dir="E:\\new-test") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             db_path = temp_root / "bot_config.db"
             prompt_path = temp_root / "systemprompt.md"

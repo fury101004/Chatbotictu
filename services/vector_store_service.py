@@ -37,6 +37,7 @@ from functools import lru_cache
 from datetime import datetime
 from collections import defaultdict, deque
 import tiktoken  
+import unicodedata
 
 from config.settings import settings
 
@@ -61,7 +62,7 @@ client = None
 encoding = None
 
 # Đường dẫn file nội quy bot
-BOT_RULE_PATH = Path("data/bot-rule.md")
+BOT_RULE_PATH = Path(settings.BOT_RULE_PATH)
 BOT_RULE_ID = "BOT_RULE_001"                     # ID cố định để dễ tìm và ép lên đầu
 BOT_RULE_FULL = ""                               # Bản đầy đủ (dùng khi context còn dư token)
 BOT_RULE_SHORT = "# Quy tắc bot\nTrả lời ngắn gọn, tiếng Việt, chính xác, không thêm thắt."
@@ -102,7 +103,7 @@ def get_bot_rule_text() -> str:
 def get_client():
     global client
     if client is None:
-        client = chromadb.PersistentClient(path="./vectorstore")
+        client = chromadb.PersistentClient(path=str(settings.VECTORSTORE_DIR))
     return client
 
 
@@ -204,6 +205,20 @@ _bm25: Optional[BM25Okapi] = None
 _all_tokenized: List[List[str]] = []   # danh sách các doc đã tokenize để BM25 dùng
 _all_ids: List[str] = []               # mapping vị trí → chroma id
 _last_count = -1                       # để biết DB có thay đổi không → rebuild BM25
+
+
+def _normalize_bm25_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(text or "").casefold())
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    normalized = normalized.replace("đ", "d").replace("&", " va ")
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _tokenize_bm25_text(text: str) -> list[str]:
+    normalized = _normalize_bm25_text(text)
+    return [token for token in re.findall(r"[a-z0-9]+", normalized) if len(token) > 1]
+
+
 # b6 Tokenize tất cả document.Tạo BM25 index để hỗ trợ hybrid search (vector + BM25).
 def _rebuild_bm25():
     """Chỉ rebuild BM25 khi số lượng document thay đổi → cực nhẹ RAM/CPU"""
@@ -221,11 +236,42 @@ def _rebuild_bm25():
     ids = data["ids"]
 
     # Tokenize đơn giản (lower + split) để BM25 dùng
-    _all_tokenized = [doc.lower().split() for doc in docs]
+    _all_tokenized = [_tokenize_bm25_text(doc) for doc in docs]
     _all_ids = ids
     _bm25 = BM25Okapi(_all_tokenized) if docs else None
     _last_count = current
     print(f"BM25 rebuilt with {len(docs)} chunks")
+
+
+def _normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
+    if not raw_scores:
+        return {}
+    minimum = min(raw_scores.values())
+    maximum = max(raw_scores.values())
+    if maximum <= minimum:
+        return {key: 1.0 for key in raw_scores}
+    return {
+        key: (value - minimum) / (maximum - minimum + 1e-8)
+        for key, value in raw_scores.items()
+    }
+
+
+def _top_bm25_candidates(query: str, limit: int) -> tuple[Dict[str, float], list[str]]:
+    if _bm25 is None or not _all_ids:
+        return {}, []
+
+    query_tokens = _tokenize_bm25_text(query)
+    if not query_tokens:
+        return {}, []
+
+    bm25_raw = _bm25.get_scores(query_tokens)
+    raw_scores = {doc_id: float(bm25_raw[index]) for index, doc_id in enumerate(_all_ids)}
+    ranked_ids = [
+        doc_id
+        for doc_id, score in sorted(raw_scores.items(), key=lambda item: item[1], reverse=True)
+        if score > 0
+    ][:limit]
+    return _normalize_scores(raw_scores), ranked_ids
 
 # 3. SMART CHUNKING – Chia nhỏ file thành các chunk thông minh
 def _detect_chunk_type(text: str) -> str:
@@ -562,11 +608,16 @@ def query_documents(
 
     coll = get_collection()
     _rebuild_bm25()  # đảm bảo BM25 mới nhất
+    if coll.count() == 0:
+        return [], [], {"session_history": list(SESSION_MEMORY[user_id]), "stats": STATS.copy(), "sources": []}
 
-   # vector search đầu tiên để lấy candidates
+    vector_candidate_limit = max(n_results + 15, n_results * 3)
+    bm25_candidate_limit = max(n_results + 10, n_results * 2)
+
+    # vector search đầu tiên để lấy candidates
     vec = coll.query(
         query_texts=[query],
-        n_results=n_results + 15,   # lấy dư để hybrid tốt hơn
+        n_results=vector_candidate_limit,
         include=["documents", "metadatas", "distances"]
     )
 
@@ -574,32 +625,42 @@ def query_documents(
     v_distances = vec["distances"][0]   # cosine distance: 0 = giống, 2 = khác
 
     # Chuyển distance → similarity (0-1)
-    cosine_sim = [1.0 - d for d in v_distances]
-    if max(cosine_sim) > min(cosine_sim):
-        norm_cosine = [(x - min(cosine_sim)) / (max(cosine_sim) - min(cosine_sim) + 1e-8) for x in cosine_sim]
-    else:
-        norm_cosine = [1.0] * len(cosine_sim)
+    cosine_raw = {
+        doc_id: 1.0 - distance
+        for doc_id, distance in zip(v_ids, v_distances)
+    }
+    norm_cosine = _normalize_scores(cosine_raw)
+    norm_bm25, bm25_ids = _top_bm25_candidates(query, bm25_candidate_limit)
 
-    #BM25 scores cho tất cả document trong collection
-    bm25_raw = _bm25.get_scores(query.lower().split()) if _bm25 else []
-    id_to_bm25 = {doc_id: bm25_raw[i] for i, doc_id in enumerate(_all_ids)}
-    max_bm25 = max(id_to_bm25.values(), default=1)
-    norm_bm25 = {k: v / max_bm25 if max_bm25 > 0 else 0 for k, v in id_to_bm25.items()}
+    candidate_ids = list(dict.fromkeys([*v_ids, *bm25_ids]))
+    if BOT_RULE_ID not in candidate_ids:
+        candidate_ids.append(BOT_RULE_ID)
 
     # hybrid_scores dùng để kết hợp 2 điểm số
     hybrid_scores: Dict[str, float] = {}
-    for i, doc_id in enumerate(v_ids):
-        c_score = norm_cosine[i]
-        b_score = norm_bm25.get(doc_id, 0)
+    for doc_id in candidate_ids:
+        c_score = norm_cosine.get(doc_id, 0.0)
+        b_score = norm_bm25.get(doc_id, 0.0)
         hybrid_scores[doc_id] = alpha * c_score + (1 - alpha) * b_score
+        if doc_id == BOT_RULE_ID:
+            hybrid_scores[doc_id] = 2.0
 
     # Lấy top candidates
-    top_ids = [x[0] for x in sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)[:n_results + 5]]
+    ranked_ids = [
+        doc_id
+        for doc_id, _score in sorted(hybrid_scores.items(), key=lambda item: item[1], reverse=True)
+    ]
+    top_ids = ranked_ids[: n_results + 5]
 
     # Lấy nội dung thật
     results = coll.get(ids=top_ids, include=["documents", "metadatas"])
     docs = results["documents"]
     metas = results["metadatas"]
+    ids = results["ids"]
+    items_by_id = {
+        doc_id: (document, metadata)
+        for doc_id, document, metadata in zip(ids, docs, metas)
+    }
 
     # cho bot rule luôn đứng đầu
     rule_doc = None
@@ -607,13 +668,21 @@ def query_documents(
     normal_docs = []
     normal_metas = []
 
-    for d, m in zip(docs, metas):
-        if m.get("source") == "BOT_RULE" or BOT_RULE_ID in str(m.get("id", "")):
+    for doc_id in top_ids:
+        item = items_by_id.get(doc_id)
+        if item is None:
+            continue
+        d, m = item
+        if m.get("source") == "BOT_RULE" or doc_id == BOT_RULE_ID:
             rule_doc = d
             rule_meta = m
         else:
+            enriched_meta = dict(m or {})
+            enriched_meta["hybrid_score"] = round(hybrid_scores.get(doc_id, 0.0), 6)
+            enriched_meta["vector_score"] = round(norm_cosine.get(doc_id, 0.0), 6)
+            enriched_meta["bm25_score"] = round(norm_bm25.get(doc_id, 0.0), 6)
             normal_docs.append(d)
-            normal_metas.append(m)
+            normal_metas.append(enriched_meta)
 
     # Nếu rule không có trong top → lấy thủ công
     if not rule_doc:
@@ -637,7 +706,7 @@ def query_documents(
         "query": query,
         "timestamp": datetime.now().isoformat(),
         "sources": [m.get("source", "") for m in final_metas if m.get("source") != "BOT_RULE"],
-        "retrieved_ids": top_ids[:n_results]
+        "retrieved_ids": ranked_ids[:n_results]
     })
 
     # Cập nhật thống kê
@@ -660,8 +729,10 @@ def query_documents(
 def reset_vectorstore():
     """Xóa sạch dữ liệu – dùng khi reload toàn bộ tài liệu"""
     get_client().delete_collection("markdown_docs_v2")
-    global _bm25, _last_count
+    global _bm25, _last_count, _all_ids, _all_tokenized
     _bm25 = None
+    _all_ids = []
+    _all_tokenized = []
     _last_count = -1
     SESSION_MEMORY.clear()
     STATS["popular_files"].clear()

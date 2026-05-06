@@ -11,7 +11,7 @@ from services.web_knowledge_service import save_web_search_answer, search_truste
 
 class WebKnowledgeServiceTests(unittest.TestCase):
     def test_official_web_answer_is_saved_as_trusted_and_searchable_after_threshold(self) -> None:
-        with tempfile.TemporaryDirectory(dir="E:\\new-test") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "web_kb.db"
             chunk = RetrievedChunk(
                 document="ICTU công bố thông báo tuyển sinh mới nhất trên website chính thức.",
@@ -43,7 +43,7 @@ class WebKnowledgeServiceTests(unittest.TestCase):
             self.assertEqual(matches[0].sources, ["https://ictu.edu.vn/tuyen-sinh-moi-nhat"])
 
     def test_external_web_answer_is_candidate_and_not_prioritized(self) -> None:
-        with tempfile.TemporaryDirectory(dir="E:\\new-test") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "web_kb.db"
             chunk = RetrievedChunk(
                 document="Một trang ngoài nhắc đến ICTU.",

@@ -1,13 +1,17 @@
-﻿import sqlite3
+from __future__ import annotations
+
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
 from config.rag_tools import RAG_TOOL_PROFILES
+from config.settings import settings
 from config.system_prompt import ensure_system_prompt_file, get_system_prompt
 
-DB_PATH = Path("data/bot_config.db")
-DB_PATH.parent.mkdir(exist_ok=True)
+
+DB_PATH = Path(settings.DB_PATH)
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def get_conn() -> sqlite3.Connection:
@@ -129,6 +133,7 @@ def init_db() -> None:
 
     conn.commit()
     conn.close()
+
 
 def get_config(key: str, default: str = "") -> str:
     conn = get_conn()

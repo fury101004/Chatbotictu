@@ -1,10 +1,19 @@
-﻿from pathlib import Path
+from __future__ import annotations
+
+from pathlib import Path
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 class Settings(BaseSettings):
+    APP_NAME: str = Field(
+        default="ICTU AI Chatbot",
+        validation_alias=AliasChoices("APP_NAME"),
+    )
     ENVIRONMENT: str = Field(
         default="development",
         validation_alias=AliasChoices("ENVIRONMENT", "APP_ENV", "ENV"),
@@ -41,12 +50,22 @@ class Settings(BaseSettings):
     API_RATE_UPLOAD: str = "10/hour"
     API_RATE_ADMIN: str = "10/minute"
 
+    PROJECT_ROOT: Path = PROJECT_ROOT
+    DATA_DIR: Path = Path("data")
+    LOG_DIR: Path = Path("logs")
+    FRONTEND_TEMPLATE_DIR: Path = Path("views/frontend/templates")
+    FRONTEND_ASSET_DIR: Path = Path("views/frontend/assets")
+
     UPLOAD_DIR: Path = Path("data/uploads")
     RAG_UPLOAD_ROOT: Path = Path("data/rag_uploads")
     DB_PATH: Path = Path("data/bot_config.db")
-    QA_CORPUS_ROOT: Path = Path("data/qa_generated_fixed")
-    LOG_DIR: Path = Path("logs")
+    QA_CORPUS_ROOT: Path = Path("data/primary_corpus")
+    VECTORSTORE_DIR: Path = Path("vectorstore")
     API_LOG_PATH: Path = Path("logs/api.log")
+    SYSTEM_PROMPT_PATH: Path = Path("data/systemprompt.md")
+    BOT_RULE_PATH: Path = Path("data/bot-rule.md")
+    INTENTS_DIR: Path = Path("data/intents")
+    BADWORDS_PATH: Path = Path("data/badwords.md")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -54,6 +73,37 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    def model_post_init(self, __context) -> None:  # type: ignore[override]
+        root = Path(self.PROJECT_ROOT)
+        if not root.is_absolute():
+            root = (PROJECT_ROOT / root).resolve()
+        else:
+            root = root.resolve()
+        self.PROJECT_ROOT = root
+
+        for field_name in (
+            "DATA_DIR",
+            "LOG_DIR",
+            "FRONTEND_TEMPLATE_DIR",
+            "FRONTEND_ASSET_DIR",
+            "UPLOAD_DIR",
+            "RAG_UPLOAD_ROOT",
+            "DB_PATH",
+            "QA_CORPUS_ROOT",
+            "VECTORSTORE_DIR",
+            "API_LOG_PATH",
+            "SYSTEM_PROMPT_PATH",
+            "BOT_RULE_PATH",
+            "INTENTS_DIR",
+            "BADWORDS_PATH",
+        ):
+            path_value = Path(getattr(self, field_name))
+            if not path_value.is_absolute():
+                path_value = (self.PROJECT_ROOT / path_value).resolve()
+            else:
+                path_value = path_value.resolve()
+            setattr(self, field_name, path_value)
 
     @property
     def is_production(self) -> bool:
@@ -102,11 +152,17 @@ settings = Settings()
 _validate_production_security_config(settings)
 if not settings.SESSION_SECRET:
     settings.SESSION_SECRET = settings.JWT_SECRET
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 settings.RAG_UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 settings.QA_CORPUS_ROOT.mkdir(parents=True, exist_ok=True)
 settings.LOG_DIR.mkdir(parents=True, exist_ok=True)
+settings.VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
 settings.API_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+settings.SYSTEM_PROMPT_PATH.parent.mkdir(parents=True, exist_ok=True)
+settings.BOT_RULE_PATH.parent.mkdir(parents=True, exist_ok=True)
+settings.INTENTS_DIR.mkdir(parents=True, exist_ok=True)
+settings.BADWORDS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 __all__ = ["Settings", "settings"]

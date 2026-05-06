@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Hybrid Retrieval Architecture</title>
+  <desc id="desc">Diagram of the ICTU chatbot hybrid retrieval strategy combining vector search, BM25, lexical fallback, and trusted web sources.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#eef6ff"/>
+    </linearGradient>
+    <linearGradient id="query" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#60a5fa"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#fb923c"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 500 17px 'Segoe UI', Arial, sans-serif; fill: #475569; }
+      .panel { fill: #ffffff; stroke: #dbe6f0; stroke-width: 2; rx: 28; ry: 28; filter: url(#shadow); }
+      .head { font: 700 19px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+      .box { font: 700 24px 'Segoe UI', Arial, sans-serif; fill: #0f172a; }
+      .body { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #334155; }
+      .small { font: 600 13px 'Segoe UI', Arial, sans-serif; fill: #475569; }
+      .line { stroke: #475569; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .dashed { stroke: #94a3b8; stroke-width: 3; stroke-dasharray: 8 10; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect x="42" y="36" width="1516" height="828" rx="32" ry="32" fill="#ffffff" stroke="#dbe6f0" stroke-width="2"/>
+
+  <text x="76" y="95" class="title">Hybrid Retrieval Strategy</text>
+  <text x="76" y="130" class="subtitle">The chatbot does not rely on a single search method. It merges local semantic retrieval, lexical ranking, and official web evidence for stronger grounding.</text>
+
+  <rect x="626" y="170" width="348" height="94" rx="24" ry="24" fill="url(#query)" filter="url(#shadow)"/>
+  <text x="800" y="208" class="head" text-anchor="middle">User Query</text>
+  <text x="800" y="234" class="small" text-anchor="middle" fill="#cbd5e1">Example: tuition, regulations, timetable, latest news</text>
+
+  <rect x="118" y="334" width="310" height="196" class="panel"/>
+  <rect x="118" y="334" width="310" height="46" rx="28" ry="28" fill="url(#teal)"/>
+  <text x="273" y="363" class="head" text-anchor="middle">Local Semantic Search</text>
+  <text x="146" y="418" class="box">ChromaDB Vector Store</text>
+  <text x="146" y="452" class="body">Embeddings search across handbook, policy, FAQ, and uploaded files.</text>
+  <text x="146" y="479" class="body">Useful when the user paraphrases or uses natural language.</text>
+
+  <rect x="490" y="334" width="310" height="196" class="panel"/>
+  <rect x="490" y="334" width="310" height="46" rx="28" ry="28" fill="url(#blue)"/>
+  <text x="645" y="363" class="head" text-anchor="middle">Keyword Retrieval</text>
+  <text x="518" y="418" class="box">BM25 + Lexical Matching</text>
+  <text x="518" y="452" class="body">Captures exact terms such as program codes, policy names, and fixed phrases.</text>
+  <text x="518" y="479" class="body">Acts as a strong backup when vector similarity is weak.</text>
+
+  <rect x="862" y="334" width="310" height="196" class="panel"/>
+  <rect x="862" y="334" width="310" height="46" rx="28" ry="28" fill="url(#orange)"/>
+  <text x="1017" y="363" class="head" text-anchor="middle">Trusted Web Knowledge</text>
+  <text x="890" y="418" class="box">Cache of Official Answers</text>
+  <text x="890" y="452" class="body">Stores validated web evidence from official ICTU sources for repeated reuse.</text>
+  <text x="890" y="479" class="body">Improves speed and consistency for later realtime questions.</text>
+
+  <rect x="1234" y="334" width="248" height="196" class="panel"/>
+  <rect x="1234" y="334" width="248" height="46" rx="28" ry="28" fill="url(#teal)"/>
+  <text x="1358" y="363" class="head" text-anchor="middle">Realtime Web Search</text>
+  <text x="1262" y="418" class="box">Official ICTU Search</text>
+  <text x="1262" y="452" class="body">Triggered for latest notices, deadlines, and current public information.</text>
+  <text x="1262" y="479" class="body">Official domains are prioritized first.</text>
+
+  <rect x="444" y="618" width="712" height="158" class="panel"/>
+  <rect x="444" y="618" width="712" height="46" rx="28" ry="28" fill="url(#query)"/>
+  <text x="800" y="647" class="head" text-anchor="middle">Merge, Score, and Select the Best Context</text>
+  <text x="474" y="700" class="body">Candidate pools from vector retrieval and BM25 are normalized and merged.</text>
+  <text x="474" y="727" class="body">The system preserves evidence quality, favors relevant local context, and supplements with web evidence when the query is time-sensitive.</text>
+  <text x="474" y="754" class="body">The final top-k context is passed to the response generator for grounded answering.</text>
+
+  <path d="M 800 264 C 800 300, 273 300, 273 334" class="line"/>
+  <path d="M 800 264 C 800 300, 645 300, 645 334" class="line"/>
+  <path d="M 800 264 C 800 300, 1017 300, 1017 334" class="line"/>
+  <path d="M 800 264 C 800 300, 1358 300, 1358 334" class="line"/>
+
+  <path d="M 273 530 C 273 585, 580 585, 580 618" class="line"/>
+  <path d="M 645 530 C 645 580, 710 580, 710 618" class="line"/>
+  <path d="M 1017 530 C 1017 580, 890 580, 890 618" class="line"/>
+  <path d="M 1358 530 C 1358 585, 1020 585, 1020 618" class="dashed"/>
+
+  <rect x="94" y="628" width="270" height="128" rx="22" ry="22" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
+  <text x="120" y="666" class="box" font-size="18">Why this matters</text>
+  <text x="120" y="693" class="body">Vector search catches paraphrases.</text>
+  <text x="120" y="717" class="body">BM25 catches exact keywords.</text>
+  <text x="120" y="741" class="body">Web search handles fresh information.</text>
+
+  <text x="76" y="820" class="body">Suggested caption: Hybrid retrieval architecture combining ChromaDB, BM25, lexical fallback, trusted web cache, and official ICTU web search to improve answer grounding and coverage.</text>
+</svg>

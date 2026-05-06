@@ -237,7 +237,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     status = "success" if imported_files > 0 and not failed_sources else "partial" if imported_files > 0 else "error"
     action = "Reset + import" if reset_first else "Import"
     msg = (
-        f"{action} xong: {imported_files}/{len(corpus_records)} file tu qa_generated_fixed. "
+        f"{action} xong: {imported_files}/{len(corpus_records)} file tu seed corpus chinh. "
         f"Vector store hien co {total_chunks} chunks."
     )
     if failed_sources:

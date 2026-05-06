@@ -61,6 +61,18 @@ def _route_rag_tool_by_keyword(message: str) -> tuple[str, str]:
             cue in message_lower for cue in ["khi nao", "bao gio", "o dau", "lam sao", "ntn"]
         ):
             score += 2
+        if tool_name == "student_handbook_rag" and any(
+            cue in message_lower
+            for cue in [
+                "dieu kien dat danh hieu",
+                "danh hieu sinh vien",
+                "nguoi hoc khong duoc lam",
+                "hanh vi nao",
+                "chuong trinh dao tao",
+                "tong so tin chi",
+            ]
+        ):
+            score += 4
         if tool_name == "school_policy_rag" and any(
             cue in message_lower for cue in ["bao hiem y te", "bhyt", "chinh sach", "lan 1", "lan 2", "lan 3"]
         ):

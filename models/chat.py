@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Optional, TypedDict
@@ -21,6 +21,9 @@ class ChatResponse(BaseModel):
     rag_tool: Optional[str] = None
     rag_route: Optional[str] = None
     llm_model: Optional[str] = None
+    intent: Optional[str] = None
+    needs_clarification: Optional[bool] = None
+    response_time_ms: Optional[int] = None
     web_kb_status: Optional[dict[str, Any]] = None
     timestamp: str
     session_id: str
@@ -52,6 +55,9 @@ class ChatGraphState(TypedDict, total=False):
     stop_graph: bool
     mode: str
     language: str
+    intent: str
+    needs_clarification: bool
+    clarification_question: str
     target_file: Optional[str]
     context_text: str
     sources: list[str]
@@ -62,12 +68,4 @@ class ChatGraphState(TypedDict, total=False):
     llm_model: str
     selected_llm_model: str
     web_kb_status: dict[str, Any]
-
-
-
-
-
-
-
-
-
+    response_time_ms: int

@@ -35,9 +35,12 @@ data/rag_uploads/
 data/all_questions.md
 data/api.log
 data/bot_config.db
+data/chroma_db/
+data/_tmp_*/
 data/qa_generated/
 data/qa_generated_fixed/
 clean_data/
+datapdf/
 evaluation/
 reports/
 vectorstore/

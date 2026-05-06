@@ -110,7 +110,7 @@ class ApproveChatEntryTests(unittest.TestCase):
             content="Q: Hoc phi dong khi nao?\nA: Hoc phi duoc thong bao theo tung dot trong nam hoc.",
         )
 
-        with tempfile.TemporaryDirectory(dir="E:\\new-test") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             upload_dir = Path(temp_dir)
             with (
                 patch("services.knowledge_base_service.get_chat_entry_by_id", return_value=entry),

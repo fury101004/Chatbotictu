@@ -65,7 +65,7 @@ class _FakeCollection:
 
 class ReingestPipelineTests(unittest.TestCase):
     def test_reingest_reloads_seed_and_uploaded_sources(self) -> None:
-        with tempfile.TemporaryDirectory(dir="E:\\new-test") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             seed_path = temp_root / "seed.md"
             upload_path = temp_root / "upload.md"

@@ -337,8 +337,32 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null)
         '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
     );
 
-    const metaHtml = meta?.llm_model
-        ? `<div class="message-meta">Model: ${escapeHtml(formatModelName(meta.llm_model))}</div>`
+    const metaParts = [];
+    if (meta?.llm_model) {
+        metaParts.push(`Model: ${escapeHtml(formatModelName(meta.llm_model))}`);
+    }
+    if (typeof meta?.response_time_ms === "number") {
+        metaParts.push(`Thời gian: ${escapeHtml(`${meta.response_time_ms} ms`)}`);
+    }
+    const metaHtml = metaParts.length
+        ? `<div class="message-meta">${metaParts.join(" | ")}</div>`
+        : "";
+    const sources = Array.isArray(meta?.sources) ? meta.sources.filter(Boolean) : [];
+    const sourcesHtml = sources.length
+        ? `
+            <div class="message-sources">
+                <div class="message-sources-label">Nguồn tham khảo</div>
+                <ul class="message-sources-list">
+                    ${sources.map((source) => {
+                        const safeSource = escapeHtml(String(source));
+                        if (/^https?:\/\//i.test(String(source))) {
+                            return `<li><a href="${safeSource}" target="_blank" rel="noopener noreferrer">${safeSource}</a></li>`;
+                        }
+                        return `<li>${safeSource}</li>`;
+                    }).join("")}
+                </ul>
+            </div>
+        `
         : "";
     
     msgElement.innerHTML = `
@@ -347,6 +371,7 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null)
             <span class="message-time">${timestamp}</span>
         </div>
         <div class="message-content">${html}</div>
+        ${sourcesHtml}
         ${metaHtml}
     `;
     
@@ -410,7 +435,13 @@ document.getElementById("chatForm").onsubmit = async (e) => {
             return;
         }
 
-        if (data.response) addMessage("bot", data.response, "ICTU AI", null, { llm_model: data.llm_model });
+        if (data.response) {
+            addMessage("bot", data.response, "ICTU AI", null, {
+                llm_model: data.llm_model,
+                sources: data.sources,
+                response_time_ms: data.response_time_ms,
+            });
+        }
     } catch (err) {
         thinking.remove();
         addMessage("system", "Mạng lag rồi đại ca ơi, thử lại đi!", "Hệ thống");
@@ -919,6 +950,36 @@ body {
     font-family: 'Roboto Mono', monospace;
     font-size: 0.72rem;
     word-break: break-word;
+}
+
+.message-sources {
+    margin-top: 0.8rem;
+    padding: 0.7rem 0.85rem;
+    border-radius: 10px;
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.14);
+}
+
+.message-sources-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #8f9ba8;
+    margin-bottom: 0.45rem;
+}
+
+.message-sources-list {
+    margin: 0;
+    padding-left: 1rem;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.message-sources-list li {
+    color: inherit;
+    font-size: 0.82rem;
+    line-height: 1.45;
 }
 
 .message-content strong {

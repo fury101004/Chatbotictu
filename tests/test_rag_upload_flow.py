@@ -33,7 +33,7 @@ from models.chat import RAGResult
 
 class UploadFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_upload_saves_file_even_when_indexing_fails(self) -> None:
-        with tempfile.TemporaryDirectory(dir="E:\\new-test") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             upload_dir = Path(temp_dir)
             upload = UploadFile(filename="guide.md", file=BytesIO(b"# Guide\n\nNoi dung"))
 
@@ -55,7 +55,7 @@ class UploadFlowTests(unittest.IsolatedAsyncioTestCase):
             clear_cache_mock.assert_called_once()
 
     async def test_upload_indexes_file_when_embedding_backend_is_ready(self) -> None:
-        with tempfile.TemporaryDirectory(dir="E:\\new-test") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             upload_dir = Path(temp_dir)
             upload = UploadFile(filename="guide.md", file=BytesIO(b"# Guide\n\nNoi dung"))
 
@@ -87,7 +87,7 @@ class EmbeddingBackendTests(unittest.TestCase):
 
     def test_embedding_backend_ready_when_local_model_exists_without_network(self) -> None:
         with (
-            patch("services.vector_store_service._resolve_local_embedding_model_path", return_value=Path("C:/models/local-embed")),
+            patch("services.vector_store_service._resolve_local_embedding_model_path", return_value=Path("local-embed-cache")),
             patch("services.vector_store_service.socket.create_connection", side_effect=OSError("blocked")),
         ):
             vector_store_service.embedding_backend_ready.cache_clear()
@@ -95,7 +95,7 @@ class EmbeddingBackendTests(unittest.TestCase):
 
     def test_get_embedding_function_forces_offline_mode_with_local_model(self) -> None:
         with (
-            patch("services.vector_store_service._resolve_local_embedding_model_path", return_value=Path("C:/models/local-embed")),
+            patch("services.vector_store_service._resolve_local_embedding_model_path", return_value=Path("local-embed-cache")),
             patch("services.vector_store_service.embedding_functions.SentenceTransformerEmbeddingFunction") as factory,
             patch.dict(os.environ, {}, clear=True),
         ):
@@ -109,7 +109,7 @@ class EmbeddingBackendTests(unittest.TestCase):
 
         self.assertIs(result, factory.return_value)
         factory.assert_called_once_with(
-            model_name=str(Path("C:/models/local-embed")),
+            model_name=str(Path("local-embed-cache")),
             local_files_only=True,
         )
 

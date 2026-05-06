@@ -223,6 +223,11 @@ def try_repair_roundtrip(text: str, encoding_name: str) -> str:
 
 
 def fix_mojibake(text: str) -> tuple[str, bool]:
+    # Do not transform plain ASCII text. Round-trip heuristics can otherwise
+    # introduce fake Vietnamese-looking mojibake (for example "va" -> "vĂ ").
+    if text.isascii() and not contains_mojibake(text):
+        return text, False
+
     current = text
     changed = False
 
@@ -287,15 +292,32 @@ def repair_common_phrases(text: str) -> tuple[str, bool]:
         stripped = line.strip()
         if stripped and not re.match(r"^[A-Za-z0-9_.\\/:-]+$", stripped):
             original_line = line
+            candidate_line = line
             for source, target in COMMON_PHRASE_REPLACEMENTS.items():
+                if source.isascii() and not target.isascii():
+                    continue
                 escaped = re.escape(source)
                 if source[:1].isalnum() and source[-1:].isalnum():
                     pattern = rf"\b{escaped}\b"
                 else:
                     pattern = escaped
-                line = re.sub(pattern, target, line)
-            if line != original_line:
-                changed = True
+                candidate_line = re.sub(pattern, target, candidate_line)
+
+            if candidate_line != original_line:
+                if not contains_mojibake(original_line) and contains_mojibake(candidate_line):
+                    output_lines.append(line)
+                    continue
+
+                original_score = text_quality_score(original_line)
+                candidate_score = text_quality_score(candidate_line)
+                original_penalty = mojibake_penalty(original_line)
+                candidate_penalty = mojibake_penalty(candidate_line)
+
+                # Only accept replacements that measurably improve text quality
+                # and do not introduce additional mojibake noise.
+                if candidate_score > original_score and candidate_penalty <= original_penalty:
+                    line = candidate_line
+                    changed = True
         output_lines.append(line)
     rebuilt = "\n".join(output_lines)
     if text.endswith("\n") and not rebuilt.endswith("\n"):
@@ -354,8 +376,15 @@ Quy tắc:
 Văn bản:
 {text}
 """
-    response = model.generate_content(prompt)
-    output = (getattr(response, "text", "") or "").strip()
+    try:
+        response = model.generate_content(prompt)
+    except Exception:
+        return text
+
+    try:
+        output = (getattr(response, "text", "") or "").strip()
+    except Exception:
+        return text
     return output or text
 
 

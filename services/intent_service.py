@@ -1,169 +1,160 @@
-﻿# intent_engine.py – Phát hiện ý định người dùng (intent detection)
+from __future__ import annotations
+
 import random
+import re
+import unicodedata
 from pathlib import Path
 
-INTENTS_DIR = Path("data/intents")
+from config.settings import settings
 
-# Cache để không phải đọc file liên tục
-_cache = {}
-_cache_mtime = {}
 
-def _load_intent_file(filename: str) -> set:
-    """Đọc file từ khóa, có cache để tăng tốc"""
+INTENTS_DIR = Path(settings.INTENTS_DIR)
+_cache: dict[str, set[str]] = {}
+_cache_mtime: dict[str, float | None] = {}
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_WORD_BOUNDARY_RE = re.compile(r"[a-z0-9]")
+_SHORT_GREETING_TOKENS = {"hi", "yo", "ok", "alo", "hey"}
+
+
+def _normalize_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(text or "").casefold())
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    normalized = normalized.replace("đ", "d")
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _normalize_keywords(values: set[str]) -> set[str]:
+    return {item for item in (_normalize_text(value) for value in values) if item}
+
+
+def _tokenize_words(text: str) -> set[str]:
+    return set(_TOKEN_RE.findall(text))
+
+
+def _keyword_in_message(message: str, tokens: set[str], keyword: str) -> bool:
+    if not keyword:
+        return False
+
+    if _WORD_BOUNDARY_RE.search(keyword):
+        if " " in keyword:
+            pattern = rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])"
+            return re.search(pattern, message) is not None
+
+        if len(keyword) <= 2:
+            return keyword in _SHORT_GREETING_TOKENS and keyword in tokens
+        return keyword in tokens
+
+    return keyword in message
+
+
+def _contains_any(message: str, tokens: set[str], keywords: set[str]) -> bool:
+    return any(_keyword_in_message(message, tokens, keyword) for keyword in keywords)
+
+
+def _load_intent_file(filename: str) -> set[str]:
     path = INTENTS_DIR / filename
     current_mtime = path.stat().st_mtime if path.exists() else None
 
     if filename in _cache and _cache_mtime.get(filename) == current_mtime:
         return _cache[filename]
 
-    words = set()
+    phrases: set[str] = set()
     if path.exists():
         try:
-            text = path.read_text(encoding="utf-8").lower()
+            text = path.read_text(encoding="utf-8")
             for line in text.splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    for word in line.replace(",", " ").split():
-                        w = word.strip()
-                        if w:
-                            words.add(w)
-        except Exception as e:
-            print(f"[Intent] Lỗi đọc file {filename}: {e}")
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                for part in stripped.split(","):
+                    phrase = _normalize_text(part)
+                    if phrase:
+                        phrases.add(phrase)
+        except OSError:
+            pass
 
-    _cache[filename] = words
+    _cache[filename] = phrases
     _cache_mtime[filename] = current_mtime
-    return words
+    return phrases
 
 
-# Load các file từ khóa
-GREETINGS      = _load_intent_file("greetings.md")      # xin chào, hi, chào bạn...
-CHITCHAT       = _load_intent_file("chitchat.md")       # hôm nay thế nào, ăn chưa...
-LIGHT_INSULTS  = _load_intent_file("light_insults.md")  # ngu, đần, chậm hiểu...
-HEAVY_INSULTS  = _load_intent_file("heavy_insults.md")  # đĩ, lồn, cặc, óc chó...
+GREETINGS = _load_intent_file("greetings.md")
+CHITCHAT = _load_intent_file("chitchat.md")
+LIGHT_INSULTS = _load_intent_file("light_insults.md")
+HEAVY_INSULTS = _load_intent_file("heavy_insults.md")
+
+INTRODUCTION_KEYWORDS = _normalize_keywords(
+    {
+        "ban la ai",
+        "may la ai",
+        "bot la ai",
+        "ai vay",
+        "la ai day",
+        "ban ten gi",
+        "ten ban la gi",
+        "ten bot la gi",
+        "gioi thieu ban than",
+        "who are you",
+        "what are you",
+        "your name",
+        "introduce yourself",
+    }
+)
+
+GOODBYE_KEYWORDS = _normalize_keywords({"bye", "tam biet", "ngu ngon", "hen gap lai"})
+THANKS_KEYWORDS = _normalize_keywords({"cam on", "thanks", "thank you", "ok cam on"})
 
 
-# Từ khóa hỏi danh tính – ưu tiên cực cao
-INTRODUCTION_KEYWORDS = {
-    "bạn là ai", "mày là ai", "bot là ai", "ai vậy", "là ai đấy", "là cái gì", "tên gì",
- "tên là gì", "gọi là gì", "tên mày là gì", "tên bạn là gì", "ai tạo ra mày", "ai làm ra bạn",
- "chủ của bạn là ai", "bạn được tạo bởi ai", "ai phát triển bạn", "who are you", "what are you",
- "you are what", "bạn làm gì", "bạn giúp gì được", "bạn hỗ trợ gì", "bạn biết gì"
-}
-
-
-# Trả lời chuyên nghiệp, tự nhiên, rõ ràng
 RESPONSES = {
     "introduction": [
-        "Mình là trợ lý ảo AI được thiết kế chuyên sâu để hỗ trợ bạn tra cứu kiến thức, giải đáp thắc mắc và đồng hành trong công việc/học tập.\n"
-        "Mình có thể đọc hiểu tài liệu bạn upload (PDF, Markdown, Word...), nhớ toàn bộ lịch sử trò chuyện và trả lời cực kỳ chính xác dựa trên dữ liệu đó.\n"
-        "Bạn cứ hỏi thoải mái – từ lập trình, học tập, đến cuộc sống thường ngày – mình đều hỗ trợ hết!",
-
-        "Chào bạn! Mình là một trợ lý AI thông minh, được xây dựng để trở thành người bạn đồng hành đáng tin cậy của bạn.\n"
-        "Điểm mạnh của mình là:\n"
-        "• Đọc và hiểu tài liệu bạn cung cấp\n"
-        "• Nhớ chính xác những gì chúng ta đã nói\n"
-        "• Trả lời nhanh, đúng trọng tâm, không lan man\n"
-        "Cứ thử hỏi mình bất kỳ điều gì nhé!",
-
-        "Mình là trợ lý AI chuyên hỗ trợ tra cứu kiến thức cá nhân và doanh nghiệp.\n"
-        "Bạn có thể nghĩ mình như một 'người thư ký thông minh' – luôn sẵn sàng tìm thông tin, giải thích rõ ràng, và không bao giờ quên những gì bạn đã hỏi.\n"
-        "Rất vui được hỗ trợ bạn!",
-
-        "Xin chào! Mình là một AI được huấn luyện để giúp bạn học tập, làm việc và giải quyết vấn đề hiệu quả hơn.\n"
-        "Mình có thể:\n"
-        "– Trả lời câu hỏi dựa trên tài liệu bạn upload\n"
-        "– Nhớ toàn bộ cuộc trò chuyện\n"
-        "– Hiểu khi bạn nói 'sai rồi', 'trả lời lại đi' và tự sửa ngay\n"
-        "Bạn cần mình giúp gì hôm nay?"
+        "Mình là trợ lý AI của ICTU, chuyên hỗ trợ tra cứu và giải đáp thông tin cho sinh viên.",
     ],
-
     "greeting": [
-        "Chào bạn! Rất vui được gặp lại",
-        "Hi! Hôm nay bạn khỏe không?",
-        "Xin chào! Mình luôn sẵn sàng hỗ trợ bạn",
-        "Hello! Có gì mình giúp được không ạ?",
-        "Chào! Hôm nay bạn muốn tìm hiểu gì nào?",
+        "Chào bạn! Mình sẵn sàng hỗ trợ đây.",
+        "Xin chào! Bạn cần mình tra cứu gì nào?",
     ],
-
     "goodbye": [
-        "Tạm biệt bạn! Chúc một ngày tốt lành",
-        "Hẹn gặp lại nhé! Có gì cứ gọi mình",
-        "Bye! Nghỉ ngơi vui vẻ nha",
-        "Chúc ngủ ngon! Mai gặp lại",
-        "Tạm biệt! Mình luôn ở đây khi bạn cần",
+        "Tạm biệt bạn! Khi cần cứ quay lại nhé.",
     ],
-
     "thanks": [
-        "Không có gì! Rất vui được giúp bạn",
-        "Rất hân hạnh được hỗ trợ",
-        "Mình luôn sẵn sàng giúp bạn mà",
-        "Có gì đâu, bạn cứ hỏi thoải mái nhé!",
-        "Rất vui vì đã giúp được bạn",
+        "Không có gì, mình rất vui được hỗ trợ bạn.",
     ],
-
     "light_insult": [
-        "Ừm… mình sẽ cố gắng trả lời tốt hơn nhé",
-        "Mình xin lỗi nếu làm bạn chưa hài lòng. Bạn muốn mình giải thích lại không?",
-        "Mình còn đang học mỗi ngày. Cảm ơn bạn đã góp ý!",
-        "Hihi, mình sẽ cố không để bạn phải nói thế lần nữa",
+        "Mình sẽ cố trả lời rõ hơn nhé. Bạn nói mình biết chỗ nào chưa ổn được không?",
     ],
-
     "heavy_insult": [
-        "Mình rất tiếc vì đã làm bạn khó chịu. Nếu có thể, bạn cho mình biết mình sai ở đâu để sửa nhé?",
-        "Mình xin lỗi. Mình sẽ cố gắng trả lời tốt hơn trong tương lai.",
-        "Mình hiểu bạn đang không vui. Nếu bạn muốn, mình sẵn sàng trả lời lại từ đầu.",
+        "Nếu câu trả lời trước chưa đúng, bạn cho mình thêm chi tiết để mình sửa nhé.",
     ],
-
     "chitchat": [
-        "Hôm nay thời tiết thế nào bên bạn?",
-        "Bạn đang làm gì thú vị gần đây không?",
-        "Cuối tuần này bạn có kế hoạch gì chưa?",
-        "Mình vừa được cập nhật thêm nhiều kiến thức mới đấy!",
-        "Bạn thích trà hay cà phê hơn?",
-    ]
+        "Mình vẫn đang ở đây, bạn muốn hỏi gì về ICTU nào?",
+    ],
 }
 
 
-def detect_intent(message: str):
-    """Phát hiện nhanh ý định người dùng – ưu tiên cao đến thấp"""
-    msg = message.lower().strip()
+def detect_intent(message: str) -> str | None:
+    normalized_message = _normalize_text(message)
+    tokens = _tokenize_words(normalized_message)
 
-    # 1. Chửi nặng → ưu tiên cao nhất
-    if any(word in msg for word in HEAVY_INSULTS):
+    if _contains_any(normalized_message, tokens, HEAVY_INSULTS):
         return "heavy_insult"
-
-    # 2. Hỏi danh tính → ưu tiên cực cao (người dùng hay hỏi nhất)
-    if any(phrase in msg for phrase in INTRODUCTION_KEYWORDS):
+    if _contains_any(normalized_message, tokens, INTRODUCTION_KEYWORDS):
         return "introduction"
-
-    # 3. Chửi nhẹ
-    if any(word in msg for word in LIGHT_INSULTS):
+    if _contains_any(normalized_message, tokens, LIGHT_INSULTS):
         return "light_insult"
 
-    # 4. Tạm biệt
-    goodbye_keywords = {"bye", "tạm biệt", "ngủ ngon", "ngủ đây", "đi ngủ", "good night", "bai", "hẹn gặp lại"}
-    if any(word in msg for word in goodbye_keywords):
+    if _contains_any(normalized_message, tokens, GOODBYE_KEYWORDS):
         return "goodbye"
-
-    # 5. Cảm ơn
-    thanks_keywords = {"cảm ơn", "thanks", "tks", "cám ơn", "thank you", "cảm ơn nhé", "ok cảm ơn"}
-    if any(word in msg for word in thanks_keywords):
+    if _contains_any(normalized_message, tokens, THANKS_KEYWORDS):
         return "thanks"
 
-    # 6. Chào hỏi
-    if any(word in msg for word in GREETINGS):
+    if _contains_any(normalized_message, tokens, GREETINGS):
         return "greeting"
-
-    # 7. Tán gẫu
-    if any(word in msg for word in CHITCHAT):
+    if _contains_any(normalized_message, tokens, CHITCHAT):
         return "chitchat"
-
-    # Không nhận diện được → để RAG xử lý
     return None
 
 
 def get_intent_response(intent_type: str) -> str:
-    """Trả về câu trả lời ngẫu nhiên theo intent"""
     if intent_type in RESPONSES:
         return random.choice(RESPONSES[intent_type])
     return random.choice(RESPONSES["chitchat"])

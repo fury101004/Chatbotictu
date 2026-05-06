@@ -13,8 +13,10 @@ from services.rag_types import CorpusDocument
 from services.web_knowledge_service import search_trusted_web_knowledge
 from services.web_search import search_web_ictu
 
+
+DEFAULT_CONTEXT_TEXT = "Thông tin đang được cập nhật."
 _UNTITLED_SENTINELS = {"Khong co tieu de", "Không có tiêu đề"}
-_EMPTY_CONTEXT_SENTINELS = {"Thong tin dang duoc cap nhat.", "Thông tin đang được cập nhật.", ""}
+_EMPTY_CONTEXT_SENTINELS = {"Thong tin dang duoc cap nhat.", DEFAULT_CONTEXT_TEXT, ""}
 
 
 def _documents_to_chunks(documents: list[Document]) -> list[RetrievedChunk]:
@@ -65,7 +67,7 @@ def _build_result_from_documents(
         else:
             context_parts.append(text)
 
-    context_text = "\n\n".join(context_parts) if context_parts else "Thông tin đang được cập nhật."
+    context_text = "\n\n".join(context_parts) if context_parts else DEFAULT_CONTEXT_TEXT
     chunks_used = len(limited_chunks)
 
     return RAGResult(
@@ -110,7 +112,7 @@ def _build_result_from_matches(
             )
         )
 
-    context_text = "\n\n".join(context_parts) if context_parts else "Thông tin đang được cập nhật."
+    context_text = "\n\n".join(context_parts) if context_parts else DEFAULT_CONTEXT_TEXT
     return RAGResult(
         context_text=context_text,
         chunks=chunks,
@@ -213,5 +215,5 @@ def build_context_from_chunks(chunks: list[RetrievedChunk], max_chunks: int = 25
         else:
             context_parts.append(text)
 
-    context_text = "\n\n".join(context_parts) if context_parts else "Thông tin đang được cập nhật."
+    context_text = "\n\n".join(context_parts) if context_parts else DEFAULT_CONTEXT_TEXT
     return context_text, sources

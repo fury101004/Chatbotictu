@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">AI Agent RAG Cover Figure</title>
+  <desc id="desc">A presentation cover figure for the ICTU AI Chatbot project, highlighting AI agent workflow, retrieval, vector store, and trusted university knowledge.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#0f3b4f"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="100%" stop-color="#67e8f9"/>
+    </linearGradient>
+    <linearGradient id="warm" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fb7185"/>
+      <stop offset="100%" stop-color="#fdba74"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#020617" flood-opacity="0.28"/>
+    </filter>
+    <style>
+      .title { font: 700 56px 'Segoe UI', Arial, sans-serif; fill: #f8fafc; }
+      .subtitle { font: 500 21px 'Segoe UI', Arial, sans-serif; fill: #dbeafe; }
+      .cardTitle { font: 700 22px 'Segoe UI', Arial, sans-serif; fill: #0f172a; }
+      .body { font: 500 16px 'Segoe UI', Arial, sans-serif; fill: #334155; }
+      .light { font: 600 15px 'Segoe UI', Arial, sans-serif; fill: #e0f2fe; letter-spacing: 1px; }
+      .nodeText { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #f1f5f9; }
+      .line { stroke: #93c5fd; stroke-width: 3; fill: none; }
+      .dash { stroke: rgba(255,255,255,0.28); stroke-width: 2; stroke-dasharray: 7 10; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <circle cx="1280" cy="170" r="230" fill="#38bdf8" opacity="0.16"/>
+  <circle cx="1380" cy="760" r="240" fill="#2dd4bf" opacity="0.12"/>
+  <circle cx="280" cy="760" r="210" fill="#f97316" opacity="0.10"/>
+  <path d="M 0 730 C 240 630, 440 660, 710 760 S 1250 920, 1600 800 L 1600 900 L 0 900 Z" fill="#082f49" opacity="0.45"/>
+
+  <text x="98" y="144" class="light">ICTU AI CHATBOT REPORT VISUAL</text>
+  <text x="98" y="214" class="title">AI Agent + RAG for University Knowledge</text>
+  <text x="98" y="258" class="subtitle">A grounded chatbot architecture that routes questions, retrieves evidence, answers safely, and keeps knowledge reusable.</text>
+
+  <rect x="82" y="328" width="540" height="448" rx="34" ry="34" fill="#ffffff" opacity="0.96" filter="url(#shadow)"/>
+  <text x="124" y="388" class="cardTitle">Why this architecture is strong</text>
+  <text x="124" y="432" class="body">1. Questions are normalized and classified before retrieval.</text>
+  <text x="124" y="468" class="body">2. Knowledge is routed to the correct domain instead of using one giant prompt.</text>
+  <text x="124" y="504" class="body">3. Hybrid retrieval combines vector search, BM25, lexical fallback, and trusted web evidence.</text>
+  <text x="124" y="540" class="body">4. The system can ask follow-up questions when year, cohort, or semester is missing.</text>
+  <text x="124" y="576" class="body">5. Safe fallback reduces hallucination risk when context is weak or outdated.</text>
+  <text x="124" y="612" class="body">6. Admin ingestion keeps the knowledge base maintainable and expandable.</text>
+
+  <rect x="124" y="654" width="456" height="86" rx="22" ry="22" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
+  <text x="150" y="690" class="cardTitle" font-size="18">Best use in report</text>
+  <text x="150" y="719" class="body">Chapter opener, proposal slide, architecture summary, or defense presentation cover.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="802" y="248" width="702" height="462" rx="38" ry="38" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.18)" stroke-width="2"/>
+    <rect x="1092" y="308" width="130" height="84" rx="24" ry="24" fill="url(#mint)"/>
+    <text x="1157" y="343" class="nodeText" text-anchor="middle">User</text>
+    <text x="1157" y="366" class="small" text-anchor="middle">Web / API</text>
+
+    <rect x="886" y="446" width="170" height="94" rx="26" ry="26" fill="#1e40af"/>
+    <text x="971" y="484" class="nodeText" text-anchor="middle">Agent</text>
+    <text x="971" y="509" class="small" text-anchor="middle">Route and reason</text>
+
+    <rect x="1100" y="446" width="170" height="94" rx="26" ry="26" fill="#0f766e"/>
+    <text x="1185" y="484" class="nodeText" text-anchor="middle">Retrieve</text>
+    <text x="1185" y="509" class="small" text-anchor="middle">Vector + BM25</text>
+
+    <rect x="1314" y="446" width="140" height="94" rx="26" ry="26" fill="#ea580c"/>
+    <text x="1384" y="484" class="nodeText" text-anchor="middle">Web</text>
+    <text x="1384" y="509" class="small" text-anchor="middle">Trusted source</text>
+
+    <rect x="994" y="596" width="270" height="84" rx="26" ry="26" fill="url(#warm)"/>
+    <text x="1129" y="631" class="nodeText" text-anchor="middle">Grounded Answer</text>
+    <text x="1129" y="654" class="small" text-anchor="middle">Response + memory + logs</text>
+
+    <path d="M 1157 392 C 1157 425, 1008 425, 1008 446" class="line"/>
+    <path d="M 1157 392 C 1157 424, 1185 424, 1185 446" class="line"/>
+    <path d="M 1157 392 C 1157 425, 1384 425, 1384 446" class="line"/>
+    <path d="M 971 540 C 971 572, 1070 572, 1070 596" class="line"/>
+    <path d="M 1185 540 C 1185 572, 1140 572, 1140 596" class="line"/>
+    <path d="M 1384 540 C 1384 572, 1190 572, 1190 596" class="line"/>
+
+    <rect x="850" y="326" width="176" height="54" rx="18" ry="18" fill="#082f49" opacity="0.9"/>
+    <text x="938" y="360" class="small" text-anchor="middle">question intake</text>
+
+    <rect x="854" y="607" width="108" height="52" rx="16" ry="16" fill="#082f49" opacity="0.9"/>
+    <text x="908" y="639" class="small" text-anchor="middle">fallback</text>
+
+    <rect x="1294" y="607" width="152" height="52" rx="16" ry="16" fill="#082f49" opacity="0.9"/>
+    <text x="1370" y="639" class="small" text-anchor="middle">follow-up prompt</text>
+  </g>
+
+  <path d="M 764 220 C 860 190, 916 166, 1038 152" class="dash"/>
+  <path d="M 706 766 C 896 716, 1138 714, 1536 742" class="dash"/>
+
+  <text x="98" y="836" class="subtitle">Suggested caption: Presentation figure summarizing the AI agent and RAG-based architecture used by the ICTU chatbot system.</text>
+</svg>

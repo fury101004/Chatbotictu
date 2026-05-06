@@ -72,6 +72,7 @@ pillow==11.3.0
 posthog==6.9.3
 proto-plus==1.27.2
 protobuf==5.29.6
+pytest==8.3.5
 pyasn1==0.6.3
 pyasn1_modules==0.4.2
 pybase64==1.4.3
