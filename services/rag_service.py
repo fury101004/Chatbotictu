@@ -6,13 +6,22 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Optional
 
-from config.db import get_chat_history
 from config.rag_tools import DEFAULT_RAG_TOOL, FALLBACK_RAG_NODE, RAG_TOOL_ORDER, RAG_TOOL_PROFILES
 from models.chat import RAGResult
+from pipelines.retrieval_pipeline import (
+    RetrievalRuntime,
+    build_retrieval_query as _build_retrieval_query_impl,
+    retrieve_fallback_context as _retrieve_fallback_context_impl,
+    retrieve_general_context as _retrieve_general_context_impl,
+    retrieve_tool_context as _retrieve_tool_context_impl,
+)
+from repositories.vector_repository import fetch_documents_by_source, list_vector_sources, search_vector_documents
+from repositories.conversation_repository import load_chat_history
 from services.ictu_scope_service import is_ictu_related_query
-from services.langchain_service import invoke_json_prompt_chain
 from services.langchain_retrievers import CorpusLexicalRetriever, VectorStoreRetriever
+from services.langchain_service import invoke_json_prompt_chain
 from services.llm_service import get_model, llm_network_available
+from services.memory_service import get_memory_store
 from services.rag_corpus import (
     _extract_relevant_snippet,
     _load_all_tool_documents,
@@ -39,33 +48,31 @@ from services.rag_types import (
     CorpusDocument,
     RetrievalFlowPlan,
 )
-from services.vector_store_service import SESSION_MEMORY, embedding_backend_ready, get_collection, inject_bot_rule, query_documents
+from services.vector_store_service import embedding_backend_ready, inject_bot_rule
 from services.web_search import should_use_web_search
 
-TOOL_LEXICAL_RETRIEVAL_LIMIT = 8
-FALLBACK_LEXICAL_RETRIEVAL_LIMIT = 8
 _STUDENT_FAQ_ROUTE_CUES = (
-    "khi nào",
-    "bao giờ",
-    "ở đâu",
-    "làm sao",
+    "khi nao",
+    "bao gio",
+    "o dau",
+    "lam sao",
     "ntn",
 )
 _STUDENT_HANDBOOK_ROUTE_CUES = (
-    "điều kiện đạt danh hiệu",
-    "danh hiệu sinh viên",
-    "người học không được làm",
-    "hành vi nào",
-    "chương trình đào tạo",
-    "tổng số tín chỉ",
+    "dieu kien dat danh hieu",
+    "danh hieu sinh vien",
+    "nguoi hoc khong duoc lam",
+    "hanh vi nao",
+    "chuong trinh dao tao",
+    "tong so tin chi",
 )
 _SCHOOL_POLICY_ROUTE_CUES = (
-    "bảo hiểm y tế",
+    "bao hiem y te",
     "bhyt",
-    "chính sách",
-    "lần 1",
-    "lần 2",
-    "lần 3",
+    "chinh sach",
+    "lan 1",
+    "lan 2",
+    "lan 3",
 )
 _NORMALIZED_STUDENT_FAQ_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _STUDENT_FAQ_ROUTE_CUES)
 _NORMALIZED_STUDENT_HANDBOOK_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _STUDENT_HANDBOOK_ROUTE_CUES)
@@ -168,9 +175,9 @@ def _route_rag_tool_by_llm(message: str) -> Optional[tuple[str, str]]:
                 return FALLBACK_RAG_NODE, f"router_llm_low_conf:{confidence:.2f}"
             return tool_name, f"router_llm:{tool_name}:{confidence:.2f}"
     except FutureTimeoutError:
-        print("LLM router bị timeout, chuyển sang keyword routing.")
+        print("LLM router timed out, falling back to keyword routing.")
     except Exception as exc:
-        print(f"LLM router không khả dụng, chuyển sang keyword routing: {exc}")
+        print(f"LLM router unavailable, falling back to keyword routing: {exc}")
 
     return None
 
@@ -221,14 +228,14 @@ def _fallback_retrieval_flow(message: str, *, route: str = "flow_keyword") -> Re
         return RetrievalFlowPlan(
             source=RETRIEVAL_WEB_SEARCH,
             priority=RETRIEVAL_WEB_FIRST,
-            reason="Câu hỏi có dấu hiệu cần thông tin mới/cập nhật.",
+            reason="Realtime query likely needs web data.",
             confidence=0.55,
             route=f"{route}:web_search",
         )
     return RetrievalFlowPlan(
         source=RETRIEVAL_LOCAL_DATA,
         priority=RETRIEVAL_LOCAL_FIRST,
-        reason="Mặc định ưu tiên dữ liệu nội bộ khi không có dấu hiệu thời gian thực.",
+        reason="Default to internal data for stable institutional questions.",
         confidence=0.50,
         route=f"{route}:local_data",
     )
@@ -255,7 +262,7 @@ def _route_retrieval_flow_by_llm(message: str, rag_tool: Optional[str]) -> Optio
 
         primary_model = get_model()
         if primary_model is not None and used_model != primary_model.label:
-            print(f"Retrieval flow planner chuyển sang model fallback: {used_model}")
+            print(f"Retrieval flow planner switched to fallback model: {used_model}")
 
         payload = payload or _extract_router_json(raw_text)
         if not payload:
@@ -282,9 +289,9 @@ def _route_retrieval_flow_by_llm(message: str, rag_tool: Optional[str]) -> Optio
             route=f"flow_llm:{source}:{priority}:{confidence:.2f}",
         )
     except FutureTimeoutError:
-        print("Retrieval flow planner bị timeout, chuyển sang keyword flow.")
+        print("Retrieval flow planner timed out, falling back to keyword flow.")
     except Exception as exc:
-        print(f"Retrieval flow planner không khả dụng, chuyển sang keyword flow: {exc}")
+        print(f"Retrieval flow planner unavailable, falling back to keyword flow: {exc}")
     return None
 
 
@@ -295,20 +302,43 @@ def route_retrieval_flow(message: str, rag_tool: Optional[str] = None) -> Retrie
     return _fallback_retrieval_flow(message)
 
 
-def _plan_allows_web(plan: RetrievalFlowPlan) -> bool:
-    return plan.source in {RETRIEVAL_WEB_SEARCH, RETRIEVAL_HYBRID}
-
-
-def _plan_is_web_first(plan: RetrievalFlowPlan) -> bool:
-    return plan.priority == RETRIEVAL_WEB_FIRST or plan.source == RETRIEVAL_WEB_SEARCH
-
-
 def _build_planned_web_result(message: str, route_name: str, tool_name: Optional[str]) -> Optional[RAGResult]:
     return _build_web_knowledge_result(message, route_name=route_name, tool_name=tool_name) or _build_web_search_result(
         message,
         route_name=route_name,
         tool_name=tool_name,
     )
+
+
+def _build_retrieval_runtime() -> RetrievalRuntime:
+    return RetrievalRuntime(
+        is_ictu_related_query=is_ictu_related_query,
+        route_retrieval_flow=route_retrieval_flow,
+        build_scope_guard_result=_build_scope_guard_result,
+        build_planned_web_result=_build_planned_web_result,
+        merge_web_search_result=_merge_web_search_result,
+        build_result_from_documents=_build_result_from_documents,
+        corpus_lexical_retriever_cls=CorpusLexicalRetriever,
+        vector_store_retriever_cls=VectorStoreRetriever,
+        load_tool_corpus=_load_tool_corpus,
+        load_all_tool_documents=_load_all_tool_documents,
+        search_documents=_search_documents,
+        extract_relevant_snippet=_extract_relevant_snippet,
+        inject_bot_rule=inject_bot_rule,
+        embedding_backend_ready=embedding_backend_ready,
+        session_memory=get_memory_store(),
+        history_loader=load_chat_history,
+        list_vector_sources=list_vector_sources,
+        fetch_documents_by_source=fetch_documents_by_source,
+        search_vector_documents=search_vector_documents,
+        default_rag_tool=DEFAULT_RAG_TOOL,
+        fallback_rag_node=FALLBACK_RAG_NODE,
+        rag_tool_order=tuple(RAG_TOOL_ORDER),
+    )
+
+
+def build_retrieval_query(session_id: str, message: str) -> str:
+    return _build_retrieval_query_impl(_build_retrieval_runtime(), session_id, message)
 
 
 def retrieve_tool_context(
@@ -318,63 +348,14 @@ def retrieve_tool_context(
     route_name: str,
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
-    scope_query = build_retrieval_query(session_id, message)
-    if not is_ictu_related_query(scope_query):
-        return _build_scope_guard_result(route_name=route_name, tool_name=tool_name)
-
-    flow_plan = retrieval_plan or route_retrieval_flow(scope_query, tool_name)
-    planned_route_name = f"{route_name}|{flow_plan.route}"
-    web_result: Optional[RAGResult] = None
-
-    if _plan_allows_web(flow_plan) and _plan_is_web_first(flow_plan):
-        web_result = _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=tool_name)
-        if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
-            return web_result
-
-    lexical_documents = CorpusLexicalRetriever(
-        document_supplier=lambda: _load_tool_corpus(tool_name),
-        search_fn=_search_documents,
-        snippet_fn=_extract_relevant_snippet,
+    return _retrieve_tool_context_impl(
+        _build_retrieval_runtime(),
+        message=message,
+        session_id=session_id,
         tool_name=tool_name,
-        limit=TOOL_LEXICAL_RETRIEVAL_LIMIT,
-    ).invoke(message)
-
-    if not lexical_documents:
-        if web_result is not None:
-            return web_result
-        if _plan_allows_web(flow_plan):
-            web_result = _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=tool_name)
-            if web_result is not None:
-                return web_result
-        return retrieve_general_context(
-            message,
-            session_id,
-            route_name=planned_route_name,
-            tool_name=tool_name,
-            retrieval_plan=flow_plan,
-        )
-
-    inject_bot_rule(force_full=True)
-    result = _build_result_from_documents(
-        documents=lexical_documents,
-        tool_name=tool_name,
-        route_name=planned_route_name,
-        mode=tool_name,
+        route_name=route_name,
+        retrieval_plan=retrieval_plan,
     )
-
-    if flow_plan.source == RETRIEVAL_WEB_SEARCH:
-        web_result = web_result or _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=tool_name)
-        return web_result or result
-
-    if flow_plan.source == RETRIEVAL_HYBRID:
-        web_result = web_result or _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=tool_name)
-        return _merge_web_search_result(
-            result,
-            web_result,
-            web_first=_plan_is_web_first(flow_plan),
-        )
-
-    return result
 
 
 def retrieve_fallback_context(
@@ -383,199 +364,13 @@ def retrieve_fallback_context(
     route_name: str = "router_fallback",
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
-    scope_query = build_retrieval_query(session_id, message)
-    if not is_ictu_related_query(scope_query):
-        return _build_scope_guard_result(route_name=route_name, tool_name=FALLBACK_RAG_NODE)
-
-    flow_plan = retrieval_plan or route_retrieval_flow(scope_query, FALLBACK_RAG_NODE)
-    planned_route_name = f"{route_name}|{flow_plan.route}"
-    web_result: Optional[RAGResult] = None
-
-    if _plan_allows_web(flow_plan) and _plan_is_web_first(flow_plan):
-        web_result = _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=FALLBACK_RAG_NODE)
-        if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
-            return web_result
-
-    def _fallback_search(_: tuple[CorpusDocument, ...], query: str, limit: int = 6) -> list[tuple[int, CorpusDocument]]:
-        all_matches: list[tuple[int, CorpusDocument]] = []
-        for tool in RAG_TOOL_ORDER:
-            documents = _load_tool_corpus(tool)
-            all_matches.extend(_search_documents(documents, query, limit=2))
-        all_matches.sort(key=lambda item: item[0], reverse=True)
-        return all_matches[:limit]
-
-    fallback_documents = CorpusLexicalRetriever(
-        document_supplier=_load_all_tool_documents,
-        search_fn=_fallback_search,
-        snippet_fn=_extract_relevant_snippet,
-        tool_name=FALLBACK_RAG_NODE,
-        limit=FALLBACK_LEXICAL_RETRIEVAL_LIMIT,
-    ).invoke(message)
-
-    if not fallback_documents:
-        if web_result is not None:
-            return web_result
-        if _plan_allows_web(flow_plan):
-            web_result = _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=FALLBACK_RAG_NODE)
-            if web_result is not None:
-                return web_result
-        return retrieve_general_context(
-            message,
-            session_id,
-            route_name=planned_route_name,
-            tool_name=DEFAULT_RAG_TOOL,
-            retrieval_plan=flow_plan,
-        )
-
-    inject_bot_rule(force_full=True)
-    result = _build_result_from_documents(
-        documents=fallback_documents,
-        tool_name=FALLBACK_RAG_NODE,
-        route_name=planned_route_name,
-        mode="multi_tool_fallback_rag",
+    return _retrieve_fallback_context_impl(
+        _build_retrieval_runtime(),
+        message=message,
+        session_id=session_id,
+        route_name=route_name,
+        retrieval_plan=retrieval_plan,
     )
-
-    if flow_plan.source == RETRIEVAL_WEB_SEARCH:
-        web_result = web_result or _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=FALLBACK_RAG_NODE)
-        return web_result or result
-
-    if flow_plan.source == RETRIEVAL_HYBRID:
-        web_result = web_result or _build_planned_web_result(scope_query, route_name=planned_route_name, tool_name=FALLBACK_RAG_NODE)
-        return _merge_web_search_result(
-            result,
-            web_result,
-            web_first=_plan_is_web_first(flow_plan),
-        )
-
-    return result
-
-
-def _detect_collection_source(message_lower: str) -> Optional[str]:
-    try:
-        coll = get_collection()
-        data = coll.get(include=["metadatas"])
-    except Exception as exc:
-        print(f"Vector source detection unavailable: {exc}")
-        return None
-
-    all_sources = {m.get("source", "") for m in data.get("metadatas", []) if m}
-
-    for src in all_sources:
-        if src == "BOT_RULE":
-            continue
-        name = src.lower().replace(".md", "").replace(".markdown", "")
-        variants = [name, name.replace("-", " "), f"file {name}", f"trong {name}"]
-        if any(variant in message_lower for variant in variants if len(variant) > 2):
-            return src
-    return None
-
-
-def _normalize_message_key(text: str) -> str:
-    return re.sub(r"\s+", " ", str(text or "")).strip().casefold()
-
-
-def _get_previous_user_message_from_db(session_id: str, current_message: str) -> str:
-    try:
-        history = get_chat_history(session_id=session_id)
-    except Exception:
-        return ""
-
-    user_messages = [
-        str(item.get("content") or "").strip()
-        for item in history
-        if str(item.get("role") or "").strip().casefold() == "user"
-    ]
-    if not user_messages:
-        return ""
-
-    current_key = _normalize_message_key(current_message)
-    for candidate in reversed(user_messages):
-        normalized_candidate = _normalize_message_key(candidate)
-        if normalized_candidate and normalized_candidate != current_key:
-            return candidate
-    return ""
-
-
-def build_retrieval_query(session_id: str, message: str) -> str:
-    current_message = str(message or "").strip()
-    if not current_message:
-        return ""
-
-    previous_q = ""
-    history = SESSION_MEMORY.get(session_id)
-    if history:
-        previous_q = str(history[-1].get("query") or "").strip()
-    if not previous_q:
-        previous_q = _get_previous_user_message_from_db(session_id, current_message)
-
-    if not previous_q:
-        return current_message
-    if _normalize_message_key(previous_q) == _normalize_message_key(current_message):
-        return current_message
-    return f"{previous_q} {current_message}"
-
-
-def _build_general_fallback_result(
-    message: str,
-    route_name: str,
-    tool_name: Optional[str],
-    retrieval_plan: Optional[RetrievalFlowPlan] = None,
-) -> RAGResult:
-    flow_plan = retrieval_plan or route_retrieval_flow(message, tool_name)
-    web_result: Optional[RAGResult] = None
-
-    if _plan_allows_web(flow_plan) and _plan_is_web_first(flow_plan):
-        web_result = _build_planned_web_result(message, route_name=route_name, tool_name=tool_name)
-        if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
-            return web_result
-
-    fallback_documents = CorpusLexicalRetriever(
-        document_supplier=_load_all_tool_documents,
-        search_fn=_search_documents,
-        snippet_fn=_extract_relevant_snippet,
-        tool_name=tool_name or FALLBACK_RAG_NODE,
-        limit=FALLBACK_LEXICAL_RETRIEVAL_LIMIT,
-    ).invoke(message)
-    if fallback_documents:
-        result = _build_result_from_documents(
-            documents=fallback_documents,
-            tool_name=tool_name or FALLBACK_RAG_NODE,
-            route_name=route_name,
-            mode="lexical_fallback",
-        )
-
-        if flow_plan.source == RETRIEVAL_WEB_SEARCH:
-            web_result = web_result or _build_planned_web_result(message, route_name=route_name, tool_name=tool_name)
-            return web_result or result
-
-        if flow_plan.source == RETRIEVAL_HYBRID:
-            web_result = web_result or _build_planned_web_result(message, route_name=route_name, tool_name=tool_name)
-            return _merge_web_search_result(
-                result,
-                web_result,
-                web_first=_plan_is_web_first(flow_plan),
-            )
-
-        return result
-
-    result = RAGResult(
-        context_text="Thông tin đang được cập nhật.",
-        chunks=[],
-        target_file=None,
-        mode="lexical_fallback_empty",
-        sources=[],
-        chunks_used=0,
-        rag_tool=tool_name,
-        rag_route=route_name,
-    )
-
-    if _plan_allows_web(flow_plan):
-        return _merge_web_search_result(
-            result,
-            web_result or _build_planned_web_result(message, route_name=route_name, tool_name=tool_name),
-            web_first=_plan_is_web_first(flow_plan),
-        )
-    return result
 
 
 def retrieve_general_context(
@@ -585,64 +380,14 @@ def retrieve_general_context(
     tool_name: Optional[str] = None,
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
-    query_for_retrieval = build_retrieval_query(session_id, message)
-    if not is_ictu_related_query(query_for_retrieval):
-        return _build_scope_guard_result(route_name=route_name, tool_name=tool_name)
-
-    flow_plan = retrieval_plan or route_retrieval_flow(query_for_retrieval, tool_name)
-    planned_route_name = route_name if f"|{flow_plan.route}" in route_name else f"{route_name}|{flow_plan.route}"
-    web_result: Optional[RAGResult] = None
-
-    if _plan_allows_web(flow_plan) and _plan_is_web_first(flow_plan):
-        web_result = _build_planned_web_result(query_for_retrieval, route_name=planned_route_name, tool_name=tool_name)
-        if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
-            return web_result
-
-    message_lower = message.lower()
-    target_file = None
-
-    if not embedding_backend_ready():
-        return _build_general_fallback_result(message, planned_route_name, tool_name, retrieval_plan=flow_plan)
-
-    try:
-        target_file = _detect_collection_source(message_lower)
-        documents = VectorStoreRetriever(
-            query_fn=query_documents,
-            collection_getter=get_collection,
-            user_id=session_id,
-            n_results=100,
-            alpha=0.7,
-            target_source=target_file,
-        ).invoke(query_for_retrieval)
-        mode = "forced_file" if target_file else "hybrid_search"
-    except Exception as exc:
-        print(f"Vector retrieval unavailable, using lexical fallback: {exc}")
-        return _build_general_fallback_result(message, planned_route_name, tool_name, retrieval_plan=flow_plan)
-
-    inject_bot_rule(force_full=True)
-    result = _build_result_from_documents(
-        documents=documents,
+    return _retrieve_general_context_impl(
+        _build_retrieval_runtime(),
+        message=message,
+        session_id=session_id,
+        route_name=route_name,
         tool_name=tool_name,
-        route_name=planned_route_name,
-        mode=mode,
-        target_file=target_file,
-        context_max_chunks=25,
+        retrieval_plan=retrieval_plan,
     )
-    unique_sources = result.sources
-
-    if flow_plan.source == RETRIEVAL_WEB_SEARCH:
-        web_result = web_result or _build_planned_web_result(query_for_retrieval, route_name=planned_route_name, tool_name=tool_name)
-        return web_result or result
-
-    if flow_plan.source == RETRIEVAL_HYBRID or (not unique_sources and _plan_allows_web(flow_plan)):
-        web_result = web_result or _build_planned_web_result(query_for_retrieval, route_name=planned_route_name, tool_name=tool_name)
-        return _merge_web_search_result(
-            result,
-            web_result,
-            web_first=_plan_is_web_first(flow_plan),
-        )
-
-    return result
 
 
 def retrieve_context(message: str, session_id: str) -> RAGResult:

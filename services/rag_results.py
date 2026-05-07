@@ -6,6 +6,8 @@ from langchain_core.documents import Document
 
 from config.rag_tools import FALLBACK_RAG_NODE
 from models.chat import RAGResult, RetrievedChunk
+from services.citation_service import merge_sources, sources_from_metadata
+from services.context_builder import DEFAULT_CONTEXT_TEXT, build_context_entry, build_context_text
 from services.ictu_scope_service import ICTU_SCOPE_REPLY_VI, normalize_scope_text
 from services.langchain_retrievers import WebKnowledgeRetriever, WebSearchRetriever
 from services.rag_corpus import _extract_relevant_snippet, _tokenize
@@ -14,10 +16,7 @@ from services.web_knowledge_service import search_trusted_web_knowledge
 from services.web_search import search_web_ictu
 
 
-DEFAULT_CONTEXT_TEXT = "Thông tin đang được cập nhật."
-_UNTITLED_SENTINELS = ("Không có tiêu đề",)
 _EMPTY_CONTEXT_SENTINELS = (DEFAULT_CONTEXT_TEXT, "")
-_NORMALIZED_UNTITLED_SENTINELS = tuple(normalize_scope_text(marker) for marker in _UNTITLED_SENTINELS)
 _NORMALIZED_EMPTY_CONTEXT_SENTINELS = tuple(normalize_scope_text(marker) for marker in _EMPTY_CONTEXT_SENTINELS)
 
 
@@ -48,28 +47,19 @@ def _build_result_from_documents(
 
     for chunk in limited_chunks:
         metadata = chunk.metadata
-        source = str(metadata.get("source", "") or "")
         title = str(metadata.get("title", "") or "").strip()
         context_entry = str(metadata.get("context_entry", "") or "").strip()
 
-        if source and source != "BOT_RULE":
-            extra_sources = metadata.get("sources")
-            if isinstance(extra_sources, list):
-                sources.extend(str(item) for item in extra_sources if item)
-            else:
-                sources.append(source)
+        sources = merge_sources(sources, sources_from_metadata(metadata))
+        context_parts.append(
+            build_context_entry(
+                title=title,
+                text=chunk.document,
+                context_entry=context_entry,
+            )
+        )
 
-        if context_entry:
-            context_parts.append(context_entry)
-            continue
-
-        text = chunk.document.strip().replace("\n", " ")[:2000]
-        if title and normalize_scope_text(title) not in _NORMALIZED_UNTITLED_SENTINELS:
-            context_parts.append(f"[{title}]\n{text}")
-        else:
-            context_parts.append(text)
-
-    context_text = "\n\n".join(context_parts) if context_parts else DEFAULT_CONTEXT_TEXT
+    context_text = build_context_text(context_parts)
     chunks_used = len(limited_chunks)
 
     return RAGResult(
@@ -77,7 +67,7 @@ def _build_result_from_documents(
         chunks=chunks,
         target_file=target_file,
         mode=mode,
-        sources=list(dict.fromkeys(source for source in sources if source)),
+        sources=sources,
         chunks_used=chunks_used,
         rag_tool=tool_name,
         rag_route=route_name,
@@ -100,7 +90,7 @@ def _build_result_from_matches(
     for score, doc in matches:
         snippet = _extract_relevant_snippet(doc, message, query_tokens)
         context_parts.append(f"[{doc.title} | source: {doc.source} | score: {score}]\n{snippet}")
-        sources.append(doc.source)
+        sources = merge_sources(sources, [doc.source])
         chunks.append(
             RetrievedChunk(
                 document=snippet,
@@ -114,13 +104,13 @@ def _build_result_from_matches(
             )
         )
 
-    context_text = "\n\n".join(context_parts) if context_parts else DEFAULT_CONTEXT_TEXT
+    context_text = build_context_text(context_parts)
     return RAGResult(
         context_text=context_text,
         chunks=chunks,
         target_file=None,
         mode=mode,
-        sources=list(dict.fromkeys(sources)),
+        sources=sources,
         chunks_used=len(chunks),
         rag_tool=tool_name,
         rag_route=route_name,
@@ -157,14 +147,14 @@ def _merge_web_search_result(local_result: RAGResult, web_result: Optional[RAGRe
         context_text = f"{local_result.context_text}\n\n{web_result.context_text}"
 
     chunks = [*web_result.chunks, *local_result.chunks] if web_first else [*local_result.chunks, *web_result.chunks]
-    sources = [*web_result.sources, *local_result.sources] if web_first else [*local_result.sources, *web_result.sources]
+    sources = merge_sources(web_result.sources, local_result.sources) if web_first else merge_sources(local_result.sources, web_result.sources)
 
     return RAGResult(
         context_text=context_text,
         chunks=chunks,
         target_file=local_result.target_file,
         mode=f"{local_result.mode}+web_search",
-        sources=list(dict.fromkeys(sources)),
+        sources=sources,
         chunks_used=local_result.chunks_used + web_result.chunks_used,
         rag_tool=local_result.rag_tool,
         rag_route=local_result.rag_route,
@@ -205,17 +195,10 @@ def build_context_from_chunks(chunks: list[RetrievedChunk], max_chunks: int = 25
     sources: list[str] = []
 
     for chunk in chunks[:max_chunks]:
-        title = chunk.metadata.get("title", "").strip()
-        text = chunk.document.strip().replace("\n", " ")[:2000]
-        source = chunk.metadata.get("source", "")
+        metadata = dict(chunk.metadata or {})
+        title = str(metadata.get("title", "") or "").strip()
+        context_parts.append(build_context_entry(title=title, text=chunk.document))
+        sources = merge_sources(sources, sources_from_metadata(metadata))
 
-        if source and source != "BOT_RULE":
-            sources.append(source)
-
-        if title and normalize_scope_text(title) not in _NORMALIZED_UNTITLED_SENTINELS:
-            context_parts.append(f"[{title}]\n{text}")
-        else:
-            context_parts.append(text)
-
-    context_text = "\n\n".join(context_parts) if context_parts else DEFAULT_CONTEXT_TEXT
+    context_text = build_context_text(context_parts)
     return context_text, sources

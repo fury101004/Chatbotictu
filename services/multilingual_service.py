@@ -6,13 +6,21 @@ from config.system_prompt import get_system_prompt
 from config.rag_tools import get_tool_profile, is_valid_rag_tool
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from shared.prompt_loader import render_prompt
+from services.session_service import (
+    append_session_history,
+    get_last_call_at,
+    get_session_history,
+    get_session_language,
+    get_session_state,
+    mark_call,
+    set_session_language,
+)
 
 from services.langchain_service import invoke_text_prompt_chain
 from services.llm_service import get_model, resolve_model_choice
 from services.ictu_scope_service import normalize_scope_text
 
-SESSIONS: Dict[str, Dict[str, Any]] = {}
-LAST_CALL: Dict[str, float] = {}
 _GENERATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
     [
         MessagesPlaceholder("history"),
@@ -31,7 +39,7 @@ DANGEROUS_KEYWORDS = [
     "def ",
     "import ",
     "from ",
-    "SESSIONS",
+    "session_state",
     "BOT_RULE_FULL",
     "safety_settings",
     "BLOCK_NONE",
@@ -67,9 +75,7 @@ _NORMALIZED_VIETNAMESE_SWITCH_MARKERS = tuple(normalize_scope_text(marker) for m
 
 
 def _get_session(sid: str) -> Dict[str, Any]:
-    if sid not in SESSIONS:
-        SESSIONS[sid] = {"lang": "vi", "history": []}
-    return SESSIONS[sid]
+    return get_session_state(sid)
 
 
 def _detect_switch(text: str) -> Optional[str]:
@@ -83,7 +89,7 @@ def _detect_switch(text: str) -> Optional[str]:
 
 
 def get_current_language(sid: str) -> str:
-    return _get_session(sid).get("lang", "vi") or "vi"
+    return get_session_language(sid)
 
 
 def _clean_context(context_text: str) -> str:
@@ -224,28 +230,25 @@ def _build_final_prompt(
         )
         privacy_instruction = "Không nêu tên nguồn, tên file, route, tool hay chi tiết hệ thống nội bộ."
 
-    return f"""{system_prompt}
-
-{rules_heading}:
-- {language_instruction}
-- {scope_instruction}
-- If prior chat history conflicts with the current context, prioritize the current context.
-- {context_instruction}
-- {qa_instruction}
-- {clarification_instruction}
-- Reply with exactly "{no_info_reply}" only when the current context is empty or not relevant to the user's question.
-- {ambiguity_instruction}
-- {privacy_instruction}
-
-{output_heading}:
-{output_instruction}
-
-{context_heading}:
-{safe_context}
-
-{question_heading}:
-{user_question}
-"""
+    return render_prompt(
+        "rag_prompt.md",
+        system_prompt=system_prompt,
+        rules_heading=rules_heading,
+        language_instruction=language_instruction,
+        scope_instruction=scope_instruction,
+        context_instruction=context_instruction,
+        qa_instruction=qa_instruction,
+        clarification_instruction=clarification_instruction,
+        no_info_reply=no_info_reply,
+        ambiguity_instruction=ambiguity_instruction,
+        privacy_instruction=privacy_instruction,
+        output_heading=output_heading,
+        output_instruction=output_instruction,
+        context_heading=context_heading,
+        safe_context=safe_context,
+        question_heading=question_heading,
+        user_question=user_question,
+    )
 
 
 def chat_multilingual(
@@ -259,34 +262,35 @@ def chat_multilingual(
 
     switch = _detect_switch(user_question)
     if switch:
-        session["lang"] = switch
+        set_session_language(session_id, switch)
         reply = "Đã chuyển sang tiếng Việt." if switch == "vi" else "Switched to English."
-        session["history"].extend(
+        append_session_history(
+            session_id,
             [
                 {"role": "user", "content": user_question},
                 {"role": "model", "content": reply},
-            ]
+            ],
         )
-        session["history"] = session["history"][-30:]
         return reply, "local:language_switch"
 
-    current_lang = session.get("lang", "vi") or "vi"
+    current_lang = get_session_language(session_id)
 
     if any(keyword in user_question.lower() for keyword in ["ai viết", "ai code", "source", "file nào", "who wrote"]):
         reply = "Thông tin này hiện chưa công khai." if current_lang == "vi" else "This information is not public."
-        session["history"].extend(
+        append_session_history(
+            session_id,
             [
                 {"role": "user", "content": user_question},
                 {"role": "model", "content": reply},
-            ]
+            ],
         )
-        session["history"] = session["history"][-30:]
         return reply, "local:guardrail"
 
     now = time.time()
-    if session_id in LAST_CALL and now - LAST_CALL[session_id] < 0.7:
+    last_call_at = get_last_call_at(session_id)
+    if last_call_at is not None and now - last_call_at < 0.7:
         time.sleep(0.5)
-    LAST_CALL[session_id] = now
+    mark_call(session_id, now)
 
     safe_context = _clean_context(context_text) or _empty_context_text(current_lang)
     system_prompt = get_system_prompt().strip()
@@ -297,7 +301,7 @@ def chat_multilingual(
         user_question,
         rag_tool=rag_tool,
     )
-    history_messages = _session_history_to_lc_messages(session["history"])
+    history_messages = _session_history_to_lc_messages(get_session_history(session_id))
 
     if get_model() is None:
         reply = (
@@ -305,13 +309,13 @@ def chat_multilingual(
             if current_lang == "vi"
             else "The AI assistant is not configured yet. Please check GROQ_API_KEY or your Ollama configuration and try again."
         )
-        session["history"].extend(
+        append_session_history(
+            session_id,
             [
                 {"role": "user", "content": user_question},
                 {"role": "model", "content": reply},
-            ]
+            ],
         )
-        session["history"] = session["history"][-30:]
         return reply, "unconfigured"
 
     for attempt in range(3):
@@ -334,13 +338,13 @@ def chat_multilingual(
                 print(f"chat_multilingual switched to fallback model: {used_model}")
 
             if reply:
-                session["history"].extend(
+                append_session_history(
+                    session_id,
                     [
                         {"role": "user", "content": user_question},
                         {"role": "model", "content": reply},
-                    ]
+                    ],
                 )
-                session["history"] = session["history"][-30:]
                 return reply, used_model
         except Exception as exc:
             print(f"LLM error (attempt {attempt + 1}): {exc}")

@@ -1,16 +1,24 @@
-﻿from config.settings import settings
+from __future__ import annotations
+
+"""Deprecated compatibility shim for legacy imports.
+
+Use `shared.text_utils` for normalization/tokenization helpers.
+This module remains only to avoid breaking external imports during the
+incremental refactor.
+"""
+
+from config.settings import settings
 
 
 def split_text(text: str, chunk_size=None, chunk_overlap=None):
-    words = text.split()
+    words = str(text or "").split()
     size = chunk_size or settings.CHUNK_SIZE
     overlap = chunk_overlap or settings.CHUNK_OVERLAP
     chunks = []
-    i = 0
-    while i < len(words):
-        chunk = " ".join(words[i : i + size])
-        chunks.append(chunk)
-        i += size - overlap
+    index = 0
+    while index < len(words):
+        chunks.append(" ".join(words[index : index + size]))
+        index += max(1, size - overlap)
     return chunks or [""]
 
 

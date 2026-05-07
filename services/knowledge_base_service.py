@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -6,10 +6,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Optional
 import re
-import sqlite3
-import unicodedata
 
-from config.db import get_approved_chat_entry_ids, get_approved_chat_qas, get_conn, upsert_approved_chat_qa
 from config.rag_tools import (
     DEFAULT_RAG_TOOL,
     RAG_TOOL_ORDER,
@@ -20,15 +17,27 @@ from config.rag_tools import (
     is_valid_rag_tool,
 )
 from config.settings import settings
+from repositories.conversation_repository import list_chat_history_rows
+from repositories.knowledge_base_repository import (
+    list_approved_chat_entry_ids,
+    list_approved_chat_qas,
+    save_approved_chat_qa,
+)
+from repositories.vector_repository import list_vector_chunks
+from shared.text_utils import normalize_search_text, tokenize_search_text
+from shared.vector_utils import display_vector_source, infer_vector_tool_name
 from services.ictu_scope_service import ICTU_SCOPE_REPLY_VI, is_ictu_related_query
-from services.rag_service import clear_rag_corpus_cache
-from services.vector_store_service import add_documents, embedding_backend_ready, get_client
+from services.rag_corpus import clear_rag_corpus_cache
+from services.vector_store_service import add_documents, embedding_backend_ready
 
 
 MAX_VECTOR_CONTENT_CHARS = 7000
 MAX_CHAT_SNIPPET_CHARS = 700
 MAX_VECTOR_SNIPPET_CHARS = 700
 APPROVED_CHAT_SUBDIR = "_knowledge_base_chat"
+get_approved_chat_entry_ids = list_approved_chat_entry_ids
+get_approved_chat_qas = list_approved_chat_qas
+upsert_approved_chat_qa = save_approved_chat_qa
 
 
 @dataclass(slots=True)
@@ -59,16 +68,13 @@ class ChatKnowledgeEntry:
 
 
 def _normalize_search_text(text: str) -> str:
-    lowered = unicodedata.normalize("NFKD", text.casefold())
-    lowered = "".join(ch for ch in lowered if not unicodedata.combining(ch))
-    lowered = lowered.replace("đ", "d").replace("&", " va ")
-    lowered = re.sub(r"\s+", " ", lowered)
-    return lowered.strip()
+    return normalize_search_text(text)
+
 
 
 def _tokenize_query(query: str) -> list[str]:
-    normalized = _normalize_search_text(query)
-    return [token for token in re.findall(r"[a-z0-9]+", normalized) if len(token) > 1]
+    return tokenize_search_text(query)
+
 
 
 def _score_text_match(query: str, *, title: str, body: str, source: str) -> int:
@@ -130,54 +136,8 @@ def _display_timestamp(raw_timestamp: str) -> str:
         return raw_timestamp or "Vua xong"
 
 
-def _chat_history_has_session_id(cursor: sqlite3.Cursor) -> bool:
-    cursor.execute("PRAGMA table_info(chat_history)")
-    return "session_id" in [column[1] for column in cursor.fetchall()]
-
-
 def _fetch_chat_rows() -> list[dict]:
-    conn = get_conn()
-    cursor = conn.cursor()
-
-    if _chat_history_has_session_id(cursor):
-        cursor.execute(
-            """
-            SELECT id, role, content, timestamp, session_id
-            FROM chat_history
-            ORDER BY id ASC
-            """
-        )
-        rows = [
-            {
-                "id": row_id,
-                "role": role,
-                "content": content or "",
-                "timestamp": timestamp or "",
-                "session_id": session_id or "default",
-            }
-            for row_id, role, content, timestamp, session_id in cursor.fetchall()
-        ]
-    else:
-        cursor.execute(
-            """
-            SELECT id, role, content, timestamp
-            FROM chat_history
-            ORDER BY id ASC
-            """
-        )
-        rows = [
-            {
-                "id": row_id,
-                "role": role,
-                "content": content or "",
-                "timestamp": timestamp or "",
-                "session_id": "default",
-            }
-            for row_id, role, content, timestamp in cursor.fetchall()
-        ]
-
-    conn.close()
-    return rows
+    return list_chat_history_rows()
 
 
 def _build_chat_entry_id(session_id: str, answer_row_id: int) -> str:
@@ -287,18 +247,18 @@ def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> 
         "",
         f"# {title}",
         "",
-        "## Câu hỏi",
+        "## CĂ¢u há»i",
         "",
         entry.question.strip(),
         "",
-        "## Trả lời đã duyệt",
+        "## Tráº£ lá»i Ä‘Ă£ duyá»‡t",
         "",
         entry.answer.strip(),
         "",
         "## Ghi chu",
         "",
-        "- Nguồn này được tạo từ cặp hỏi đáp chatbot đã duyệt thủ công.",
-        "- Có thể được đồng bộ vào vector store để dùng lại trong retrieval.",
+        "- Nguá»“n nĂ y Ä‘Æ°á»£c táº¡o tá»« cáº·p há»i Ä‘Ă¡p chatbot Ä‘Ă£ duyá»‡t thá»§ cĂ´ng.",
+        "- CĂ³ thá»ƒ Ä‘Æ°á»£c Ä‘á»“ng bá»™ vĂ o vector store Ä‘á»ƒ dĂ¹ng láº¡i trong retrieval.",
         "",
     ]
     return "\n".join(lines)
@@ -307,7 +267,7 @@ def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> 
 def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict:
     entry = get_chat_entry_by_id(entry_id)
     if entry is None:
-        raise ValueError("Không tìm thấy cặp hỏi đáp chatbot để duyệt.")
+        raise ValueError("KhĂ´ng tĂ¬m tháº¥y cáº·p há»i Ä‘Ă¡p chatbot Ä‘á»ƒ duyá»‡t.")
 
     selected_tool = tool_name if is_valid_rag_tool(tool_name) else DEFAULT_RAG_TOOL
     filename = _approved_chat_filename(entry)
@@ -342,9 +302,9 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
             )
             indexed = True
         except Exception as exc:
-            warning = f"Đã lưu Q&A đã duyệt nhưng chưa index được vào vector store: {exc}"
+            warning = f"ÄĂ£ lÆ°u Q&A Ä‘Ă£ duyá»‡t nhÆ°ng chÆ°a index Ä‘Æ°á»£c vĂ o vector store: {exc}"
     else:
-        warning = "Đã lưu Q&A đã duyệt vào knowledge base, nhưng embedding backend chưa sẵn sàng để index."
+        warning = "ÄĂ£ lÆ°u Q&A Ä‘Ă£ duyá»‡t vĂ o knowledge base, nhÆ°ng embedding backend chÆ°a sáºµn sĂ ng Ä‘á»ƒ index."
 
     clear_rag_corpus_cache()
     return {
@@ -356,40 +316,15 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
         "indexed": indexed,
         "warning": warning,
         "message": (
-            "Đã duyệt Q&A vào knowledge base và index vector store."
+            "ÄĂ£ duyá»‡t Q&A vĂ o knowledge base vĂ  index vector store."
             if indexed
-            else "Đã duyệt Q&A vào knowledge base."
+            else "ÄĂ£ duyá»‡t Q&A vĂ o knowledge base."
         ),
     }
 
 
-def _infer_vector_tool_name(source: str, raw_tool_name: Optional[str]) -> str:
-    if raw_tool_name in RAG_TOOL_PROFILES:
-        return str(raw_tool_name)
-
-    normalized_source = str(source or "").replace("\\", "/")
-    if normalized_source.startswith("uploads/"):
-        parts = PurePosixPath(normalized_source).parts
-        if len(parts) >= 3 and parts[1] in RAG_TOOL_PROFILES:
-            return parts[1]
-
-    inferred_tool = detect_tool_from_path(settings.QA_CORPUS_ROOT / Path(normalized_source))
-    if inferred_tool in RAG_TOOL_PROFILES:
-        return str(inferred_tool)
-
-    return DEFAULT_RAG_TOOL
-
-
-def _display_vector_source(source: str) -> str:
-    normalized_source = str(source or "").replace("\\", "/")
-    if not normalized_source:
-        return "unknown.md"
-    return PurePosixPath(normalized_source).name or normalized_source
-
-
 def _load_vector_entries() -> tuple[list[VectorKnowledgeEntry], int]:
-    coll = get_client().get_or_create_collection(name="markdown_docs_v2")
-    raw = coll.get(include=["documents", "metadatas"])
+    raw = list_vector_chunks()
 
     grouped: dict[str, dict] = {}
     total_chunks = 0
@@ -404,7 +339,7 @@ def _load_vector_entries() -> tuple[list[VectorKnowledgeEntry], int]:
             source,
             {
                 "source": source,
-                "tool_name": _infer_vector_tool_name(source, (metadata or {}).get("tool_name")),
+                "tool_name": infer_vector_tool_name(source, (metadata or {}).get("tool_name")) or DEFAULT_RAG_TOOL,
                 "titles": [],
                 "documents": [],
             },
@@ -431,7 +366,7 @@ def _load_vector_entries() -> tuple[list[VectorKnowledgeEntry], int]:
         entries.append(
             VectorKnowledgeEntry(
                 source=source,
-                display_name=_display_vector_source(source),
+                display_name=display_vector_source(source),
                 tool_name=tool_name,
                 tool_label=tool_label,
                 chunk_count=len(bucket["documents"]),
@@ -574,20 +509,20 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         vector_entries, total_chunks = _load_vector_entries()
     except Exception as exc:
         vector_entries, total_chunks = [], 0
-        vector_warning = f"Vector store tạm thời chưa đọc được: {exc}"
+        vector_warning = f"Vector store táº¡m thá»i chÆ°a Ä‘á»c Ä‘Æ°á»£c: {exc}"
 
     try:
         chat_entries = _load_chat_entries()
     except Exception as exc:
         chat_entries = []
-        chat_warning = f"Chat history tạm thời chưa đọc được: {exc}"
+        chat_warning = f"Chat history táº¡m thá»i chÆ°a Ä‘á»c Ä‘Æ°á»£c: {exc}"
 
     try:
         approved_chat_entries = get_approved_chat_qas()
     except Exception as exc:
         approved_chat_entries = []
         if not chat_warning:
-            chat_warning = f"Không đọc được danh sách Q&A đã duyệt: {exc}"
+            chat_warning = f"KhĂ´ng Ä‘á»c Ä‘Æ°á»£c danh sĂ¡ch Q&A Ä‘Ă£ duyá»‡t: {exc}"
     cleaned_query = query.strip()
 
     vector_results: list[dict] = []
@@ -634,3 +569,4 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         "chat_results": chat_results,
         "search_results": merged_results,
     }
+

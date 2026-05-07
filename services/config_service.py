@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from config.db import set_config
 from config.settings import settings
 from config.system_prompt import get_system_prompt, save_system_prompt
+from repositories.config_repository import set_runtime_config
 from services.llm_service import PRIMARY_MODEL_NAME, get_configured_model_labels, model_rotation_mode
 
 
@@ -47,10 +47,10 @@ def update_runtime_config(
 
     settings.CHUNK_SIZE = chunk_size
     settings.CHUNK_OVERLAP = chunk_overlap
-    set_config("chunk_size", str(chunk_size))
-    set_config("chunk_overlap", str(chunk_overlap))
+    set_runtime_config("chunk_size", str(chunk_size))
+    set_runtime_config("chunk_overlap", str(chunk_overlap))
     cleaned_prompt = save_system_prompt(bot_rules)
-    set_config("bot_rules", cleaned_prompt)
+    set_runtime_config("bot_rules", cleaned_prompt)
 
     need_reingest = (old_chunk != chunk_size or old_overlap != chunk_overlap) or reingest
     msg = "Lưu cấu hình thành công!"

@@ -4,13 +4,18 @@ import hashlib
 import json
 import os
 import re
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
-from config.db import get_conn
+from repositories.web_knowledge_repository import (
+    count_trusted_web_knowledge,
+    ensure_web_knowledge_schema as ensure_web_knowledge_schema_in_repo,
+    increment_web_knowledge_hits,
+    list_trusted_web_knowledge_rows,
+    upsert_web_knowledge_entry,
+)
 from services.ictu_scope_service import is_ictu_related_query, normalize_scope_text
 
 
@@ -130,54 +135,13 @@ def _is_realtime_query(query: str) -> bool:
 
 
 def ensure_web_knowledge_schema() -> None:
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS web_search_knowledge (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content_hash TEXT UNIQUE NOT NULL,
-            status TEXT NOT NULL DEFAULT 'candidate',
-            question TEXT NOT NULL,
-            answer TEXT NOT NULL,
-            sources_json TEXT NOT NULL DEFAULT '[]',
-            source_text TEXT NOT NULL DEFAULT '',
-            rag_tool TEXT,
-            rag_route TEXT,
-            llm_model TEXT,
-            confidence_score REAL NOT NULL DEFAULT 0,
-            hit_count INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            expires_at TEXT
-        )
-        """
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_web_search_knowledge_status_expires "
-        "ON web_search_knowledge(status, expires_at)"
-    )
-    conn.commit()
-    conn.close()
+    ensure_web_knowledge_schema_in_repo()
 
 
 def trusted_web_knowledge_count() -> int:
     ensure_web_knowledge_schema()
     now_text = _iso(_now())
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT COUNT(*)
-        FROM web_search_knowledge
-        WHERE status = 'trusted'
-          AND (expires_at IS NULL OR expires_at = '' OR expires_at > ?)
-        """,
-        (now_text,),
-    )
-    count = int(cursor.fetchone()[0] or 0)
-    conn.close()
-    return count
+    return count_trusted_web_knowledge(now_text)
 
 
 def web_knowledge_ready() -> bool:
@@ -220,59 +184,25 @@ def save_web_search_answer(
     expires_at = _iso(now + timedelta(days=ttl_days))
     content_hash = _entry_hash(question, sources)
 
-    ensure_web_knowledge_schema()
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO web_search_knowledge (
-            content_hash, status, question, answer, sources_json, source_text,
-            rag_tool, rag_route, llm_model, confidence_score, hit_count,
-            created_at, updated_at, expires_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-        ON CONFLICT(content_hash) DO UPDATE SET
-            status = CASE
-                WHEN web_search_knowledge.status = 'trusted' THEN 'trusted'
-                ELSE excluded.status
-            END,
-            answer = excluded.answer,
-            sources_json = excluded.sources_json,
-            source_text = excluded.source_text,
-            rag_tool = excluded.rag_tool,
-            rag_route = excluded.rag_route,
-            llm_model = excluded.llm_model,
-            confidence_score = MAX(web_search_knowledge.confidence_score, excluded.confidence_score),
-            updated_at = excluded.updated_at,
-            expires_at = excluded.expires_at
-        """,
-        (
-            content_hash,
-            status,
-            question.strip(),
-            answer.strip(),
-            json.dumps(sources, ensure_ascii=False),
-            source_text[:8000],
-            rag_tool,
-            rag_route,
-            llm_model,
-            confidence_score,
-            _iso(now),
-            _iso(now),
-            expires_at,
-        ),
+    entry_id = upsert_web_knowledge_entry(
+        content_hash=content_hash,
+        status=status,
+        question=question.strip(),
+        answer=answer.strip(),
+        sources_json=json.dumps(sources, ensure_ascii=False),
+        source_text=source_text[:8000],
+        rag_tool=rag_tool,
+        rag_route=rag_route,
+        llm_model=llm_model,
+        confidence_score=confidence_score,
+        created_at=_iso(now),
+        updated_at=_iso(now),
+        expires_at=expires_at,
     )
-    conn.commit()
-    cursor.execute(
-        "SELECT id FROM web_search_knowledge WHERE content_hash = ?",
-        (content_hash,),
-    )
-    row = cursor.fetchone()
-    conn.close()
     return {
         "saved": True,
         "status": status,
-        "entry_id": int(row[0]) if row else None,
+        "entry_id": entry_id,
         "trusted_count": trusted_web_knowledge_count(),
     }
 
@@ -283,22 +213,7 @@ def search_trusted_web_knowledge(query: str, *, limit: int = 4) -> list[WebKnowl
 
     ensure_web_knowledge_schema()
     now_text = _iso(_now())
-    conn = get_conn()
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT id, question, answer, sources_json, source_text, status, expires_at
-        FROM web_search_knowledge
-        WHERE status = 'trusted'
-          AND (expires_at IS NULL OR expires_at = '' OR expires_at > ?)
-        ORDER BY updated_at DESC
-        LIMIT 300
-        """,
-        (now_text,),
-    )
-    rows = cursor.fetchall()
-    conn.close()
+    rows = list_trusted_web_knowledge_rows(now_text, limit=300)
 
     scored: list[WebKnowledgeMatch] = []
     for row in rows:
@@ -328,12 +243,8 @@ def search_trusted_web_knowledge(query: str, *, limit: int = 4) -> list[WebKnowl
     scored.sort(key=lambda item: item.score, reverse=True)
     matches = scored[:limit]
     if matches:
-        conn = get_conn()
-        cursor = conn.cursor()
-        cursor.executemany(
-            "UPDATE web_search_knowledge SET hit_count = hit_count + 1, updated_at = ? WHERE id = ?",
-            [(_iso(_now()), match.entry_id) for match in matches],
+        increment_web_knowledge_hits(
+            [match.entry_id for match in matches],
+            updated_at=_iso(_now()),
         )
-        conn.commit()
-        conn.close()
     return matches

@@ -1,4 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+"""Compatibility wrapper for LangGraph-backed chat orchestration.
+
+The main chat flow now routes through lightweight orchestrators. This module
+stays in place so existing imports do not break while the graph boundary is
+reduced incrementally.
+"""
 
 from collections.abc import Callable
 from typing import Any, Optional
@@ -173,9 +180,3 @@ class RAGChatGraph:
 
     def invoke(self, state: ChatGraphState) -> ChatGraphState:
         return self._graph.invoke(state)
-
-
-
-
-
-

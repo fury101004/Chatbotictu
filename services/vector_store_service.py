@@ -36,19 +36,23 @@ import json
 from functools import lru_cache
 from datetime import datetime
 from collections import defaultdict, deque
-import tiktoken  
 import unicodedata
 
 from config.settings import settings
+from pipelines.chunking_pipeline import (
+    extract_academic_year as extract_academic_year_from_content,
+    infer_document_type as infer_document_type_from_content,
+    smart_chunk as build_smart_chunks,
+)
+from pipelines.embedding_pipeline import (
+    build_embedding_function as build_embedding_function_from_pipeline,
+    embedding_backend_ready as embedding_backend_ready_from_pipeline,
+)
+from pipelines.indexing_pipeline import index_document
+from shared.token_utils import count_text_tokens
+from services.memory_service import SESSION_MEMORY, clear_memory_store
 
 # Metadata (title, level, source, word_count) được dùng để cho biết chunk đến từ đâu, thuộc phần nào, quan trọng cỡ nào và hiển thị preview
-
-_ACADEMIC_YEAR_RE = re.compile(r"\b(20\d{2})\s*[-/]\s*(20\d{2})\b")
-_SINGLE_YEAR_RE = re.compile(r"\b(20\d{2})\b")
-_PAGE_PATTERNS = (
-    re.compile(r"^(?:trang|page)\s*[:\-]?\s*(\d{1,4})(?:\b|/)", re.IGNORECASE),
-    re.compile(r"^\[\s*(?:trang|page)\s*(\d{1,4})\s*\]", re.IGNORECASE),
-)
 
 # Vector embeddings chỉ được load khi thật sự cần để app vẫn có thể boot offline.
 EMBEDDING_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
@@ -56,10 +60,6 @@ ef = None
 
 # Chroma client cũng được khởi tạo lazy để tránh side effects lúc import module.
 client = None
-
-# Dùng để đếm token (rất quan trọng khi chunk và tính context length cho LLM)
-# Lazy-load tiktoken so the web app can boot even on low-memory machines.
-encoding = None
 
 # Đường dẫn file nội quy bot
 BOT_RULE_PATH = Path(settings.BOT_RULE_PATH)
@@ -69,8 +69,6 @@ BOT_RULE_SHORT = "# Quy tắc bot\nTrả lời ngắn gọn, tiếng Việt, ch�
 
 # Memory ngắn hạn cho từng user → hỗ trợ hỏi follow-up thì bot nhớ
 # user_id → deque(maxlen=6) tức nhớ tối đa 3 lượt hỏi-đáp (6 tin nhắn)
-SESSION_MEMORY: Dict[str, deque] = defaultdict(lambda: deque(maxlen=6))
-
 # Thống kê hiệu năng để sau này làm dashboard
 STATS = {
     "total_queries": 0,
@@ -108,31 +106,17 @@ def get_client():
 
 
 def count_tokens(text: str) -> int:
-    global encoding
-    if encoding is None:
-        try:
-            encoding = tiktoken.get_encoding("cl100k_base")
-        except (MemoryError, OSError):
-            # Approximate fallback keeps upload/chunking usable when tiktoken
-            # cannot load its BPE table in the current environment.
-            return max(1, len(text.split()))
-    return len(encoding.encode(text))
+    return count_text_tokens(text)
 
 
 def get_embedding_function():
     global ef
     if ef is None:
-        local_model_path = _resolve_local_embedding_model_path()
-        use_local_model = local_model_path is not None
-        if use_local_model:
-            os.environ["HF_HUB_OFFLINE"] = "1"
-            os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
-        model_name = str(local_model_path) if use_local_model else EMBEDDING_MODEL_NAME
-        print(f"Loading embedding model: {model_name}")
-        ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=model_name,
-            local_files_only=use_local_model,
+        ef = build_embedding_function_from_pipeline(
+            current_embedding_function=ef,
+            resolve_local_model_path=_resolve_local_embedding_model_path,
+            embedding_factory=embedding_functions.SentenceTransformerEmbeddingFunction,
+            model_name=EMBEDDING_MODEL_NAME,
         )
     return ef
 
@@ -172,17 +156,12 @@ def _resolve_local_embedding_model_path() -> Optional[Path]:
 
 
 def embedding_backend_ready() -> bool:
-    local_model_path = _resolve_local_embedding_model_path()
-    if local_model_path is not None:
-        print(f"Embedding backend ready via local cache: {local_model_path}")
-        return True
-
-    try:
-        with socket.create_connection(("huggingface.co", 443), timeout=0.75):
-            return True
-    except OSError as exc:
-        print(f"Embedding backend unavailable, skip vector indexing: {exc}")
-        return False
+    return embedding_backend_ready_from_pipeline(
+        resolve_local_model_path=_resolve_local_embedding_model_path,
+        network_host="huggingface.co",
+        network_port=443,
+        timeout=0.75,
+    )
 
 
 def _clear_embedding_backend_ready_cache() -> None:
@@ -279,218 +258,24 @@ def _top_bm25_candidates(query: str, limit: int) -> tuple[Dict[str, float], list
     ][:limit]
     return _normalize_scores(raw_scores), ranked_ids
 
-# 3. SMART CHUNKING – Chia nhỏ file thành các chunk thông minh
-def _detect_chunk_type(text: str) -> str:
-    if "```" in text:
-        return "code"
-    if any(c in text for c in ["│", "┃", "├", "┣", "┳", "═"]):
-        return "table"
-    if re.search(r'^[-*•]\s', text, re.M):
-        return "list"
-    return "text"
-
-
-def _split_text_windows(text: str, max_words: int, overlap_words: int) -> List[str]:
-    words = text.split()
-    if not words:
-        return []
-
-    if max_words <= 0 or len(words) <= max_words:
-        return [text.strip()]
-
-    overlap_words = max(0, min(overlap_words, max_words - 1))
-    step = max(1, max_words - overlap_words)
-    windows: List[str] = []
-    start = 0
-
-    while start < len(words):
-        window = " ".join(words[start : start + max_words]).strip()
-        if window:
-            windows.append(window)
-        if start + max_words >= len(words):
-            break
-        start += step
-
-    return windows
-
-
-def _tail_overlap_text(text: str, overlap_words: int) -> str:
-    if overlap_words <= 0:
-        return ""
-    words = text.split()
-    if not words:
-        return ""
-    return " ".join(words[-overlap_words:]).strip()
-
-
-def _extract_page_number(line: str) -> Optional[int]:
-    candidate = line.strip()
-    if not candidate:
-        return None
-
-    for pattern in _PAGE_PATTERNS:
-        match = pattern.search(candidate)
-        if match:
-            try:
-                return int(match.group(1))
-            except (TypeError, ValueError):
-                return None
-    return None
-
-
+# 3. SMART CHUNKING – delegated to ingestion pipeline
 def _extract_academic_year(source_name: str, filename: str, content: str) -> Optional[str]:
-    combined = f"{source_name}\n{filename}\n{content[:8000]}"
-    matches = [
-        (int(match.group(1)), int(match.group(2)))
-        for match in _ACADEMIC_YEAR_RE.finditer(combined)
-    ]
-    if matches:
-        start, end = max(matches, key=lambda pair: (pair[1], pair[0]))
-        return f"{start}-{end}"
-
-    years = sorted({int(match.group(1)) for match in _SINGLE_YEAR_RE.finditer(combined)})
-    if len(years) >= 2:
-        for index in range(len(years) - 1, 0, -1):
-            prev_year = years[index - 1]
-            current_year = years[index]
-            if current_year - prev_year == 1:
-                return f"{prev_year}-{current_year}"
-    return None
+    return extract_academic_year_from_content(source_name, filename, content)
 
 
 def _infer_document_type(source_name: str, filename: str, tool_name: Optional[str], content: str) -> str:
-    haystack = f"{source_name} {filename}".casefold()
-    content_lower = content.casefold()
-
-    if haystack.endswith(".questions.md") or "**question:**" in content_lower or "**q:**" in content_lower:
-        return "qa_pair"
-    if tool_name == "student_handbook_rag":
-        return "student_handbook"
-    if tool_name == "school_policy_rag":
-        return "school_policy"
-    if tool_name == "student_faq_rag":
-        return "student_faq"
-
-    if any(keyword in haystack for keyword in ["quyet dinh", "quy dinh", "quy che", "thong tu", "nghi dinh", "luat"]):
-        return "policy_document"
-    if any(keyword in haystack for keyword in ["so tay", "handbook", "cam nang"]):
-        return "handbook_document"
-    return "general_document"
+    return infer_document_type_from_content(source_name, filename, tool_name, content)
 
 
 def smart_chunk(content: str, filename: str, source_name: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    Chunk theo:
-        • Heading (# ## ### ####)
-        • Không cắt ngang code block (```)
-        • Sử dụng chunk size/chunk overlap theo cấu hình runtime
-        • Ghi lại level/title để UI và retrieval khai thác metadata tốt hơn
-    """
-    lines = content.split("\n")
-    max_words = max(1, int(getattr(settings, "CHUNK_SIZE", 1000) or 1000))
-    overlap_words = max(0, int(getattr(settings, "CHUNK_OVERLAP", 200) or 0))
-    overlap_words = min(overlap_words, max_words - 1) if max_words > 1 else 0
-
-    chunks = []
-    buffer = []
-    buffer_word_count = 0
-    default_title = Path(source_name or filename).stem
-    current_title = default_title
-    current_level = 1
-    current_chapter = default_title
-    current_section = default_title
-    current_page_number: Optional[int] = None
-    heading_stack: Dict[int, str] = {1: default_title}
-    in_code_block = False
-    buffer_is_overlap_seed = False
-
-    def flush_buffer(*, preserve_overlap: bool = False):
-        nonlocal buffer, buffer_word_count, buffer_is_overlap_seed
-        if not buffer:
-            return
-
-        text = "\n".join(buffer).strip()
-        if not text:
-            buffer.clear()
-            buffer_word_count = 0
-            buffer_is_overlap_seed = False
-            return
-
-        if buffer_is_overlap_seed and not preserve_overlap:
-            buffer.clear()
-            buffer_word_count = 0
-            buffer_is_overlap_seed = False
-            return
-
-        chunk_type = _detect_chunk_type(text)
-        if chunk_type in {"code", "table"}:
-            segments = [text]
-        else:
-            segments = _split_text_windows(
-                text,
-                max_words=max_words,
-                overlap_words=overlap_words if preserve_overlap else 0,
-            )
-
-        for segment in segments:
-            chunks.append(
-                {
-                    "text": segment,
-                    "title": current_title,
-                    "level": current_level,
-                    "chapter": current_chapter,
-                    "section": current_section,
-                    "page_number": current_page_number,
-                    "token_count": count_tokens(segment),
-                    "word_count": len(segment.split()),
-                    "type": chunk_type,
-                }
-            )
-
-        if preserve_overlap and overlap_words > 0 and chunk_type not in {"code", "table"}:
-            overlap_text = _tail_overlap_text(text, overlap_words)
-            buffer = [overlap_text] if overlap_text else []
-            buffer_word_count = len(overlap_text.split()) if overlap_text else 0
-            buffer_is_overlap_seed = bool(overlap_text)
-        else:
-            buffer.clear()
-            buffer_word_count = 0
-            buffer_is_overlap_seed = False
-
-    for line in lines:
-        line = line.rstrip()
-        detected_page_number = _extract_page_number(line)
-        if detected_page_number is not None:
-            current_page_number = detected_page_number
-
-        if line.startswith("```"):
-            in_code_block = not in_code_block
-
-        if re.match(r'^#{1,4}\s', line):
-            flush_buffer()
-            heading_level = len(line) - len(line.lstrip('#'))
-            current_title = line.lstrip("# ").strip()
-            current_level = heading_level
-            if not current_title:
-                current_title = f"Heading cap {heading_level}"
-
-            heading_stack[heading_level] = current_title
-            for level in list(heading_stack):
-                if level > heading_level:
-                    del heading_stack[level]
-            current_chapter = heading_stack.get(1) or heading_stack.get(2) or default_title
-            current_section = " > ".join(heading_stack[level] for level in sorted(heading_stack))
-
-        buffer.append(line)
-        buffer_word_count += len(line.split())
-        if buffer_is_overlap_seed and len(buffer) > 1:
-            buffer_is_overlap_seed = False
-
-        if buffer_word_count > max_words and not in_code_block:
-            flush_buffer(preserve_overlap=True)
-
-    flush_buffer()
-    return chunks
+    return build_smart_chunks(
+        content,
+        filename,
+        source_name=source_name,
+        chunk_size=settings.CHUNK_SIZE,
+        chunk_overlap=settings.CHUNK_OVERLAP,
+        count_tokens_fn=count_tokens,
+    )
 
 # 4. ADD DOCUMENTS – Xóa cũ, thêm mới, tự động chunk
 def _build_chunk_id_prefix(source_name: str) -> str:
@@ -512,58 +297,19 @@ def add_documents(
     - Chunk thông minh
     - Add từng batch nhỏ để tránh treo khi file siêu to
     """
-    coll = get_collection()
-    clean_name = (source_name or Path(filename).name).strip()
-    if not clean_name:
-        clean_name = Path(filename).name or "document.md"
-
-    # Xóa toàn bộ chunk cũ của file này (nếu có)
-    coll.delete(where={"source": clean_name})
-    # Xử lý chunk b3
-    selected_tool_name = str(tool_name or "unassigned")
-    academic_year = _extract_academic_year(clean_name, filename, file_content)
-    document_type = _infer_document_type(clean_name, filename, selected_tool_name, file_content)
-    chunks = smart_chunk(file_content, filename, source_name=clean_name)
-    if not chunks:
-        print(f"No chunks generated from {filename}")
-        return
-    """"""
-    docs = [c["text"] for c in chunks]
-    metadatas = [{
-        "source": clean_name, #Tên file gốc → biết chunk này đến từ file nào, dùng để filter khi user nhắc tới file cụ thể (forced_file mode).
-        "title": c["title"], #Tên heading của chunk → dùng để hiển thị, phân loại, biết chunk này thuộc phần nào trong file.
-        "title_clean": re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', '', c["title"].lower())).strip(),
-        "level": c.get("level", 1),
-        "chunk_type": c["type"],
-        "token_count": c["token_count"],
-        "word_count": c.get("word_count", len(c["text"].split())),
-        "file_name": Path(clean_name).name,
-        "academic_year": academic_year or "",
-        "chapter": c.get("chapter", ""),
-        "section": c.get("section", c.get("title", "")),
-        "page_number": c.get("page_number") if c.get("page_number") is not None else -1,
-        "document_type": document_type,
-        "created_at": datetime.now().isoformat(),
-        "version": version,
-        "tool_name": selected_tool_name,
-    } for c in chunks]
-
-    # Tạo ID duy nhất cho từng chunk:
-    id_prefix = _build_chunk_id_prefix(clean_name)
-    ids = [f"{id_prefix}__{i:05d}" for i in range(len(chunks))]
-
-    # Add từng batch 50 chunk để không bị lag khi file 10k+ dòng
-    batch_size = 50
-    for i in range(0, len(docs), batch_size):
-        coll.add(
-            documents=docs[i:i+batch_size],
-            metadatas=metadatas[i:i+batch_size],
-            ids=ids[i:i+batch_size]
-        )
-
-    print(f"Added {len(chunks)} chunks from {clean_name} (version {version})")
-    _rebuild_bm25()          # cập nhật BM25
-    inject_bot_rule()        # đảm bảo rule vẫn sống
+    index_document(
+        file_content=file_content,
+        filename=filename,
+        version=version,
+        source_name=source_name,
+        tool_name=tool_name,
+        collection_getter=get_collection,
+        smart_chunk_fn=smart_chunk,
+        extract_academic_year_fn=_extract_academic_year,
+        infer_document_type_fn=_infer_document_type,
+        rebuild_bm25_fn=_rebuild_bm25,
+        inject_bot_rule_fn=inject_bot_rule,
+    )
 
 
 # b5. INJECT BOT RULE dựa vào file bot-rule.md để Đảm bảo khi LLM lấy context, rule luôn được ưu tiên 
@@ -740,7 +486,7 @@ def reset_vectorstore():
     _all_ids = []
     _all_tokenized = []
     _last_count = -1
-    SESSION_MEMORY.clear()
+    clear_memory_store()
     STATS["popular_files"].clear()
     STATS["total_queries"] = 0
     print("Da reset toan bo vector store!")

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import socket
-from dataclasses import dataclass
 from functools import lru_cache
 from threading import Lock
 from typing import Any, Optional
@@ -11,6 +10,9 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 
+from providers.base_llm_provider import ModelCandidate, ProviderResponse
+from providers.provider_factory import create_llm_providers
+from shared.message_utils import message_content
 from services.rate_limit_monitor import record_429
 
 load_dotenv()
@@ -39,24 +41,8 @@ MODEL_DISPLAY_NAMES = {
 }
 _MODEL_ROTATION_LOCK = Lock()
 _MODEL_ROTATION_INDEX = 0
-
-
-@dataclass(slots=True)
-class LLMResponse:
-    text: str
-
-    def __iter__(self):
-        yield self
-
-
-@dataclass(frozen=True, slots=True)
-class ModelCandidate:
-    provider: str
-    model: str
-
-    @property
-    def label(self) -> str:
-        return f"{self.provider}:{self.model}"
+_PROVIDERS = create_llm_providers()
+LLMResponse = ProviderResponse
 
 
 def _split_env_list(value: str, default: list[str]) -> list[str]:
@@ -80,16 +66,12 @@ def _ollama_models() -> list[str]:
     return _split_env_list(configured, DEFAULT_OLLAMA_MODEL_ORDER)
 
 
-def _groq_api_key() -> str:
-    return os.getenv("GROQ_API_KEY", "").strip()
-
-
 def _groq_base_url() -> str:
-    return os.getenv("GROQ_API_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
+    return _PROVIDERS["groq"].base_url()
 
 
 def _ollama_base_url() -> str:
-    return os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+    return _PROVIDERS["ollama"].base_url()
 
 
 def model_rotation_mode() -> str:
@@ -99,18 +81,26 @@ def model_rotation_mode() -> str:
     return "round_robin"
 
 
+def _configured_models_for_provider(provider_name: str) -> list[str]:
+    if provider_name == "groq":
+        return _groq_models()
+    if provider_name == "ollama":
+        return _ollama_models()
+    return []
+
+
 def _model_candidates(preferred_model: str = PRIMARY_MODEL_NAME) -> list[ModelCandidate]:
     candidates: list[ModelCandidate] = []
-    for provider in _provider_order():
-        if provider == "groq":
-            if not _groq_api_key():
-                continue
-            models = _groq_models()
-            if preferred_model and preferred_model in models:
-                models = [preferred_model, *[model for model in models if model != preferred_model]]
-            candidates.extend(ModelCandidate("groq", model) for model in models)
-        elif provider == "ollama":
-            candidates.extend(ModelCandidate("ollama", model) for model in _ollama_models())
+    for provider_name in _provider_order():
+        provider = _PROVIDERS.get(provider_name)
+        if provider is None or not provider.available():
+            continue
+        candidates.extend(
+            provider.list_models(
+                _configured_models_for_provider(provider_name),
+                preferred_model=preferred_model,
+            )
+        )
     return candidates
 
 
@@ -212,19 +202,6 @@ def llm_network_available(timeout: float = 0.75) -> bool:
     return False
 
 
-def _message_content(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        return "".join(_message_content(item) for item in value)
-    if isinstance(value, dict):
-        if "text" in value:
-            return str(value["text"])
-        if "content" in value:
-            return _message_content(value["content"])
-    return str(value)
-
-
 def _to_chat_messages(contents: Any) -> list[dict[str, str]]:
     if isinstance(contents, str):
         return [{"role": "user", "content": contents}]
@@ -233,7 +210,7 @@ def _to_chat_messages(contents: Any) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
         for item in contents:
             if not isinstance(item, dict):
-                messages.append({"role": "user", "content": _message_content(item)})
+                messages.append({"role": "user", "content": message_content(item)})
                 continue
 
             role = str(item.get("role", "user")).lower()
@@ -243,48 +220,15 @@ def _to_chat_messages(contents: Any) -> list[dict[str, str]]:
                 role = "user"
 
             if "parts" in item:
-                content = _message_content(item["parts"])
+                content = message_content(item["parts"])
             else:
-                content = _message_content(item.get("content", ""))
+                content = message_content(item.get("content", ""))
             if content.strip():
                 messages.append({"role": role, "content": content})
         if messages:
             return messages
 
-    return [{"role": "user", "content": _message_content(contents)}]
-
-
-def _timeout_seconds(request_options: Optional[dict]) -> float:
-    if not request_options:
-        return 90.0
-    try:
-        return float(request_options.get("timeout", 90))
-    except (TypeError, ValueError):
-        return 90.0
-
-
-def _generation_options(generation_config: Optional[dict]) -> dict[str, Any]:
-    generation_config = generation_config or {}
-    options: dict[str, Any] = {}
-    if "temperature" in generation_config:
-        options["temperature"] = generation_config["temperature"]
-    if "top_p" in generation_config:
-        options["top_p"] = generation_config["top_p"]
-    if "max_output_tokens" in generation_config:
-        options["max_tokens"] = generation_config["max_output_tokens"]
-    elif "max_tokens" in generation_config:
-        options["max_tokens"] = generation_config["max_tokens"]
-    if generation_config.get("response_mime_type") == "application/json":
-        options["response_format"] = {"type": "json_object"}
-    return options
-
-
-def _is_rate_limited_error(exc: Exception) -> bool:
-    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
-        return exc.response.status_code == 429
-
-    normalized = str(exc).casefold()
-    return "429" in normalized or "rate limit" in normalized or "too many requests" in normalized
+    return [{"role": "user", "content": message_content(contents)}]
 
 
 def _call_groq(
@@ -294,28 +238,12 @@ def _call_groq(
     generation_config: Optional[dict],
     request_options: Optional[dict],
 ) -> LLMResponse:
-    options = _generation_options(generation_config)
-    payload: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-    }
-    if "max_tokens" in options:
-        payload["max_completion_tokens"] = options.pop("max_tokens")
-    payload.update(options)
-
-    response = httpx.post(
-        f"{_groq_base_url()}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {_groq_api_key()}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=_timeout_seconds(request_options),
+    return _PROVIDERS["groq"].invoke(
+        model=model,
+        messages=messages,
+        generation_config=generation_config,
+        request_options=request_options,
     )
-    response.raise_for_status()
-    data = response.json()
-    text = data["choices"][0]["message"].get("content") or ""
-    return LLMResponse(text=text.strip())
 
 
 def _call_ollama(
@@ -325,32 +253,20 @@ def _call_ollama(
     generation_config: Optional[dict],
     request_options: Optional[dict],
 ) -> LLMResponse:
-    generation_config = generation_config or {}
-    options: dict[str, Any] = {}
-    if "temperature" in generation_config:
-        options["temperature"] = generation_config["temperature"]
-    if "top_p" in generation_config:
-        options["top_p"] = generation_config["top_p"]
-    if "max_output_tokens" in generation_config:
-        options["num_predict"] = generation_config["max_output_tokens"]
-
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "options": options,
-    }
-    if generation_config.get("response_mime_type") == "application/json":
-        payload["format"] = "json"
-    response = httpx.post(
-        f"{_ollama_base_url()}/api/chat",
-        json=payload,
-        timeout=_timeout_seconds(request_options),
+    return _PROVIDERS["ollama"].invoke(
+        model=model,
+        messages=messages,
+        generation_config=generation_config,
+        request_options=request_options,
     )
-    response.raise_for_status()
-    data = response.json()
-    text = (data.get("message") or {}).get("content") or data.get("response") or ""
-    return LLMResponse(text=text.strip())
+
+
+def _is_rate_limited_error(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        return exc.response.status_code == 429
+
+    normalized = str(exc).casefold()
+    return "429" in normalized or "rate limit" in normalized or "too many requests" in normalized
 
 
 def generate_content_with_fallback(

@@ -2,28 +2,24 @@ from __future__ import annotations
 
 import logging
 import re
-import time
-from datetime import datetime
 
-from config.db import save_message
-from config.rag_tools import DEFAULT_RAG_TOOL, FALLBACK_RAG_NODE
+from orchestrators.chat_orchestrator import process_chat_message as process_chat_message_via_orchestrator
+from orchestrators.rag_orchestrator import retrieve_context as retrieve_rag_context, route_tool as route_rag_tool_via_orchestrator
+from config.rag_tools import DEFAULT_RAG_TOOL
 from models.chat import ChatGraphState, RAGResult
+from repositories.conversation_repository import save_conversation_message
+from shared.prompt_loader import render_prompt
 from services.intent_service import detect_intent, get_intent_response
 from services.ictu_scope_service import normalize_scope_text
+from services.memory_service import append_retrieval_memory
 from services.moderation_service import contains_swear, get_swear_response
 from services.multilingual_service import chat_multilingual, get_current_language
 from services.quick_reply_service import get_quick_response
-from services.rag_service import (
-    retrieve_fallback_context,
-    retrieve_general_context,
-    retrieve_tool_context,
-    route_rag_tool,
-)
-from services.vector_store_service import SESSION_MEMORY
 from services.web_knowledge_service import save_web_search_answer
 
 
 logger = logging.getLogger("chat_agent")
+save_message = save_conversation_message
 
 _MISSING_CONTEXT_TEXTS = (
     "",
@@ -61,6 +57,49 @@ _NORMALIZED_POLICY_TIMEFRAME_MARKERS = tuple(normalize_scope_text(marker) for ma
 _NORMALIZED_PROGRAM_SCOPE_MARKERS = tuple(normalize_scope_text(marker) for marker in _PROGRAM_SCOPE_MARKERS)
 _NORMALIZED_GRADUATION_ROUND_MARKERS = tuple(normalize_scope_text(marker) for marker in _GRADUATION_ROUND_MARKERS)
 _NORMALIZED_SCHEDULE_MARKERS = tuple(normalize_scope_text(marker) for marker in _SCHEDULE_MARKERS)
+
+
+def route_rag_tool(message: str) -> tuple[str, str]:
+    return route_rag_tool_via_orchestrator(message)
+
+
+def retrieve_tool_context(
+    *,
+    message: str,
+    session_id: str,
+    tool_name: str,
+    route_name: str,
+) -> RAGResult:
+    return retrieve_rag_context(
+        message=message,
+        session_id=session_id,
+        route_name=route_name,
+        rag_tool=tool_name,
+    )
+
+
+def retrieve_fallback_context(*, message: str, session_id: str, route_name: str) -> RAGResult:
+    return retrieve_rag_context(
+        message=message,
+        session_id=session_id,
+        route_name=route_name,
+        rag_tool="fallback_rag",
+    )
+
+
+def retrieve_general_context(
+    *,
+    message: str,
+    session_id: str,
+    route_name: str,
+    tool_name: str | None = None,
+) -> RAGResult:
+    return retrieve_rag_context(
+        message=message,
+        session_id=session_id,
+        route_name=route_name,
+        rag_tool=tool_name,
+    )
 
 
 def _log_step(step: str, state: ChatGraphState, **payload: object) -> None:
@@ -194,7 +233,6 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
 
     route_name = state.get("rag_route", "general_rag")
     rag_tool = state.get("rag_tool") or DEFAULT_RAG_TOOL
-
     if rag_tool == "student_handbook_rag":
         result = retrieve_tool_context(
             message=state["message"],
@@ -216,7 +254,7 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
             tool_name="student_faq_rag",
             route_name=route_name,
         )
-    elif rag_tool == FALLBACK_RAG_NODE:
+    elif rag_tool == "fallback_rag":
         result = retrieve_fallback_context(
             message=state["message"],
             session_id=state["session_id"],
@@ -249,7 +287,11 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
 
 def _fallback_kb_reply(state: ChatGraphState) -> str:
     if state.get("needs_clarification") and state.get("clarification_question"):
-        return state["clarification_question"]
+        return render_prompt(
+            "fallback_prompt.md",
+            primary_message="",
+            clarification_question=state["clarification_question"],
+        )
     return (
         "Mình chưa tìm thấy thông tin phù hợp trong Knowledge Base hiện tại. "
         "Bạn có thể nói rõ hơn câu hỏi hoặc nêu thêm mốc như năm học, khóa, học kỳ hay đợt áp dụng không?"
@@ -317,17 +359,15 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
         )
 
     if state.get("chunks"):
-        SESSION_MEMORY[session_id].append(
-            {
-                "query": message,
-                "timestamp": datetime.now().isoformat(),
-                "sources": state.get("sources", []),
-                "retrieved_ids": [
-                    chunk.metadata.get("path", chunk.metadata.get("id", ""))
-                    for chunk in state.get("chunks", [])[:25]
-                ],
-                "rag_tool": state.get("rag_tool"),
-            }
+        append_retrieval_memory(
+            session_id,
+            query=message,
+            sources=state.get("sources", []),
+            retrieved_ids=[
+                chunk.metadata.get("path", chunk.metadata.get("id", ""))
+                for chunk in state.get("chunks", [])[:25]
+            ],
+            rag_tool=state.get("rag_tool"),
         )
 
     state["language"] = get_current_language(session_id)
@@ -340,48 +380,16 @@ def get_chat_graph_engine() -> str:
 
 
 async def process_chat_message(message: str, session_id: str = "default", llm_model: str = "auto") -> dict:
-    started_at = time.perf_counter()
-    state: ChatGraphState = {
-        "message": message,
-        "session_id": session_id,
-        "selected_llm_model": llm_model,
-    }
-
-    for step in (
-        _normalize_input,
-        _classify_intent,
-        _route_rag_tool_step,
-        _retrieve_context,
-        _generate_answer,
-        _save_history,
-    ):
-        state = step(state)
-        if state.get("stop_graph"):
-            break
-
-    response_time_ms = int((time.perf_counter() - started_at) * 1000)
-    state["response_time_ms"] = response_time_ms
-    result = {
-        "response": state.get("response", ""),
-        "language": state.get("language"),
-        "intent": state.get("intent"),
-        "needs_clarification": state.get("needs_clarification"),
-        "response_time_ms": response_time_ms,
-    }
-
-    if state.get("sources") is not None:
-        result["sources"] = state.get("sources", [])
-    if state.get("mode") is not None:
-        result["mode"] = state.get("mode")
-    if state.get("chunks_used") is not None:
-        result["chunks_used"] = state.get("chunks_used")
-    if state.get("rag_tool") is not None:
-        result["rag_tool"] = state.get("rag_tool")
-    if state.get("rag_route") is not None:
-        result["rag_route"] = state.get("rag_route")
-    if state.get("llm_model") is not None:
-        result["llm_model"] = state.get("llm_model")
-    if state.get("web_kb_status") is not None:
-        result["web_kb_status"] = state.get("web_kb_status")
-
-    return result
+    return await process_chat_message_via_orchestrator(
+        message=message,
+        session_id=session_id,
+        llm_model=llm_model,
+        steps=(
+            _normalize_input,
+            _classify_intent,
+            _route_rag_tool_step,
+            _retrieve_context,
+            _generate_answer,
+            _save_history,
+        ),
+    )

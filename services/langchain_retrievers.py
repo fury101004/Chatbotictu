@@ -7,6 +7,8 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import ConfigDict, Field
 
+from shared.text_utils import tokenize_search_text
+
 
 class CorpusLexicalRetriever(BaseRetriever):
     document_supplier: Any = Field(exclude=True)
@@ -48,19 +50,13 @@ class CorpusLexicalRetriever(BaseRetriever):
 
     @staticmethod
     def _tokenize(text: str) -> list[str]:
-        import re
-        import unicodedata
-
-        normalized = unicodedata.normalize("NFKD", text.casefold())
-        normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-        normalized = normalized.replace("đ", "d").replace("&", " va ")
-        normalized = re.sub(r"\s+", " ", normalized).strip()
-        return [token for token in re.findall(r"[a-z0-9]+", normalized) if len(token) > 1]
+        return tokenize_search_text(text)
 
 
 class VectorStoreRetriever(BaseRetriever):
     query_fn: Any = Field(exclude=True)
     collection_getter: Any = Field(exclude=True)
+    source_lookup_fn: Any = Field(default=None, exclude=True)
     user_id: str = "default"
     n_results: int = 100
     alpha: float = 0.7
@@ -77,10 +73,13 @@ class VectorStoreRetriever(BaseRetriever):
         del run_manager
 
         if self.target_source:
-            collection = self.collection_getter()
-            data = collection.get(where={"source": self.target_source}, include=["documents", "metadatas"])
-            documents = data.get("documents", [])
-            metadatas = data.get("metadatas", [])
+            if self.source_lookup_fn is not None:
+                documents, metadatas = self.source_lookup_fn(self.target_source)
+            else:
+                collection = self.collection_getter()
+                data = collection.get(where={"source": self.target_source}, include=["documents", "metadatas"])
+                documents = data.get("documents", [])
+                metadatas = data.get("metadatas", [])
         else:
             documents, metadatas, _ = self.query_fn(
                 query,

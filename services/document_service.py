@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import shutil
-import sqlite3
 import time
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
-from config.db import add_uploaded_file, clear_uploaded_files, delete_uploaded_file, get_uploaded_files
 from config.rag_tools import (
     DEFAULT_RAG_TOOL,
     RAG_TOOL_ORDER,
@@ -22,10 +19,24 @@ from config.rag_tools import (
 )
 from config.settings import settings
 from models.document import HistoryEntry, UploadBatchResult, VectorManagerPayload
-from services.rag_service import clear_rag_corpus_cache
-from services.vector_store_service import add_documents, embedding_backend_ready, get_collection, reset_vectorstore
+from repositories.conversation_repository import get_chat_history_page
+from repositories.upload_repository import (
+    clear_uploaded_file_records,
+    list_uploaded_files,
+    record_uploaded_file,
+    remove_uploaded_file,
+)
+from repositories.vector_repository import (
+    delete_vector_source,
+    get_vector_collection as get_collection,
+)
+from shared.vector_utils import display_vector_source, infer_vector_tool_name
+from services.rag_corpus import clear_rag_corpus_cache
+from services.vector_store_service import add_documents, embedding_backend_ready, reset_vectorstore
 
 SUPPORTED_TEXT_SUFFIXES = {".md", ".markdown", ".txt"}
+get_uploaded_files = list_uploaded_files
+add_uploaded_file = record_uploaded_file
 
 
 def _iter_importable_paths(root: Path) -> list[Path]:
@@ -214,7 +225,6 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     if reset_first:
         reset_vectorstore()
 
-    coll = get_collection()
     imported_files = 0
     failed_sources: list[str] = []
 
@@ -233,7 +243,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
             failed_sources.append(source_name)
 
     clear_rag_corpus_cache()
-    total_chunks = coll.count()
+    total_chunks = get_collection().count()
     status = "success" if imported_files > 0 and not failed_sources else "partial" if imported_files > 0 else "error"
     action = "Reset + import" if reset_first else "Import"
     msg = (
@@ -269,9 +279,9 @@ def delete_uploaded_document(source_name: str) -> None:
 
     for candidate in candidate_sources:
         resolve_upload_source_path(candidate).unlink(missing_ok=True)
-        delete_uploaded_file(candidate)
+        remove_uploaded_file(candidate)
         try:
-            get_collection().delete(where={"source": candidate})
+            delete_vector_source(candidate)
         except Exception as exc:
             print(f"Bỏ qua xóa vector cho {candidate}: {exc}")
     clear_rag_corpus_cache()
@@ -285,38 +295,8 @@ def reset_document_store() -> None:
         shutil.rmtree(settings.RAG_UPLOAD_ROOT)
     settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     settings.RAG_UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-    clear_uploaded_files()
+    clear_uploaded_file_records()
     clear_rag_corpus_cache()
-
-
-def _infer_vector_tool_name(source: str, raw_tool_name: Optional[str]) -> Optional[str]:
-    if is_valid_rag_tool(raw_tool_name):
-        return str(raw_tool_name)
-
-    normalized_source = str(source or "").replace("\\", "/")
-    if not normalized_source or normalized_source == "BOT_RULE":
-        return None
-
-    path_parts = PurePosixPath(normalized_source).parts
-    if len(path_parts) >= 3 and path_parts[0] == UPLOAD_SOURCE_PREFIX and is_valid_rag_tool(path_parts[1]):
-        return path_parts[1]
-
-    inferred_tool = detect_tool_from_path(settings.QA_CORPUS_ROOT / Path(normalized_source))
-    if is_valid_rag_tool(inferred_tool):
-        return str(inferred_tool)
-
-    return DEFAULT_RAG_TOOL
-
-
-def _display_vector_source(source: str) -> str:
-    normalized_source = str(source or "").replace("\\", "/")
-    if not normalized_source:
-        return "unknown.md"
-
-    if normalized_source == "BOT_RULE":
-        return "BOT_RULE"
-
-    return PurePosixPath(normalized_source).name or normalized_source
 
 
 def _build_vector_tool_groups(chunks_by_file: dict[str, list[dict]], limit_per_file: int) -> list[dict]:
@@ -331,7 +311,7 @@ def _build_vector_tool_groups(chunks_by_file: dict[str, list[dict]], limit_per_f
         if not chunks:
             continue
 
-        tool_name = _infer_vector_tool_name(source, chunks[0].get("tool_name"))
+        tool_name = infer_vector_tool_name(source, chunks[0].get("tool_name"))
         if not is_valid_rag_tool(tool_name):
             continue
 
@@ -350,7 +330,7 @@ def _build_vector_tool_groups(chunks_by_file: dict[str, list[dict]], limit_per_f
             file_items.append(
                 {
                     "source": source,
-                    "display_name": _display_vector_source(source),
+                    "display_name": display_vector_source(source),
                     "source_label": source,
                     "chunk_count": len(sorted_items),
                     "chunks": sorted_items[:limit_per_file],
@@ -377,8 +357,7 @@ def _build_vector_tool_groups(chunks_by_file: dict[str, list[dict]], limit_per_f
 
 
 def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
-    coll = get_collection()
-    data = coll.get(include=["metadatas", "documents"])
+    data = get_collection().get(include=["metadatas", "documents"])
 
     chunks_by_file: dict[str, list[dict]] = defaultdict(list)
     for doc_id, doc, meta in zip(data["ids"], data.get("documents", []), data["metadatas"]):
@@ -470,11 +449,9 @@ def reingest_uploaded_documents() -> tuple[int, int]:
     reset_vectorstore()
     total_files = 0
     total_chunks = 0
-    coll = get_collection()
-
     for path, tool_name, source_name in source_records:
         try:
-            before_count = coll.count()
+            before_count = get_collection().count()
             text = path.read_text(encoding="utf-8", errors="ignore")
             add_documents(
                 file_content=text,
@@ -483,7 +460,7 @@ def reingest_uploaded_documents() -> tuple[int, int]:
                 tool_name=tool_name,
             )
             total_files += 1
-            total_chunks += max(coll.count() - before_count, 0)
+            total_chunks += max(get_collection().count() - before_count, 0)
         except Exception as exc:
             print(f"Re-ingest lỗi {path.name}: {exc}")
 
@@ -492,32 +469,6 @@ def reingest_uploaded_documents() -> tuple[int, int]:
 
 
 def get_history_page_data(page: int, per_page: int = 50) -> dict:
-    offset = (page - 1) * per_page
-    conn = sqlite3.connect(settings.DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM chat_history")
-    total = cursor.fetchone()[0]
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    cursor.execute(
-        "SELECT role, content, timestamp FROM chat_history ORDER BY id DESC LIMIT ? OFFSET ?",
-        (per_page, offset),
-    )
-    rows = cursor.fetchall()
-    conn.close()
-
-    history: list[HistoryEntry] = []
-    for role, content, ts in rows:
-        try:
-            time_str = datetime.strptime(ts.split(".")[0], "%Y-%m-%d %H:%M:%S").strftime("%d/%m %H:%M")
-        except Exception:
-            time_str = "Vua xong"
-        history.append(HistoryEntry(role=role, content=content, time=time_str))
-
-    return {
-        "history": [{"role": entry.role, "content": entry.content, "time": entry.time} for entry in history],
-        "uploaded_files": get_uploaded_files(),
-        "page": page,
-        "total_pages": total_pages,
-        "has_prev": page > 1,
-        "has_next": page < total_pages,
-    }
+    payload = get_chat_history_page(page=page, per_page=per_page)
+    payload["uploaded_files"] = get_uploaded_files()
+    return payload

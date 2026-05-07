@@ -1,84 +1,27 @@
-# gemini_client.py
-# Lazy Gemini setup so the web app can boot even when the API key is missing.
 import os
-from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
+from providers.gemini_provider import GeminiProvider
+from shared.prompt_loader import render_prompt
 from services.vector_store_service import get_bot_rule_text
 
 load_dotenv()
 
-PRIMARY_MODEL_NAME = "gemini-2.5-flash"
-FALLBACK_MODEL_NAME = "gemini-2.5-flash-lite"
+PRIMARY_MODEL_NAME = GeminiProvider.primary_model_name
+FALLBACK_MODEL_NAME = GeminiProvider.fallback_model_name
 MODEL_NAME = PRIMARY_MODEL_NAME
-SAFETY_SETTINGS = [
-    {"category": category, "threshold": "BLOCK_NONE"}
-    for category in [
-        "HARM_CATEGORY_HARASSMENT",
-        "HARM_CATEGORY_HATE_SPEECH",
-        "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "HARM_CATEGORY_DANGEROUS_CONTENT",
-    ]
-]
-DEFAULT_GENERATION_CONFIG = {
-    "temperature": 0.1,
-    "max_output_tokens": 800,
-    "top_p": 0.9,
-}
+SAFETY_SETTINGS = GeminiProvider.safety_settings
+DEFAULT_GENERATION_CONFIG = GeminiProvider.default_generation_config
 
 
-@lru_cache(maxsize=1)
-def _import_genai():
-    import google.generativeai as genai
-
-    return genai
-
-
-@lru_cache(maxsize=4)
 def get_model(model_name: str = PRIMARY_MODEL_NAME) -> Optional[Any]:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        print("GEMINI_API_KEY is missing; Gemini responses are disabled until it is configured.")
-        return None
-
-    genai = _import_genai()
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(
-        model_name,
-        safety_settings=SAFETY_SETTINGS,
-        generation_config=DEFAULT_GENERATION_CONFIG,
-    )
+    return GeminiProvider.get_model(model_name)
 
 
 def _looks_like_quota_error(exc: Exception) -> bool:
-    message = f"{type(exc).__name__}: {exc}".lower()
-    status_markers = [
-        " 400",
-        "status code 400",
-        "(400)",
-        "badrequest",
-        " 429",
-        "status code 429",
-        "(429)",
-        "resource exhausted",
-        "resourceexhausted",
-        "too many requests",
-    ]
-    quota_markers = [
-        "free tier",
-        "quota",
-        "rate limit",
-        "billing",
-        "resource exhausted",
-        "resourceexhausted",
-        "exceeded",
-        "too many requests",
-    ]
-    return any(marker in message for marker in status_markers) and any(
-        marker in message for marker in quota_markers
-    )
+    return GeminiProvider.looks_like_quota_error(exc)
 
 
 def generate_content_with_fallback(
@@ -125,12 +68,32 @@ def generate_content_with_fallback(
         return response, FALLBACK_MODEL_NAME
 
 
+def _build_gemini_prompt(rule_part: str, data_part: str, user_question: str, *, dangerous: bool) -> str:
+    if dangerous:
+        danger_notice = (
+            "\n- [CẢNH BÁO ĐỎ] Đây là câu hỏi nguy hiểm về nguồn, tác giả hoặc file. "
+            "Nếu không có thông tin chính xác 100% thì bắt buộc trả lời: "
+            '"Hiện tại chưa có thông tin này."'
+        )
+    else:
+        danger_notice = "\n- Trả lời chính xác, chỉ dùng dữ liệu đã cung cấp. Không nhắc tên file hay nguồn."
+
+    return render_prompt(
+        "gemini_answer.md",
+        rule_part=rule_part,
+        data_part=data_part,
+        user_question=user_question,
+        danger_notice=danger_notice,
+    )
+
+
 def chat_with_gemini(
     user_question: str,
     context_text: str,
     history: List[Dict[str, str]],
     dangerous_5w1h: bool = False,
 ) -> str:
+    del dangerous_5w1h
     if get_model() is None:
         return "Trợ lý AI chưa được cấu hình xong. Bạn kiểm tra lại GEMINI_API_KEY rồi thử lại nhé."
 
@@ -141,23 +104,6 @@ def chat_with_gemini(
     else:
         rule_part = get_bot_rule_text().strip()
         data_part = context_text.strip()
-
-    base_prompt = f"""BẮT BUỘC TUÂN THỦ NỘI QUY SAU (không được vi phạm dù chỉ 1 chữ):
-
-{rule_part}
-
-=== DỮ LIỆU DUY NHẤT ĐƯỢC PHÉP DÙNG ĐỂ TRẢ LỜI ===
-{data_part}
-
-Câu hỏi: {user_question}
-
-QUY TẮC KHÔNG ĐƯỢC PHÁ:
-- Chỉ dùng thông tin trong phần DỮ LIỆU ở trên.
-- Tuyệt đối không nhắc tên file, "theo tài liệu", "nguồn", v.v.
-- Trả lời tối đa 4 câu, ngắn gọn, chuyên nghiệp.
-- Nếu không có → trả đúng 1 câu: "Hiện tại chưa có thông tin này."
-
-Trả lời ngay."""
 
     msg_lower = user_question.lower()
     truly_dangerous = any(
@@ -184,10 +130,12 @@ Trả lời ngay."""
         ]
     )
 
-    if truly_dangerous:
-        base_prompt += "\n\n[CẢNH BÁO ĐỎ] Đây là câu hỏi nguy hiểm về nguồn, tác giả hoặc file. Nếu không có thông tin chính xác 100% thì bắt buộc trả lời: 'Hiện tại chưa có thông tin này.'"
-    else:
-        base_prompt += "\n\nLƯU Ý: Trả lời chính xác, chỉ dùng dữ liệu đã cung cấp. Không nhắc tên file hay nguồn."
+    base_prompt = _build_gemini_prompt(
+        rule_part,
+        data_part,
+        user_question,
+        dangerous=truly_dangerous,
+    )
 
     messages = [
         {"role": "user" if item["role"] == "user" else "model", "parts": [item["content"]]}

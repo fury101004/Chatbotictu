@@ -30,13 +30,24 @@ logs/
 *.log
 
 # Local app data
+.cache/
+cache/
+sessions/
+data/cache/
+data/sessions/
+uploads/
 data/uploads/
 data/rag_uploads/
 data/all_questions.md
 data/api.log
 data/bot_config.db
 data/chunks.jsonl
+*.jsonl
 data/chroma_db/
+chroma/
+faiss/
+*.faiss
+*.faiss.index
 data/_tmp_*/
 data/qa_generated/
 data/qa_generated_fixed/

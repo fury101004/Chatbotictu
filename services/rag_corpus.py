@@ -1,12 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 import re
-import unicodedata
 
 from config.rag_tools import QA_ROOT, RAG_TOOL_ORDER, RAG_UPLOAD_ROOT, get_tool_corpus_paths
+from shared.text_utils import normalize_search_text, tokenize_search_text
 
 from services.rag_types import CorpusDocument
 
@@ -16,15 +16,13 @@ _YEAR_RANGE_RE = re.compile(r"\b(20[0-9]{2})\s*[-/]\s*(20[0-9]{2})\b")
 
 
 def _normalize_for_match(text: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", text.casefold())
-    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    stripped = stripped.replace("đ", "d").replace("&", " va ")
-    return re.sub(r"\s+", " ", stripped).strip()
+    return normalize_search_text(text)
+
 
 
 def _tokenize(text: str) -> list[str]:
-    normalized = _normalize_for_match(text)
-    return [token for token in re.findall(r"[a-z0-9]+", normalized) if len(token) > 1]
+    return tokenize_search_text(text)
+
 
 
 def _extract_cohort_tags(text: str) -> frozenset[str]:
@@ -460,3 +458,4 @@ def detect_target_file(message_lower: str, documents: Optional[tuple[CorpusDocum
         if any(variant in message_lower for variant in variants if len(variant) > 2):
             return doc.source
     return None
+

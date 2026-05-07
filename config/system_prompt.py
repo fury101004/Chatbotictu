@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from config.settings import settings
+from shared.prompt_loader import load_prompt_text
 
 
 SYSTEM_PROMPT_PATH = Path(settings.SYSTEM_PROMPT_PATH)
-DEFAULT_SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "system_prompt.md"
 MINIMAL_SYSTEM_PROMPT = (
     "Ban la tro ly AI cua ICTU.\n"
     "Chi tra loi dua tren ngu canh cua luot hien tai.\n"
@@ -22,7 +22,7 @@ def _read_text(path: Path) -> str:
 
 
 def _get_default_system_prompt() -> str:
-    return _read_text(DEFAULT_SYSTEM_PROMPT_PATH) or MINIMAL_SYSTEM_PROMPT
+    return load_prompt_text("system_prompt.md") or MINIMAL_SYSTEM_PROMPT
 
 
 def read_system_prompt() -> str:

@@ -11,20 +11,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
 from pydantic import ConfigDict, Field
 
+from shared.message_utils import message_content
 from services.llm_service import PRIMARY_MODEL_NAME, generate_content_with_fallback
-
-
-def _message_content(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        return "".join(_message_content(item) for item in value)
-    if isinstance(value, dict):
-        if "text" in value:
-            return str(value["text"])
-        if "content" in value:
-            return _message_content(value["content"])
-    return str(value)
 
 
 def _base_messages_to_chat_messages(input_messages: list[BaseMessage]) -> list[dict[str, str]]:
@@ -40,7 +28,7 @@ def _base_messages_to_chat_messages(input_messages: list[BaseMessage]) -> list[d
         else:
             mapped_role = "user"
 
-        content = _message_content(getattr(message, "content", ""))
+        content = message_content(getattr(message, "content", ""))
         if content.strip():
             chat_messages.append({"role": mapped_role, "content": content})
     return chat_messages
@@ -114,7 +102,7 @@ def _parse_text_payload(message: BaseMessage) -> dict[str, str]:
     parser = StrOutputParser()
     response_metadata = getattr(message, "response_metadata", {}) or {}
     return {
-        "text": parser.parse(_message_content(getattr(message, "content", ""))),
+        "text": parser.parse(message_content(getattr(message, "content", ""))),
         "used_model": str(response_metadata.get("used_model", "")),
     }
 
@@ -122,7 +110,7 @@ def _parse_text_payload(message: BaseMessage) -> dict[str, str]:
 def _parse_json_payload(message: BaseMessage) -> dict[str, Any]:
     parser = JsonOutputParser()
     response_metadata = getattr(message, "response_metadata", {}) or {}
-    raw_text = _message_content(getattr(message, "content", ""))
+    raw_text = message_content(getattr(message, "content", ""))
     parsed: Optional[dict[str, Any]]
     try:
         parsed = parser.parse(raw_text)
