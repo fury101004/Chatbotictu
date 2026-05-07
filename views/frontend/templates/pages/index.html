@@ -1,40 +1,45 @@
 {% extends "layouts/base.html" %}
-{% block title %}Xin chào mình là ICTU{% endblock %}
+{% block title %}ICTU AI Dashboard{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1 class="hero-title">Xin chào</h1>
-    <p class="hero-subtitle">hệ thống Pro 2025 bản Việt Nam không giới hạn đã sẵn sàng</p>
+<div class="hero hero-home">
+    <span class="hero-kicker">ICTU AI Workspace</span>
+    <h1 class="hero-title">Xin chào, mình là ICTU AI</h1>
+    <p class="hero-subtitle">
+        Không gian làm việc thống nhất để trò chuyện, tải kiến thức, quản lý vector
+        và duyệt kho tri thức với bố cục rõ ràng, dễ theo dõi.
+    </p>
 </div>
 
 <div class="features-grid">
-    <div class="feature-card">
-        <h2 class="card-title orange">Chat Ngay</h2>
-        <p>Chat AI đỉnh nhất Việt Nam</p>
-        <a href="/chat" class="btn-large red">Vào Chat</a>
+    <div class="feature-card card-coral">
+        <h2 class="card-title tone-coral">Trò chuyện</h2>
+        <p>Tra cứu và hỏi đáp nhanh với trợ lý ICTU AI theo đúng ngữ cảnh hiện có.</p>
+        <a href="/chat" class="btn-large btn-coral">Mở chat</a>
     </div>
 
-    <div class="feature-card">
-        <h2 class="card-title teal">Upload Kiến Thức</h2>
-        <p>Cho bot nhớ file .md của bạn</p>
-        <a href="/data-loader" class="btn-large teal">Data Loader</a>
+    <div class="feature-card card-teal">
+        <h2 class="card-title tone-teal">Upload kiến thức</h2>
+        <p>Tải tài liệu <code>.md</code>, <code>.markdown</code> hoặc <code>.txt</code> vào đúng nhóm dữ liệu cho từng luồng RAG.</p>
+        <a href="/data-loader" class="btn-large btn-teal">Mở Data Loader</a>
     </div>
 
-    <div class="feature-card">
-        <h2 class="card-title purple">Vector Store</h2>
-        <p>Quản lý & xóa embeddings</p>
-        <a href="/vector-manager" class="btn-large purple">Quản Lý</a>
+    <div class="feature-card card-violet">
+        <h2 class="card-title tone-violet">Kho vector</h2>
+        <p>Theo dõi embedding, nhóm nguồn dữ liệu và dọn lại vector store khi cần.</p>
+        <a href="/vector-manager" class="btn-large btn-violet">Quản lý</a>
     </div>
 
-    <div class="feature-card">
-        <h2 class="card-title yellow">Config Prompt</h2>
-        <p>Chỉnh system prompt, bật/tắt cache</p>
-        <a href="/config" class="btn-large yellow">Config</a>
+    <div class="feature-card card-amber">
+        <h2 class="card-title tone-amber">Cấu hình</h2>
+        <p>Điều chỉnh system prompt, chunk và các thiết lập vận hành quan trọng của bot.</p>
+        <a href="/config" class="btn-large btn-amber">Mở cấu hình</a>
     </div>
-    <div class="feature-card">
-        <h2 class="card-title green">Knowledge Base</h2>
-        <p>Tra cuu kho tri thuc va duyet Q&A vao bot</p>
-        <a href="/knowledge-base" class="btn-large green">Mo KB</a>
+
+    <div class="feature-card card-lime">
+        <h2 class="card-title tone-lime">Kho tri thức</h2>
+        <p>Tra cứu câu trả lời đã duyệt và hợp nhất tri thức trước khi đưa vào hệ thống.</p>
+        <a href="/knowledge-base" class="btn-large btn-lime">Mở Knowledge Base</a>
     </div>
 </div>
 {% endblock %}

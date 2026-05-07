@@ -48,7 +48,8 @@ let currentSession = null;
 let ws;
 
 function connectWS() {
-    ws = new WebSocket(`ws://${location.host}/ws-cskh`);
+    const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(`${wsProtocol}://${location.host}/ws-cskh`);
 
     ws.onopen = () => {
         console.log("CSKH WebSocket  kt ni HON HO");
@@ -66,7 +67,10 @@ function connectWS() {
         }
         else if (d.type === "count") {
             document.getElementById("count").textContent = d.count;
-            document.querySelector(".empty-state").style.display = d.count == 0 ? "block" : "none";
+            const emptyState = document.querySelector(".empty-state");
+            if (emptyState) {
+                emptyState.style.display = d.count == 0 ? "block" : "none";
+            }
         }
     };
 
@@ -91,20 +95,37 @@ function addCustomer(session_id, firstMsg) {
     const div = document.createElement("div");
     div.className = "customer-item";
     div.dataset.id = session_id;
-    div.innerHTML = `
-        <div class="cust-info">
-            <strong>Khch ${session_id.slice(-6)}</strong>
-            <span class="time">Va xong</span>
-        </div>
-        <div class="preview">${firstMsg.substring(0,60)}${firstMsg.length > 60 ? "..." : ""}</div>
-    `;
+
+    const info = document.createElement("div");
+    info.className = "cust-info";
+
+    const title = document.createElement("strong");
+    title.textContent = `Khch ${session_id.slice(-6)}`;
+
+    const time = document.createElement("span");
+    time.className = "time";
+    time.textContent = "Va xong";
+
+    info.appendChild(title);
+    info.appendChild(time);
+
+    const preview = document.createElement("div");
+    preview.className = "preview";
+    preview.textContent = `${firstMsg.substring(0,60)}${firstMsg.length > 60 ? "..." : ""}`;
+
+    div.appendChild(info);
+    div.appendChild(preview);
 
     div.onclick = () => {
         document.querySelectorAll(".customer-item").forEach(c => c.classList.remove("active"));
         div.classList.add("active");
         currentSession = session_id;
-        document.getElementById("chat-header").innerHTML = `<strong>ang chat vi Khch ${session_id.slice(-6)}</strong>`;
-        document.getElementById("chat").innerHTML = `<div class="msg customer">${firstMsg}</div>`;
+        document.getElementById("chat-header").textContent = `ang chat vi Khch ${session_id.slice(-6)}`;
+        const chat = document.getElementById("chat");
+        const firstMessageNode = document.createElement("div");
+        firstMessageNode.className = "msg customer";
+        firstMessageNode.textContent = firstMsg;
+        chat.replaceChildren(firstMessageNode);
     };
 
     list.prepend(div);

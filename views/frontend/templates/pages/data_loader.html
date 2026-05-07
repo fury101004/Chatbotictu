@@ -1,52 +1,66 @@
 {% extends "layouts/base.html" %}
-{% block title %}Data Loader{% endblock %}
+{% block title %}Upload kiến thức{% endblock %}
 
 {% block content %}
 <div class="loader-page">
-    <h1 class="page-title">DATA LOADER</h1>
-    <p class="page-desc">Chn ng nhm d liu trc khi upload  mi tool RAG c ng loi ti liu.</p>
+    <div class="loader-hero">
+        <span class="loader-kicker">Knowledge Intake</span>
+        <h1 class="page-title">Upload kiến thức</h1>
+        <p class="page-desc">
+            Chọn đúng nhóm dữ liệu trước khi tải tệp để hệ thống gắn tài liệu vào
+            đúng pipeline RAG và giữ cho kho kiến thức luôn sạch, dễ quản lý.
+        </p>
+    </div>
 
     <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
 
-    <div class="settings-grid top-grid">
-        <div class="setting-item select-card">
-            <label for="toolSelect">Nhm d liu</label>
-            <select id="toolSelect" class="tool-select">
-                {% for tool in tool_options %}
-                <option value="{{ tool.name }}" {% if tool.name == default_tool %}selected{% endif %}>
-                    {{ tool.label }}
-                </option>
-                {% endfor %}
-            </select>
-            <p id="toolDescription" class="tool-description"></p>
+    <div class="loader-shell">
+        <div class="settings-grid top-grid">
+            <div class="setting-item select-card">
+                <label for="toolSelect">Nhóm dữ liệu</label>
+                <select id="toolSelect" class="tool-select">
+                    {% for tool in tool_options %}
+                    <option value="{{ tool.name }}" {% if tool.name == default_tool %}selected{% endif %}>
+                        {{ tool.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <p id="toolDescription" class="tool-description"></p>
+            </div>
+
+            <div class="setting-item range-card">
+                <label for="chunkSize">Chunk Size: <span id="chunkValue">{{ chunk_size }}</span></label>
+                <input type="range" min="500" max="3000" step="100" value="{{ chunk_size }}" id="chunkSize">
+            </div>
+
+            <div class="setting-item range-card">
+                <label for="chunkOverlap">Chunk Overlap: <span id="overlapValue">{{ chunk_overlap }}</span></label>
+                <input type="range" min="0" max="800" step="50" value="{{ chunk_overlap }}" id="chunkOverlap">
+            </div>
         </div>
-        <div class="setting-item">
-            <label>Chunk Size: <span id="chunkValue">{{ chunk_size }}</span> t</label>
-            <input type="range" min="500" max="3000" step="100" value="{{ chunk_size }}" id="chunkSize">
+
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-zone-copy">
+                <strong>Kéo thả tệp vào đây</strong>
+                <p>Hoặc bấm để chọn tệp. Hỗ trợ `.md`, `.markdown`, `.txt` với giới hạn tối đa 200 MB.</p>
+            </div>
+            <button type="button" class="btn-browse">Chọn tệp</button>
+            <input type="file" id="fileInput" name="files" multiple accept=".md,.markdown,.txt" hidden>
         </div>
-        <div class="setting-item">
-            <label>Chunk Overlap: <span id="overlapValue">{{ chunk_overlap }}</span> t</label>
-            <input type="range" min="0" max="800" step="50" value="{{ chunk_overlap }}" id="chunkOverlap">
+
+        <div id="fileList" class="file-preview"></div>
+
+        <div class="action-buttons">
+            <button id="uploadBtn" class="btn-large btn-teal" disabled>Tải lên theo nhóm</button>
+            <button id="resetBtn" class="btn-large btn-coral">Reset vector store</button>
         </div>
+
+        <div id="status" class="status-box" aria-live="polite"></div>
     </div>
-
-    <div class="drop-zone" id="dropZone">
-        <p>Ko th file vo y<br><small>Hoc click  chn  H tr .md, .markdown, .txt  Ti a 200MB</small></p>
-        <input type="file" id="fileInput" name="files" multiple accept=".md,.markdown,.txt" hidden>
-    </div>
-
-    <div id="fileList" class="file-preview"></div>
-
-    <div class="action-buttons">
-        <button id="uploadBtn" class="btn-large teal" disabled>UPLOAD THEO NHM</button>
-        <button id="resetBtn" class="btn-large red">RESET VECTOR STORE</button>
-    </div>
-
-    <div id="status" class="status-box"></div>
 
     <div class="nav-buttons">
-        <a href="/history" class="btn-nav">Xem lch s & file</a>
-        <a href="/chat" class="btn-nav purple">Chat vi bot</a>
+        <a href="/history" class="btn-nav">Xem lịch sử và file</a>
+        <a href="/chat" class="btn-nav purple">Mở chat</a>
     </div>
 </div>
 
@@ -64,28 +78,40 @@ const csrfToken = document.getElementById("csrfToken");
 
 let selectedFiles = [];
 
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>\"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;",
+    })[char]);
+}
+
 function updateToolDescription() {
     const current = toolOptions.find(item => item.name === toolSelect.value);
     toolDescription.textContent = current ? current.description : "";
 }
 
 function formatFiles(items) {
-    return items.map(item => `<li>${item}</li>`).join("");
+    return items.map(item => `<li>${escapeHtml(item)}</li>`).join("");
 }
 
 function renderResult(result) {
     const tone = result.status === "error" ? "error" : result.status === "partial" ? "warning" : "success";
-    const speedText = result.real_speed ? `<div class="meta-line">Tc  thc t: ${result.real_speed} MB/s</div>` : "";
+    const speedText = result.real_speed
+        ? `<div class="meta-line">Tốc độ thực tế: ${escapeHtml(result.real_speed)} MB/s</div>`
+        : "";
     const warningBlock = result.detail?.warnings?.length
-        ? `<div class="detail-block"><strong>Cnh bo</strong><ul>${formatFiles(result.detail.warnings)}</ul></div>`
+        ? `<div class="detail-block"><strong>Cảnh báo</strong><ul>${formatFiles(result.detail.warnings)}</ul></div>`
         : "";
     const failedBlock = result.detail?.failed?.length
-        ? `<div class="detail-block"><strong>Li</strong><ul>${formatFiles(result.detail.failed)}</ul></div>`
+        ? `<div class="detail-block"><strong>Tệp lỗi</strong><ul>${formatFiles(result.detail.failed)}</ul></div>`
         : "";
 
     status.innerHTML = `
         <div class="info-box ${tone}">
-            <div class="status-title">${result.msg || " x l xong."}</div>
+            <div class="status-title">${escapeHtml(result.msg || "Đã xử lý xong.")}</div>
             ${speedText}
             ${warningBlock}
             ${failedBlock}
@@ -102,11 +128,12 @@ function handleFiles(incomingList) {
     }
 
     const validFiles = [];
-    for (let i = 0; i < incomingList.length; i++) {
+    for (let i = 0; i < incomingList.length; i += 1) {
         const file = incomingList[i];
         if (!file || !file.name) continue;
-        const ext = file.name.toLowerCase();
-        if (ext.endsWith(".md") || ext.endsWith(".markdown") || ext.endsWith(".txt")) {
+
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown") || lowerName.endsWith(".txt")) {
             validFiles.push(file);
         }
     }
@@ -123,10 +150,10 @@ function renderFileList() {
     }
 
     fileList.innerHTML = `
-        <div class="preview-header"> CHN ${selectedFiles.length} FILE</div>
+        <div class="preview-header">Đã chọn ${selectedFiles.length} tệp</div>
         ${selectedFiles.map(file => `
             <div class="preview-item">
-                <span>${file.name}</span>
+                <span>${escapeHtml(file.name)}</span>
                 <small>${(file.size / 1024 / 1024).toFixed(2)} MB</small>
             </div>
         `).join("")}
@@ -146,7 +173,11 @@ uploadBtn.addEventListener("click", async () => {
     formData.append("client_total_size", totalClientSize);
     formData.append("csrf_token", csrfToken.value);
 
-    status.innerHTML = `<div class="info-box loading">ang upload v gn ti liu vo nhm <strong>${toolSelect.value}</strong>...</div>`;
+    status.innerHTML = `
+        <div class="info-box loading">
+            Đang tải tài liệu lên nhóm <strong>${escapeHtml(toolSelect.value)}</strong>...
+        </div>
+    `;
     uploadBtn.disabled = true;
 
     try {
@@ -167,16 +198,16 @@ uploadBtn.addEventListener("click", async () => {
         uploadBtn.disabled = true;
     } catch (err) {
         console.error(err);
-        status.innerHTML = `<div class="info-box error">Li mng hoc backend cha phn hi.</div>`;
+        status.innerHTML = `<div class="info-box error">Không thể kết nối tới backend để tải tài liệu.</div>`;
         uploadBtn.disabled = false;
     }
 });
 
 resetBtn.addEventListener("click", async () => {
-    if (!confirm("Xa sch vector store v file upload hin ti?")) return;
-    if (!confirm("Xc nhn ln 2: thao tc ny khng th hon tc.")) return;
+    if (!confirm("Bạn có chắc muốn xóa toàn bộ vector store và danh sách file đã tải lên?")) return;
+    if (!confirm("Xác nhận lần hai: thao tác này không thể hoàn tác.")) return;
 
-    status.innerHTML = `<div class="info-box loading">ang reset vector store...</div>`;
+    status.innerHTML = `<div class="info-box loading">Đang reset vector store...</div>`;
     const formData = new FormData();
     formData.append("csrf_token", csrfToken.value);
 
@@ -185,17 +216,18 @@ resetBtn.addEventListener("click", async () => {
             method: "POST",
             body: formData,
         });
+
         if (!response.ok) {
-            throw new Error("Reset tht bi");
+            throw new Error("Reset thất bại");
         }
 
-        status.innerHTML = `<div class="info-box success"> reset vector store v ton b file upload.</div>`;
+        status.innerHTML = `<div class="info-box success">Đã reset vector store và xóa toàn bộ file đã tải lên.</div>`;
         selectedFiles = [];
         renderFileList();
         uploadBtn.disabled = true;
     } catch (err) {
         console.error(err);
-        status.innerHTML = `<div class="info-box error">Khng reset c vector store.</div>`;
+        status.innerHTML = `<div class="info-box error">Không thể reset vector store.</div>`;
     }
 });
 
@@ -207,19 +239,28 @@ document.getElementById("chunkOverlap").addEventListener("input", event => {
     document.getElementById("overlapValue").textContent = event.target.value;
 });
 
-dropZone.addEventListener("click", () => fileInput.click());
+dropZone.addEventListener("click", event => {
+    if (event.target.closest(".btn-browse")) {
+        event.preventDefault();
+    }
+    fileInput.click();
+});
+
 dropZone.addEventListener("dragover", event => {
     event.preventDefault();
-    dropZone.style.borderColor = "#4ecdc4";
+    dropZone.classList.add("is-dragover");
 });
+
 dropZone.addEventListener("dragleave", () => {
-    dropZone.style.borderColor = "#333";
+    dropZone.classList.remove("is-dragover");
 });
+
 dropZone.addEventListener("drop", event => {
     event.preventDefault();
-    dropZone.style.borderColor = "#333";
+    dropZone.classList.remove("is-dragover");
     handleFiles(event.dataTransfer?.files);
 });
+
 fileInput.addEventListener("change", () => handleFiles(fileInput.files));
 toolSelect.addEventListener("change", updateToolDescription);
 
@@ -227,78 +268,235 @@ updateToolDescription();
 </script>
 
 <style>
-.loader-page { max-width: 980px; margin: 2rem auto; padding: 0 1rem; text-align: center; }
-.page-desc { max-width: 760px; margin: 0 auto 1.5rem; }
-.top-grid { align-items: stretch; }
-.select-card { grid-column: 1 / -1; text-align: left; }
+.loader-page {
+    max-width: 1020px;
+    margin: 0 auto;
+}
+
+.loader-hero {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.loader-kicker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.45rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(90, 215, 196, 0.1);
+    border: 1px solid rgba(90, 215, 196, 0.18);
+    color: #b8fff3;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.loader-shell {
+    padding: 1.4rem;
+    border-radius: 28px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: linear-gradient(180deg, rgba(16, 25, 47, 0.92), rgba(9, 15, 28, 0.96));
+    box-shadow: 0 24px 70px rgba(2, 8, 23, 0.34);
+}
+
+.page-desc {
+    max-width: 760px;
+    margin: 0.8rem auto 0;
+}
+
+.top-grid {
+    align-items: stretch;
+}
+
+.select-card {
+    grid-column: 1 / -1;
+}
+
 .tool-select {
     width: 100%;
     padding: 1rem 1.1rem;
-    border-radius: 14px;
-    border: 1px solid rgba(78, 205, 196, 0.35);
-    background: #151523;
+    border-radius: 16px;
+    border: 1px solid rgba(143, 200, 255, 0.18);
+    background: rgba(8, 14, 28, 0.74);
     color: #f7f9fb;
     font-size: 1rem;
+    outline: none;
 }
-.tool-description { margin: 0.8rem 0 0; color: #b9c2d0; line-height: 1.5; }
+
+.tool-select:focus {
+    border-color: rgba(90, 215, 196, 0.42);
+    box-shadow: 0 0 0 4px rgba(90, 215, 196, 0.08);
+}
+
+.tool-description {
+    margin: 0.8rem 0 0;
+    color: #b8c7e5;
+    line-height: 1.65;
+}
+
+.range-card {
+    min-height: 132px;
+}
+
 .drop-zone {
-    border: 4px dashed #333;
-    border-radius: 20px;
-    padding: 3rem;
-    cursor: pointer;
-    transition: all 0.3s;
-    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
     margin: 2rem 0;
+    cursor: pointer;
+    transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
 }
-.drop-zone:hover { border-color: #4ecdc4; }
-.file-preview { margin: 2rem 0; text-align: left; background: #1a1a2e; padding: 1.5rem; border-radius: 12px; }
-.preview-header { font-weight: bold; color: #4ecdc4; margin-bottom: 1rem; }
-.preview-item { padding: 0.5rem 0; color: #d7dcff; display: flex; justify-content: space-between; gap: 1rem; }
-.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem; max-width: 780px; margin: 2rem auto; }
-.setting-item {
-    background: #1a1a2e;
-    border: 1px solid rgba(78, 205, 196, 0.15);
-    border-radius: 16px;
-    padding: 1.3rem;
+
+.drop-zone-copy strong {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 800;
+    margin-bottom: 0.6rem;
+    color: #eff4ff;
 }
-.setting-item label { display: block; font-size: 1.05rem; margin-bottom: 0.75rem; color: #fff; text-align: left; }
-.setting-item input[type=range] { width: 100%; }
-.action-buttons { margin: 3rem 0; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-.btn-large { padding: 1.1rem 2.4rem; font-size: 1.05rem; border-radius: 999px; border: none; cursor: pointer; font-weight: 700; }
-.teal { background: #4ecdc4; color: #0f0f1a; }
-.red { background: #ff4757; color: white; }
-.status-box { min-height: 70px; margin: 2rem 0; }
+
+.drop-zone-copy p {
+    color: #b8c7e5;
+    line-height: 1.7;
+}
+
+.drop-zone.is-dragover {
+    border-color: rgba(90, 215, 196, 0.48);
+    background: linear-gradient(180deg, rgba(22, 38, 63, 0.95), rgba(12, 19, 35, 0.98));
+    transform: translateY(-2px);
+}
+
+.btn-browse {
+    margin-top: 0.4rem;
+    padding: 0.9rem 1.4rem;
+    border: 1px solid rgba(90, 215, 196, 0.22);
+    border-radius: 999px;
+    background: rgba(90, 215, 196, 0.14);
+    color: #eafffb;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.file-preview {
+    min-height: 0;
+    margin: 0 0 1.5rem;
+    padding: 0;
+    background: transparent;
+}
+
+.file-preview:not(:empty) {
+    background: rgba(7, 12, 24, 0.42);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 20px;
+    padding: 1.3rem 1.4rem;
+}
+
+.preview-header {
+    font-weight: 700;
+    color: #9cf5dd;
+    margin-bottom: 0.9rem;
+}
+
+.preview-item {
+    padding: 0.8rem 0;
+    color: #d7dcff;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.preview-item:first-of-type {
+    border-top: 0;
+}
+
+.action-buttons {
+    margin: 2.4rem 0 1.5rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.status-box {
+    min-height: 74px;
+}
+
 .info-box {
-    padding: 1.2rem 1.4rem;
-    border-radius: 16px;
-    display: inline-block;
-    min-width: min(720px, 100%);
+    width: 100%;
+    padding: 1.2rem 1.35rem;
+    border-radius: 18px;
     text-align: left;
 }
-.status-title { font-weight: 700; line-height: 1.6; }
-.meta-line { margin-top: 0.5rem; opacity: 0.9; }
-.detail-block { margin-top: 0.9rem; }
-.detail-block ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
-.success { background: #1a3a2a; color: #4ade80; border: 1px solid #4ade80; }
-.warning { background: #3a3417; color: #ffd166; border: 1px solid #ffd166; }
-.error { background: #3a1a1a; color: #ff6b6b; border: 1px solid #ff6b6b; }
-.loading { background: #13263b; color: #74b9ff; border: 1px solid #74b9ff; }
-.nav-buttons a {
-    display: inline-block;
-    margin: 1rem;
-    padding: 1rem 2.5rem;
-    background: #6c5ce7;
-    color: white;
-    border-radius: 50px;
-    text-decoration: none;
-    font-weight: bold;
+
+.status-title {
+    font-weight: 700;
+    line-height: 1.6;
 }
-.nav-buttons a.purple { background: #a29bfe; }
+
+.meta-line {
+    margin-top: 0.45rem;
+    opacity: 0.9;
+}
+
+.detail-block {
+    margin-top: 0.95rem;
+}
+
+.detail-block ul {
+    margin: 0.45rem 0 0;
+    padding-left: 1.1rem;
+}
+
+.success {
+    background: rgba(21, 70, 50, 0.82);
+    color: #9cf5ba;
+    border: 1px solid rgba(156, 245, 186, 0.22);
+}
+
+.warning {
+    background: rgba(79, 57, 16, 0.8);
+    color: #ffd889;
+    border: 1px solid rgba(255, 216, 137, 0.22);
+}
+
+.error {
+    background: rgba(82, 28, 28, 0.82);
+    color: #ffb3b0;
+    border: 1px solid rgba(255, 179, 176, 0.22);
+}
+
+.loading {
+    background: rgba(23, 47, 78, 0.82);
+    color: #a9d3ff;
+    border: 1px solid rgba(169, 211, 255, 0.22);
+}
+
+.nav-buttons {
+    margin-top: 2rem;
+}
 
 @media (max-width: 720px) {
-    .settings-grid { grid-template-columns: 1fr; }
-    .info-box { min-width: 100%; }
-    .drop-zone { padding: 2.2rem 1rem; }
+    .loader-shell {
+        padding: 1rem;
+        border-radius: 22px;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .drop-zone {
+        padding: 2.2rem 1rem;
+    }
+
+    .preview-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
 </style>
 {% endblock %}

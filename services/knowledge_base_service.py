@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -185,7 +185,7 @@ def _build_chat_entry_id(session_id: str, answer_row_id: int) -> str:
 
 
 def _pair_chat_rows(rows: list[dict]) -> list[ChatKnowledgeEntry]:
-    pending_question_by_session: dict[str, dict] = {}
+    pending_question_by_session: dict[str, deque[dict]] = defaultdict(deque)
     pairs: list[ChatKnowledgeEntry] = []
 
     for row in rows:
@@ -196,15 +196,18 @@ def _pair_chat_rows(rows: list[dict]) -> list[ChatKnowledgeEntry]:
             continue
 
         if role == "user":
-            pending_question_by_session[session_id] = row
+            pending_question_by_session[session_id].append(row)
             continue
 
         if role not in {"bot", "assistant"}:
             continue
 
-        pending = pending_question_by_session.pop(session_id, None)
-        if not pending:
+        pending_queue = pending_question_by_session.get(session_id)
+        if not pending_queue:
             continue
+        pending = pending_queue.popleft()
+        if not pending_queue:
+            pending_question_by_session.pop(session_id, None)
 
         question = str(pending.get("content") or "").strip()
         answer = content
@@ -284,18 +287,18 @@ def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> 
         "",
         f"# {title}",
         "",
-        "## Cau hoi",
+        "## Câu hỏi",
         "",
         entry.question.strip(),
         "",
-        "## Tra loi da duyet",
+        "## Trả lời đã duyệt",
         "",
         entry.answer.strip(),
         "",
         "## Ghi chu",
         "",
-        "- Nguon nay duoc tao tu cap hoi-dap chatbot da duyet thu cong.",
-        "- Co the duoc dong bo vao vector store de dung lai trong retrieval.",
+        "- Nguồn này được tạo từ cặp hỏi đáp chatbot đã duyệt thủ công.",
+        "- Có thể được đồng bộ vào vector store để dùng lại trong retrieval.",
         "",
     ]
     return "\n".join(lines)
@@ -304,7 +307,7 @@ def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> 
 def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict:
     entry = get_chat_entry_by_id(entry_id)
     if entry is None:
-        raise ValueError("Khong tim thay cap hoi-dap chatbot de duyet.")
+        raise ValueError("Không tìm thấy cặp hỏi đáp chatbot để duyệt.")
 
     selected_tool = tool_name if is_valid_rag_tool(tool_name) else DEFAULT_RAG_TOOL
     filename = _approved_chat_filename(entry)
@@ -339,9 +342,9 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
             )
             indexed = True
         except Exception as exc:
-            warning = f"Da luu Q&A da duyet nhung chua index duoc vao vector store: {exc}"
+            warning = f"Đã lưu Q&A đã duyệt nhưng chưa index được vào vector store: {exc}"
     else:
-        warning = "Da luu Q&A da duyet vao knowledge base, nhung embedding backend chua san sang de index."
+        warning = "Đã lưu Q&A đã duyệt vào knowledge base, nhưng embedding backend chưa sẵn sàng để index."
 
     clear_rag_corpus_cache()
     return {
@@ -353,9 +356,9 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
         "indexed": indexed,
         "warning": warning,
         "message": (
-            "Da duyet Q&A vao knowledge base va index vector store."
+            "Đã duyệt Q&A vào knowledge base và index vector store."
             if indexed
-            else "Da duyet Q&A vao knowledge base."
+            else "Đã duyệt Q&A vào knowledge base."
         ),
     }
 
@@ -571,20 +574,20 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         vector_entries, total_chunks = _load_vector_entries()
     except Exception as exc:
         vector_entries, total_chunks = [], 0
-        vector_warning = f"Vector store tam thoi chua doc duoc: {exc}"
+        vector_warning = f"Vector store tạm thời chưa đọc được: {exc}"
 
     try:
         chat_entries = _load_chat_entries()
     except Exception as exc:
         chat_entries = []
-        chat_warning = f"Chat history tam thoi chua doc duoc: {exc}"
+        chat_warning = f"Chat history tạm thời chưa đọc được: {exc}"
 
     try:
         approved_chat_entries = get_approved_chat_qas()
     except Exception as exc:
         approved_chat_entries = []
         if not chat_warning:
-            chat_warning = f"Khong doc duoc danh sach Q&A da duyet: {exc}"
+            chat_warning = f"Không đọc được danh sách Q&A đã duyệt: {exc}"
     cleaned_query = query.strip()
 
     vector_results: list[dict] = []

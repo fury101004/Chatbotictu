@@ -29,7 +29,8 @@
 
 <script>
 let currentSession = null;
-const ws = new WebSocket(`ws://${location.host}/ws-cskh`);
+const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${wsProtocol}://${location.host}/ws-cskh`);
 
 ws.onmessage = function(e) {
     const d = JSON.parse(e.data);
@@ -46,15 +47,26 @@ function addCustomer(session_id, firstMsg) {
     const div = document.createElement("div");
     div.className = "customer-item";
     div.dataset.session = session_id;
-    div.innerHTML = `
-        <strong>Khách ${session_id.slice(-6)}</strong>
-        <small>${firstMsg.substring(0, 50)}...</small>
-    `;
+
+    const title = document.createElement("strong");
+    title.textContent = `Khách ${session_id.slice(-6)}`;
+
+    const preview = document.createElement("small");
+    const previewText = firstMsg.length > 50 ? `${firstMsg.substring(0, 50)}...` : firstMsg;
+    preview.textContent = previewText;
+
+    div.appendChild(title);
+    div.appendChild(preview);
+
     div.onclick = () => {
         document.querySelectorAll(".customer-item").forEach(c => c.classList.remove("active"));
         div.classList.add("active");
         currentSession = session_id;
-        document.getElementById("chat").innerHTML = `<div class="msg customer">${firstMsg}</div>`;
+        const chat = document.getElementById("chat");
+        const firstMessageNode = document.createElement("div");
+        firstMessageNode.className = "msg customer";
+        firstMessageNode.textContent = firstMsg;
+        chat.replaceChildren(firstMessageNode);
     };
     document.getElementById("customers").prepend(div);
     // Tự động chọn khách đầu tiên nếu chưa có ai

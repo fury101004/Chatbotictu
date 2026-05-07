@@ -84,8 +84,8 @@
                                 </button>
                             </div>
 
-                            <div class="chunk-title-mini" title="{{ chunk.title | default('Khong co tieu de') }}">
-                                {{ (chunk.title or '[Khong co tieu de]')[:97] }}{% if (chunk.title or '')|length > 97 %}...{% endif %}
+                            <div class="chunk-title-mini" title="{{ chunk.title | default('Không có tiêu đề') }}">
+                                {{ (chunk.title or '[Không có tiêu đề]')[:97] }}{% if (chunk.title or '')|length > 97 %}...{% endif %}
                             </div>
 
                             <button class="btn-copy-mini" data-content="{{ chunk.content|e }}">
@@ -98,7 +98,7 @@
             </div>
             {% endfor %}
         {% else %}
-            <div class="tool-empty">Chua co vector nao trong nhom nay.</div>
+            <div class="tool-empty">Chưa có vector nào trong nhóm này.</div>
         {% endif %}
     </section>
     {% endfor %}
@@ -131,7 +131,7 @@ function toggleCollapse(header) {
 
 function doubleConfirm() {
     return confirm('Ban chac chan muon xoa het vector store?')
-        && confirm('Xac nhan lan 2: thao tac nay khong the hoan tac.');
+        && confirm('Xác nhận lần 2: thao tác này không thể hoàn tác.');
 }
 
 const csrfInput = document.getElementById('csrfToken');
@@ -148,7 +148,7 @@ function setSeedStatus(kind, message) {
 async function importQaCorpus(resetFirst = false) {
     if (resetFirst) {
         if (!confirm('Reset vector store roi import lai qa_generated_fixed?')) return;
-        if (!confirm('Xac nhan lan 2: se xoa vector hien tai truoc khi import.')) return;
+        if (!confirm('Xác nhận lần 2: sẽ xóa vector hiện tại trước khi import.')) return;
     }
 
     importQaBtn.disabled = true;
@@ -226,7 +226,7 @@ async function deleteChunk(chunkId, filename) {
             alert(data.error || 'Xoa that bai!');
         }
     } catch (err) {
-        alert('Loi mang!');
+        alert('Lỗi mạng!');
     }
 }
 </script>

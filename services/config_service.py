@@ -49,12 +49,12 @@ def update_runtime_config(
     set_config("bot_rules", cleaned_prompt)
 
     need_reingest = (old_chunk != chunk_size or old_overlap != chunk_overlap) or reingest
-    msg = "Luu cau hinh thanh cong!"
+    msg = "Lưu cấu hình thành công!"
 
     if need_reingest:
         total_files, total_chunks = reingest_callback()
         if total_files:
-            msg = f"RE-INGEST HOAN TAT! {total_files} file -> {total_chunks} chunks"
+            msg = f"RE-INGEST HOÀN TẤT! {total_files} file -> {total_chunks} chunks"
 
     return {"msg": msg, "reingested": need_reingest}
 

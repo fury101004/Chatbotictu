@@ -1,3 +1,13 @@
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    })[char]);
+}
+
 document.getElementById("configForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(event.target);
@@ -18,7 +28,7 @@ document.getElementById("configForm").addEventListener("submit", async (event) =
         const response = await fetch("/update-config", { method: "POST", body: formData });
         if (response.ok) {
             const data = await response.json();
-            status.innerHTML = `<div class="info-box success">${data.msg}</div>`;
+            status.innerHTML = `<div class="info-box success">${escapeHtml(data.msg)}</div>`;
             setTimeout(() => location.reload(), 2500);
         } else {
             status.innerHTML = '<div class="info-box error">Lỗi server rồi bro!</div>';

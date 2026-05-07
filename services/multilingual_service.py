@@ -9,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from services.langchain_service import invoke_text_prompt_chain
 from services.llm_service import get_model, resolve_model_choice
+from services.ictu_scope_service import normalize_scope_text
 
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 LAST_CALL: Dict[str, float] = {}
@@ -44,6 +45,26 @@ DANGEROUS_KEYWORDS = [
     "who created",
 ]
 
+_ENGLISH_SWITCH_MARKERS = (
+    "english",
+    "speak english",
+    "use english",
+    "reply in english",
+    "trả lời bằng tiếng Anh",
+    "nói tiếng Anh",
+    "switch to english",
+)
+_VIETNAMESE_SWITCH_MARKERS = (
+    "vietnamese",
+    "tiếng Việt",
+    "dùng tiếng Việt",
+    "trả lời tiếng Việt",
+    "switch to vietnamese",
+    "về tiếng Việt",
+)
+_NORMALIZED_ENGLISH_SWITCH_MARKERS = tuple(normalize_scope_text(marker) for marker in _ENGLISH_SWITCH_MARKERS)
+_NORMALIZED_VIETNAMESE_SWITCH_MARKERS = tuple(normalize_scope_text(marker) for marker in _VIETNAMESE_SWITCH_MARKERS)
+
 
 def _get_session(sid: str) -> Dict[str, Any]:
     if sid not in SESSIONS:
@@ -52,35 +73,11 @@ def _get_session(sid: str) -> Dict[str, Any]:
 
 
 def _detect_switch(text: str) -> Optional[str]:
-    normalized = re.sub(r"\s+", " ", text.lower()).strip()
+    normalized = normalize_scope_text(text)
 
-    english_markers = [
-        "english",
-        "speak english",
-        "use english",
-        "reply in english",
-        "trả lời bằng tiếng anh",
-        "tra loi bang tieng anh",
-        "nói tiếng anh",
-        "noi tieng anh",
-        "switch to english",
-    ]
-    vietnamese_markers = [
-        "vietnamese",
-        "tiếng việt",
-        "tieng viet",
-        "dùng tiếng việt",
-        "dung tieng viet",
-        "trả lời tiếng việt",
-        "tra loi tieng viet",
-        "switch to vietnamese",
-        "về tiếng việt",
-        "ve tieng viet",
-    ]
-
-    if any(marker in normalized for marker in english_markers):
+    if any(marker in normalized for marker in _NORMALIZED_ENGLISH_SWITCH_MARKERS):
         return "en"
-    if any(marker in normalized for marker in vietnamese_markers):
+    if any(marker in normalized for marker in _NORMALIZED_VIETNAMESE_SWITCH_MARKERS):
         return "vi"
     return None
 

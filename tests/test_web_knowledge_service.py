@@ -69,6 +69,38 @@ class WebKnowledgeServiceTests(unittest.TestCase):
             self.assertEqual(result["status"], "candidate")
             self.assertEqual(matches, [])
 
+    def test_save_web_search_answer_returns_stable_entry_id_on_upsert(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "web_kb.db"
+            chunk = RetrievedChunk(
+                document="Thong bao hoc phi moi nhat cua ICTU.",
+                metadata={
+                    "source_type": "web_search",
+                    "source": "https://ictu.edu.vn/hoc-phi-moi",
+                    "title": "Hoc phi ICTU",
+                },
+            )
+
+            with (
+                patch("config.db.DB_PATH", db_path),
+                patch("services.web_knowledge_service.WEB_KB_TRUSTED_THRESHOLD", 1),
+            ):
+                first = save_web_search_answer(
+                    question="Hoc phi ICTU moi nhat la gi?",
+                    answer="Thong bao ban dau ve hoc phi ICTU moi nhat.",
+                    chunks=[chunk],
+                )
+                second = save_web_search_answer(
+                    question="Hoc phi ICTU moi nhat la gi?",
+                    answer="Thong bao cap nhat lan hai ve hoc phi ICTU moi nhat.",
+                    chunks=[chunk],
+                )
+
+            self.assertTrue(first["saved"])
+            self.assertTrue(second["saved"])
+            self.assertIsNotNone(first["entry_id"])
+            self.assertEqual(second["entry_id"], first["entry_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -125,7 +125,7 @@ async def upload_markdown_files(
             existing_sources.add(source_name)
 
             if not embedding_backend_ready():
-                warning_files.append(f"{filename} -> da luu file nhung bo qua index vi embedding backend chua san sang")
+                warning_files.append(f"{filename} -> đã lưu file nhưng bỏ qua index vì embedding backend chưa sẵn sàng")
             else:
                 try:
                     t_chunk = time.time()
@@ -140,10 +140,10 @@ async def upload_markdown_files(
                     print(f"[CHUNK + ADD] {filename}: {chunk_speed:.2f} MB/s")
                 except Exception as exc:
                     print(f"[INDEX WARNING] {filename}: {exc}")
-                    warning_files.append(f"{filename} -> da luu file nhung chua index duoc: {exc}")
+                    warning_files.append(f"{filename} -> đã lưu file nhưng chưa index được: {exc}")
         except Exception as exc:
-            print(f"[LOI] {filename}: {exc}")
-            failed_files.append(f"{filename} -> loi: {exc}")
+            print(f"[LỖI] {filename}: {exc}")
+            failed_files.append(f"{filename} -> lỗi: {exc}")
 
     clear_rag_corpus_cache()
 
@@ -170,10 +170,10 @@ async def upload_markdown_files(
         indexed=len(indexed_files),
         warnings=len(warning_files),
         msg=(
-            "<strong>HOAN TAT!</strong><br>"
-            f"Nhom: {selected_tool} | Them: {len(success_files)} | "
-            f"Cap nhat: {len(updated_files)} | Index: {len(indexed_files)} | "
-            f"Canh bao: {len(warning_files)} | Loi: {len(failed_files)}"
+            "<strong>HOÀN TẤT!</strong><br>"
+            f"Nhóm: {selected_tool} | Thêm: {len(success_files)} | "
+            f"Cập nhật: {len(updated_files)} | Index: {len(indexed_files)} | "
+            f"Cảnh báo: {len(warning_files)} | Lỗi: {len(failed_files)}"
         ),
         real_speed=f"{real_speed:.2f}" if real_speed else None,
         tool_name=selected_tool,
@@ -193,7 +193,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     if not root.exists():
         return {
             "status": "error",
-            "msg": f"Khong tim thay thu muc corpus: {root}",
+            "msg": f"Không tìm thấy thư mục corpus: {root}",
             "total_files": 0,
             "imported_files": 0,
             "failed_files": 0,
@@ -204,7 +204,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     if not corpus_records:
         return {
             "status": "error",
-            "msg": f"Thu muc {root} chua co file .md/.txt de import",
+            "msg": f"Thư mục {root} chưa có file .md/.txt để import",
             "total_files": 0,
             "imported_files": 0,
             "failed_files": 0,
@@ -241,7 +241,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
         f"Vector store hien co {total_chunks} chunks."
     )
     if failed_sources:
-        msg += f" Loi: {len(failed_sources)} file."
+        msg += f" Lỗi: {len(failed_sources)} file."
 
     return {
         "status": status,
@@ -273,7 +273,7 @@ def delete_uploaded_document(source_name: str) -> None:
         try:
             get_collection().delete(where={"source": candidate})
         except Exception as exc:
-            print(f"Bo qua xoa vector cho {candidate}: {exc}")
+            print(f"Bỏ qua xóa vector cho {candidate}: {exc}")
     clear_rag_corpus_cache()
 
 
@@ -392,7 +392,7 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
                 "id": doc_id,
                 "content": doc.strip(),
                 "preview": preview_text,
-                "title": meta.get("title", "Khong co tieu de"),
+                "title": meta.get("title", "Không có tiêu đề"),
                 "level": meta.get("level", 1),
                 "word_count": meta.get("word_count", len(doc.split())),
                 "tool_name": meta.get("tool_name", "unassigned"),
@@ -485,7 +485,7 @@ def reingest_uploaded_documents() -> tuple[int, int]:
             total_files += 1
             total_chunks += max(coll.count() - before_count, 0)
         except Exception as exc:
-            print(f"Re-ingest loi {path.name}: {exc}")
+            print(f"Re-ingest lỗi {path.name}: {exc}")
 
     clear_rag_corpus_cache()
     return total_files, total_chunks

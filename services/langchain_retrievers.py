@@ -127,7 +127,7 @@ class WebKnowledgeRetriever(BaseRetriever):
                         "tool_name": self.tool_name,
                         "context_entry": (
                             f"[Trusted web KB | question: {match.question} | score: {match.score} | source: {source_label}]\n"
-                            f"{match.answer}\n\nNguon tham khao:\n{match.source_text[:1600]}"
+                            f"{match.answer}\n\nNguồn tham khảo:\n{match.source_text[:1600]}"
                         ),
                         "sources": list(match.sources),
                     },
@@ -170,4 +170,3 @@ class WebSearchRetriever(BaseRetriever):
             )
 
         return documents
-

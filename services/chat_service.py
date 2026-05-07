@@ -9,6 +9,7 @@ from config.db import save_message
 from config.rag_tools import DEFAULT_RAG_TOOL, FALLBACK_RAG_NODE
 from models.chat import ChatGraphState, RAGResult
 from services.intent_service import detect_intent, get_intent_response
+from services.ictu_scope_service import normalize_scope_text
 from services.moderation_service import contains_swear, get_swear_response
 from services.multilingual_service import chat_multilingual, get_current_language
 from services.quick_reply_service import get_quick_response
@@ -24,15 +25,42 @@ from services.web_knowledge_service import save_web_search_answer
 
 logger = logging.getLogger("chat_agent")
 
-_MISSING_CONTEXT_TEXTS = {
+_MISSING_CONTEXT_TEXTS = (
     "",
     "Thông tin đang được cập nhật.",
     "Thông tin này hiện chưa có trong tài liệu của em.",
-}
+)
+_NORMALIZED_MISSING_CONTEXT_TEXTS = tuple(normalize_scope_text(marker) for marker in _MISSING_CONTEXT_TEXTS)
 _AMBIGUOUS_YEAR_RE = re.compile(r"\b20\d{2}(?:[-/]\d{4})?\b")
-_AMBIGUOUS_COHORT_RE = re.compile(r"\b(?:k|khóa)\s*0*\d{2}\b", flags=re.IGNORECASE)
-_AMBIGUOUS_SEMESTER_RE = re.compile(r"\b(?:học kỳ|hoc ky|hk)\s*[12]\b", flags=re.IGNORECASE)
-_AMBIGUOUS_ROUND_RE = re.compile(r"\b(?:đợt|dot|lần|lan)\s*\d+\b", flags=re.IGNORECASE)
+_AMBIGUOUS_COHORT_RE = re.compile(r"\b(?:k|khoa)\s*0*\d{2}\b", flags=re.IGNORECASE)
+_AMBIGUOUS_SEMESTER_RE = re.compile(r"\b(?:hoc ky|hk)\s*[12]\b", flags=re.IGNORECASE)
+_AMBIGUOUS_ROUND_RE = re.compile(r"\b(?:dot|lan)\s*\d+\b", flags=re.IGNORECASE)
+_POLICY_TIMEFRAME_MARKERS = (
+    "học phí",
+    "học bổng",
+    "bhyt",
+    "bảo hiểm",
+)
+_PROGRAM_SCOPE_MARKERS = (
+    "chương trình",
+    "ctdt",
+    "tín chỉ",
+    "sổ tay",
+)
+_GRADUATION_ROUND_MARKERS = (
+    "tốt nghiệp",
+    "xét tốt nghiệp",
+)
+_SCHEDULE_MARKERS = (
+    "đăng ký học",
+    "đăng ký tín chỉ",
+    "lịch học",
+    "lịch thi",
+)
+_NORMALIZED_POLICY_TIMEFRAME_MARKERS = tuple(normalize_scope_text(marker) for marker in _POLICY_TIMEFRAME_MARKERS)
+_NORMALIZED_PROGRAM_SCOPE_MARKERS = tuple(normalize_scope_text(marker) for marker in _PROGRAM_SCOPE_MARKERS)
+_NORMALIZED_GRADUATION_ROUND_MARKERS = tuple(normalize_scope_text(marker) for marker in _GRADUATION_ROUND_MARKERS)
+_NORMALIZED_SCHEDULE_MARKERS = tuple(normalize_scope_text(marker) for marker in _SCHEDULE_MARKERS)
 
 
 def _log_step(step: str, state: ChatGraphState, **payload: object) -> None:
@@ -132,17 +160,17 @@ def _context_is_missing(state: ChatGraphState) -> bool:
         state.get("mode") != "ictu_scope_guard"
         and not state.get("sources")
         and not state.get("chunks_used")
-        and context_text in _MISSING_CONTEXT_TEXTS
+        and normalize_scope_text(context_text) in _NORMALIZED_MISSING_CONTEXT_TEXTS
     )
 
 
 def _build_clarification_question(message: str) -> str | None:
-    normalized = message.casefold()
+    normalized = normalize_scope_text(message)
 
-    asks_policy_timeframe = any(keyword in normalized for keyword in ["học phí", "hoc phi", "học bổng", "hoc bong", "bhyt", "bảo hiểm", "bao hiem"])
-    asks_program_scope = any(keyword in normalized for keyword in ["chương trình", "chuong trinh", "ctdt", "tín chỉ", "tin chi", "sổ tay", "so tay"])
-    asks_graduation_round = any(keyword in normalized for keyword in ["tốt nghiệp", "tot nghiep", "xét tốt nghiệp", "xet tot nghiep"])
-    asks_schedule = any(keyword in normalized for keyword in ["đăng ký học", "dang ky hoc", "đăng ký tín chỉ", "dang ky tin chi", "lịch học", "lich hoc", "lịch thi", "lich thi"])
+    asks_policy_timeframe = any(keyword in normalized for keyword in _NORMALIZED_POLICY_TIMEFRAME_MARKERS)
+    asks_program_scope = any(keyword in normalized for keyword in _NORMALIZED_PROGRAM_SCOPE_MARKERS)
+    asks_graduation_round = any(keyword in normalized for keyword in _NORMALIZED_GRADUATION_ROUND_MARKERS)
+    asks_schedule = any(keyword in normalized for keyword in _NORMALIZED_SCHEDULE_MARKERS)
 
     has_year = bool(_AMBIGUOUS_YEAR_RE.search(message))
     has_cohort = bool(_AMBIGUOUS_COHORT_RE.search(normalized))

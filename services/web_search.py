@@ -16,21 +16,28 @@ SEARCH_TIMEOUT_SECONDS = 10.0
 EXTRACT_TIMEOUT_SECONDS = 16.0
 
 REALTIME_MARKERS = (
-    "hom nay",
-    "moi nhat",
-    "gan day",
-    "cap nhat",
-    "tin moi",
-    "tin tuc",
-    "nam nay",
-    "tuyen sinh",
-    "lich",
-    "thong bao moi",
+    "hôm nay",
+    "mới nhất",
+    "gần đây",
+    "cập nhật",
+    "tin mới",
+    "tin tức",
+    "năm nay",
+    "tuyển sinh",
+    "lịch",
+    "thông báo mới",
 )
+NORMALIZED_REALTIME_MARKERS = tuple(normalize_scope_text(marker) for marker in REALTIME_MARKERS)
 
-ICTU_WEB_QUERY_MARKER = '"Dai hoc Cong nghe Thong tin va Truyen thong Thai Nguyen" ICTU'
+ICTU_WEB_QUERY_MARKER = '"Trường Đại học Công nghệ Thông tin và Truyền thông Thái Nguyên" ICTU'
 ICTU_OFFICIAL_DOMAIN = "ictu.edu.vn"
 ICTU_DOMAINS = ("ictu.edu.vn", "ictu.vn")
+ICTU_QUERY_MARKERS = (
+    "ictu",
+    "Đại học Công nghệ Thông tin và Truyền thông",
+    "Trường Đại học Công nghệ Thông tin và Truyền thông",
+)
+NORMALIZED_ICTU_QUERY_MARKERS = tuple(normalize_scope_text(marker) for marker in ICTU_QUERY_MARKERS)
 
 
 @dataclass(slots=True)
@@ -63,7 +70,7 @@ def web_search_configured() -> bool:
 
 def should_use_web_search(query: str) -> bool:
     normalized = normalize_scope_text(query or "")
-    return any(marker in normalized for marker in REALTIME_MARKERS)
+    return any(marker in normalized for marker in NORMALIZED_REALTIME_MARKERS)
 
 
 def _with_search_path(base_url: str) -> str:
@@ -76,7 +83,7 @@ def _with_extract_path(base_url: str) -> str:
 
 def _ictu_search_query(query: str) -> str:
     normalized = normalize_scope_text(query or "")
-    if "ictu" in normalized or "dai hoc cong nghe thong tin va truyen thong" in normalized:
+    if any(marker in normalized for marker in NORMALIZED_ICTU_QUERY_MARKERS):
         return query.strip()
     return f"{query.strip()} {ICTU_WEB_QUERY_MARKER}".strip()
 
@@ -103,11 +110,7 @@ def _is_ictu_web_result(item: dict[str, Any]) -> bool:
         return True
 
     haystack = normalize_scope_text(f"{title}\n{url}\n{content}")
-    return (
-        "ictu" in haystack
-        or "dai hoc cong nghe thong tin va truyen thong" in haystack
-        or "truong dai hoc cong nghe thong tin va truyen thong" in haystack
-    )
+    return any(marker in haystack for marker in NORMALIZED_ICTU_QUERY_MARKERS)
 
 
 def _item_url(item: dict[str, Any]) -> str:

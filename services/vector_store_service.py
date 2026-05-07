@@ -171,7 +171,6 @@ def _resolve_local_embedding_model_path() -> Optional[Path]:
     return None
 
 
-@lru_cache(maxsize=1)
 def embedding_backend_ready() -> bool:
     local_model_path = _resolve_local_embedding_model_path()
     if local_model_path is not None:
@@ -184,6 +183,13 @@ def embedding_backend_ready() -> bool:
     except OSError as exc:
         print(f"Embedding backend unavailable, skip vector indexing: {exc}")
         return False
+
+
+def _clear_embedding_backend_ready_cache() -> None:
+    return None
+
+
+embedding_backend_ready.cache_clear = _clear_embedding_backend_ready_cache
 
 
 _load_bot_rule()
@@ -376,9 +382,9 @@ def smart_chunk(content: str, filename: str, source_name: Optional[str] = None) 
     """
     Chunk theo:
         • Heading (# ## ### ####)
-        • Khong cat ngang code block (```)
-        • Su dung chunk size/chunk overlap theo cau hinh runtime
-        • Ghi lai level/title de UI va retrieval de khai thac metadata tot hon
+        • Không cắt ngang code block (```)
+        • Sử dụng chunk size/chunk overlap theo cấu hình runtime
+        • Ghi lại level/title để UI và retrieval khai thác metadata tốt hơn
     """
     lines = content.split("\n")
     max_words = max(1, int(getattr(settings, "CHUNK_SIZE", 1000) or 1000))
@@ -570,7 +576,7 @@ def inject_bot_rule(force_full: bool = False):
     try:
         coll = get_collection()
     except Exception as exc:
-        print(f"Bo qua inject_bot_rule vi vector store chua san sang: {exc}")
+        print(f"Bỏ qua inject_bot_rule vì vector store chưa sẵn sàng: {exc}")
         return
 
     rule_text = get_bot_rule_text() if force_full else BOT_RULE_SHORT
@@ -754,14 +760,14 @@ def initialize_vectorstore():
     coll = get_collection()
     # Đảm bảo load bot rule
     inject_bot_rule()
-    print("Bot-rule da duoc inject - luon dung top 1")
+    print("Bot-rule đã được inject - luôn dùng top 1")
     if coll.count() > 0:
         _rebuild_bm25()
-        print(f"Warm-up BM25 thanh cong voi {coll.count()} chunks")
+        print(f"Warm-up BM25 thành công với {coll.count()} chunks")
     else:
-        print("Vector store hien dang trong - cho add tai lieu dau tien")
+        print("Vector store hiện đang trống - chờ add tài liệu đầu tiên")
     print("="*70)
-    print("VECTOR STORE v2.0 DA KHOI DONG HOAN TOAN")
-    print("- Hybrid search da chuan hoa - Bot-rule bat tu - Session memory - Logging")
-    print("- Toc do ~1.0-1.8s/query - RAM nhe - Enterprise ready")
+    print("VECTOR STORE v2.0 ĐÃ KHỞI ĐỘNG HOÀN TOÀN")
+    print("- Hybrid search đã chuẩn hóa - Bot-rule bất tử - Session memory - Logging")
+    print("- Tốc độ ~1.0-1.8s/query - RAM nhẹ - Enterprise ready")
     print("="*70)

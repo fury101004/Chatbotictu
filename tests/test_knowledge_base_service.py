@@ -35,6 +35,23 @@ class ChatKnowledgePairingTests(unittest.TestCase):
         self.assertEqual(pairs[1].question, "So tay 2021-2022 co gi?")
         self.assertEqual(pairs[2].question, "Hoc phi nam 2024 la gi?")
 
+    def test_pair_chat_rows_keeps_fifo_order_when_user_sends_multiple_messages(self) -> None:
+        rows = [
+            {"id": 1, "role": "user", "content": "Cau hoi dau tien?", "timestamp": "2026-04-09 10:00:00", "session_id": "alpha"},
+            {"id": 2, "role": "user", "content": "Cau hoi thu hai?", "timestamp": "2026-04-09 10:00:02", "session_id": "alpha"},
+            {"id": 3, "role": "bot", "content": "Tra loi cho cau dau tien.", "timestamp": "2026-04-09 10:00:05", "session_id": "alpha"},
+            {"id": 4, "role": "assistant", "content": "Tra loi cho cau thu hai.", "timestamp": "2026-04-09 10:00:07", "session_id": "alpha"},
+        ]
+
+        pairs = _pair_chat_rows(rows)
+
+        self.assertEqual(len(pairs), 2)
+        ordered_pairs = sorted(pairs, key=lambda item: item.answer_row_id)
+        self.assertEqual(ordered_pairs[0].question, "Cau hoi dau tien?")
+        self.assertEqual(ordered_pairs[0].answer, "Tra loi cho cau dau tien.")
+        self.assertEqual(ordered_pairs[1].question, "Cau hoi thu hai?")
+        self.assertEqual(ordered_pairs[1].answer, "Tra loi cho cau thu hai.")
+
 
 class KnowledgeBasePayloadTests(unittest.TestCase):
     def test_payload_merges_vector_and_chat_sources_in_search_results(self) -> None:

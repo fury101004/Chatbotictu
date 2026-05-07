@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeoutError
-from functools import lru_cache
-from typing import Optional
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from typing import Optional
 
 from config.db import get_chat_history
 from config.rag_tools import DEFAULT_RAG_TOOL, FALLBACK_RAG_NODE, RAG_TOOL_ORDER, RAG_TOOL_PROFILES
@@ -22,17 +21,14 @@ from services.rag_corpus import (
     _search_documents,
     _tokenize,
     clear_rag_corpus_cache,
-    detect_target_file,
 )
 from services.rag_prompts import _RAW_TEXT_PROMPT, _build_rag_router_prompt, _build_retrieval_flow_prompt
 from services.rag_results import (
     _build_result_from_documents,
-    _build_result_from_matches,
     _build_scope_guard_result,
     _build_web_knowledge_result,
     _build_web_search_result,
     _merge_web_search_result,
-    build_context_from_chunks,
 )
 from services.rag_types import (
     RETRIEVAL_HYBRID,
@@ -48,6 +44,32 @@ from services.web_search import should_use_web_search
 
 TOOL_LEXICAL_RETRIEVAL_LIMIT = 8
 FALLBACK_LEXICAL_RETRIEVAL_LIMIT = 8
+_STUDENT_FAQ_ROUTE_CUES = (
+    "khi nào",
+    "bao giờ",
+    "ở đâu",
+    "làm sao",
+    "ntn",
+)
+_STUDENT_HANDBOOK_ROUTE_CUES = (
+    "điều kiện đạt danh hiệu",
+    "danh hiệu sinh viên",
+    "người học không được làm",
+    "hành vi nào",
+    "chương trình đào tạo",
+    "tổng số tín chỉ",
+)
+_SCHOOL_POLICY_ROUTE_CUES = (
+    "bảo hiểm y tế",
+    "bhyt",
+    "chính sách",
+    "lần 1",
+    "lần 2",
+    "lần 3",
+)
+_NORMALIZED_STUDENT_FAQ_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _STUDENT_FAQ_ROUTE_CUES)
+_NORMALIZED_STUDENT_HANDBOOK_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _STUDENT_HANDBOOK_ROUTE_CUES)
+_NORMALIZED_SCHOOL_POLICY_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _SCHOOL_POLICY_ROUTE_CUES)
 
 
 def _route_rag_tool_by_keyword(message: str) -> tuple[str, str]:
@@ -57,24 +79,14 @@ def _route_rag_tool_by_keyword(message: str) -> tuple[str, str]:
     for tool_name, profile in RAG_TOOL_PROFILES.items():
         keywords = [_normalize_for_match(keyword) for keyword in profile.get("route_keywords", [])]
         score = sum(2 for keyword in keywords if keyword in message_lower)
-        if tool_name == "student_faq_rag" and any(
-            cue in message_lower for cue in ["khi nao", "bao gio", "o dau", "lam sao", "ntn"]
-        ):
+        if tool_name == "student_faq_rag" and any(cue in message_lower for cue in _NORMALIZED_STUDENT_FAQ_ROUTE_CUES):
             score += 2
         if tool_name == "student_handbook_rag" and any(
-            cue in message_lower
-            for cue in [
-                "dieu kien dat danh hieu",
-                "danh hieu sinh vien",
-                "nguoi hoc khong duoc lam",
-                "hanh vi nao",
-                "chuong trinh dao tao",
-                "tong so tin chi",
-            ]
+            cue in message_lower for cue in _NORMALIZED_STUDENT_HANDBOOK_ROUTE_CUES
         ):
             score += 4
         if tool_name == "school_policy_rag" and any(
-            cue in message_lower for cue in ["bao hiem y te", "bhyt", "chinh sach", "lan 1", "lan 2", "lan 3"]
+            cue in message_lower for cue in _NORMALIZED_SCHOOL_POLICY_ROUTE_CUES
         ):
             score += 4
         scores[tool_name] = score
@@ -114,7 +126,6 @@ def _extract_router_json(raw_text: str) -> Optional[dict]:
         return None
 
 
-@lru_cache(maxsize=1)
 def _llm_router_network_available() -> bool:
     return llm_network_available()
 

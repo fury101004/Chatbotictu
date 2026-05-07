@@ -19,14 +19,23 @@ WEB_KB_MIN_SCORE = int(os.getenv("WEB_KB_MIN_SCORE", "18"))
 WEB_KB_TTL_DAYS = int(os.getenv("WEB_KB_TTL_DAYS", "30"))
 WEB_KB_REALTIME_TTL_DAYS = int(os.getenv("WEB_KB_REALTIME_TTL_DAYS", "2"))
 OFFICIAL_ICTU_DOMAIN = "ictu.edu.vn"
-REALTIME_MARKERS = ("hom nay", "moi nhat", "tin moi", "tin tuc", "cap nhat", "thong bao moi")
+REALTIME_MARKERS = (
+    "hôm nay",
+    "mới nhất",
+    "tin mới",
+    "tin tức",
+    "cập nhật",
+    "thông báo mới",
+)
 
 NO_INFO_MARKERS = (
-    "thong tin nay hien chua co trong tai lieu",
-    "cau hoi nay nam ngoai pham vi ictu",
-    "tro ly ai chua duoc cau hinh",
-    "minh dang kiem tra them thong tin",
+    "Thông tin này hiện chưa có trong tài liệu.",
+    "Câu hỏi này nằm ngoài phạm vi ICTU.",
+    "Trợ lý AI chưa được cấu hình đầy đủ.",
+    "Mình đang kiểm tra thêm thông tin.",
 )
+NORMALIZED_NO_INFO_MARKERS = tuple(normalize_scope_text(marker) for marker in NO_INFO_MARKERS)
+NORMALIZED_REALTIME_MARKERS = tuple(normalize_scope_text(marker) for marker in REALTIME_MARKERS)
 
 
 @dataclass(slots=True)
@@ -112,12 +121,12 @@ def _valid_answer_for_cache(answer: str) -> bool:
     normalized = normalize_scope_text(answer or "")
     if len(normalized) < 20:
         return False
-    return not any(marker in normalized for marker in NO_INFO_MARKERS)
+    return not any(marker in normalized for marker in NORMALIZED_NO_INFO_MARKERS)
 
 
 def _is_realtime_query(query: str) -> bool:
     normalized = normalize_scope_text(query or "")
-    return any(marker in normalized for marker in REALTIME_MARKERS)
+    return any(marker in normalized for marker in NORMALIZED_REALTIME_MARKERS)
 
 
 def ensure_web_knowledge_schema() -> None:
@@ -254,9 +263,18 @@ def save_web_search_answer(
         ),
     )
     conn.commit()
-    row_id = cursor.lastrowid
+    cursor.execute(
+        "SELECT id FROM web_search_knowledge WHERE content_hash = ?",
+        (content_hash,),
+    )
+    row = cursor.fetchone()
     conn.close()
-    return {"saved": True, "status": status, "entry_id": row_id, "trusted_count": trusted_web_knowledge_count()}
+    return {
+        "saved": True,
+        "status": status,
+        "entry_id": int(row[0]) if row else None,
+        "trusted_count": trusted_web_knowledge_count(),
+    }
 
 
 def search_trusted_web_knowledge(query: str, *, limit: int = 4) -> list[WebKnowledgeMatch]:

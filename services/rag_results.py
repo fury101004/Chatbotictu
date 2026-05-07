@@ -6,7 +6,7 @@ from langchain_core.documents import Document
 
 from config.rag_tools import FALLBACK_RAG_NODE
 from models.chat import RAGResult, RetrievedChunk
-from services.ictu_scope_service import ICTU_SCOPE_REPLY_VI
+from services.ictu_scope_service import ICTU_SCOPE_REPLY_VI, normalize_scope_text
 from services.langchain_retrievers import WebKnowledgeRetriever, WebSearchRetriever
 from services.rag_corpus import _extract_relevant_snippet, _tokenize
 from services.rag_types import CorpusDocument
@@ -15,8 +15,10 @@ from services.web_search import search_web_ictu
 
 
 DEFAULT_CONTEXT_TEXT = "Thông tin đang được cập nhật."
-_UNTITLED_SENTINELS = {"Khong co tieu de", "Không có tiêu đề"}
-_EMPTY_CONTEXT_SENTINELS = {"Thong tin dang duoc cap nhat.", DEFAULT_CONTEXT_TEXT, ""}
+_UNTITLED_SENTINELS = ("Không có tiêu đề",)
+_EMPTY_CONTEXT_SENTINELS = (DEFAULT_CONTEXT_TEXT, "")
+_NORMALIZED_UNTITLED_SENTINELS = tuple(normalize_scope_text(marker) for marker in _UNTITLED_SENTINELS)
+_NORMALIZED_EMPTY_CONTEXT_SENTINELS = tuple(normalize_scope_text(marker) for marker in _EMPTY_CONTEXT_SENTINELS)
 
 
 def _documents_to_chunks(documents: list[Document]) -> list[RetrievedChunk]:
@@ -62,7 +64,7 @@ def _build_result_from_documents(
             continue
 
         text = chunk.document.strip().replace("\n", " ")[:2000]
-        if title and title not in _UNTITLED_SENTINELS:
+        if title and normalize_scope_text(title) not in _NORMALIZED_UNTITLED_SENTINELS:
             context_parts.append(f"[{title}]\n{text}")
         else:
             context_parts.append(text)
@@ -146,7 +148,7 @@ def _merge_web_search_result(local_result: RAGResult, web_result: Optional[RAGRe
         return local_result
 
     local_text = local_result.context_text.strip()
-    missing_local_context = local_text in _EMPTY_CONTEXT_SENTINELS
+    missing_local_context = normalize_scope_text(local_text) in _NORMALIZED_EMPTY_CONTEXT_SENTINELS
     if missing_local_context:
         context_text = web_result.context_text
     elif web_first:
@@ -210,7 +212,7 @@ def build_context_from_chunks(chunks: list[RetrievedChunk], max_chunks: int = 25
         if source and source != "BOT_RULE":
             sources.append(source)
 
-        if title and title not in _UNTITLED_SENTINELS:
+        if title and normalize_scope_text(title) not in _NORMALIZED_UNTITLED_SENTINELS:
             context_parts.append(f"[{title}]\n{text}")
         else:
             context_parts.append(text)
