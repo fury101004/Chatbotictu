@@ -6,8 +6,8 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from services.langchain_service import invoke_json_prompt_chain, invoke_text_prompt_chain
-from services.llm_service import LLMResponse
+from services.llm.langchain_service import invoke_json_prompt_chain, invoke_text_prompt_chain
+from services.llm.llm_service import LLMResponse
 
 
 class LangChainServiceTests(unittest.TestCase):
@@ -20,7 +20,7 @@ class LangChainServiceTests(unittest.TestCase):
         )
 
         with patch(
-            "services.langchain_service.generate_content_with_fallback",
+            "services.llm.langchain_service.generate_content_with_fallback",
             return_value=(LLMResponse(text="Chain reply"), "groq:test-model"),
         ) as generate_mock:
             reply, used_model = invoke_text_prompt_chain(
@@ -55,7 +55,7 @@ class LangChainServiceTests(unittest.TestCase):
         )
 
         with patch(
-            "services.langchain_service.generate_content_with_fallback",
+            "services.llm.langchain_service.generate_content_with_fallback",
             return_value=(
                 LLMResponse(text='{"tool":"student_faq_rag","confidence":0.91}'),
                 "groq:test-model",
@@ -73,3 +73,4 @@ class LangChainServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

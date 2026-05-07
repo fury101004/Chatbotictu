@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import main
 from config.settings import settings
-from services.llm_service import llm_network_available
+from services.llm.llm_service import llm_network_available
 
 
 def _run_live_e2e_enabled() -> bool:
@@ -47,3 +47,4 @@ class LiveLLME2ETests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

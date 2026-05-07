@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import shutil
 import time
-from collections import defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
@@ -19,6 +18,14 @@ from config.rag_tools import (
 )
 from config.settings import settings
 from models.document import HistoryEntry, UploadBatchResult, VectorManagerPayload
+from pipelines.document_admin_pipeline import (
+    build_vector_manager_summary,
+    build_vector_tool_groups,
+    iter_importable_paths as iter_importable_paths_from_pipeline,
+    iter_seed_source_records as iter_seed_source_records_from_pipeline,
+    iter_uploaded_source_records as iter_uploaded_source_records_from_pipeline,
+    reingest_source_records,
+)
 from repositories.conversation_repository import get_chat_history_page
 from repositories.upload_repository import (
     clear_uploaded_file_records,
@@ -31,8 +38,8 @@ from repositories.vector_repository import (
     get_vector_collection as get_collection,
 )
 from shared.vector_utils import display_vector_source, infer_vector_tool_name
-from services.rag_corpus import clear_rag_corpus_cache
-from services.vector_store_service import add_documents, embedding_backend_ready, reset_vectorstore
+from services.rag.rag_corpus import clear_rag_corpus_cache
+from services.vector.vector_store_service import add_documents, embedding_backend_ready, reset_vectorstore
 
 SUPPORTED_TEXT_SUFFIXES = {".md", ".markdown", ".txt"}
 get_uploaded_files = list_uploaded_files
@@ -40,14 +47,7 @@ add_uploaded_file = record_uploaded_file
 
 
 def _iter_importable_paths(root: Path) -> list[Path]:
-    if not root.exists():
-        return []
-
-    return sorted(
-        path
-        for path in root.rglob("*")
-        if path.is_file() and path.suffix.lower() in SUPPORTED_TEXT_SUFFIXES
-    )
+    return iter_importable_paths_from_pipeline(root, supported_suffixes=SUPPORTED_TEXT_SUFFIXES)
 
 
 def _normalize_tool_name(tool_name: Optional[str]) -> str:
@@ -300,64 +300,37 @@ def reset_document_store() -> None:
 
 
 def _build_vector_tool_groups(chunks_by_file: dict[str, list[dict]], limit_per_file: int) -> list[dict]:
-    grouped_sources: dict[str, dict[str, list[dict]]] = {tool_name: {} for tool_name in RAG_TOOL_ORDER}
-    theme_by_tool = {
-        "student_handbook_rag": "orange",
-        "school_policy_rag": "purple",
-        "student_faq_rag": "teal",
-    }
-
-    for source, chunks in chunks_by_file.items():
-        if not chunks:
-            continue
-
-        tool_name = infer_vector_tool_name(source, chunks[0].get("tool_name"))
-        if not is_valid_rag_tool(tool_name):
-            continue
-
-        grouped_sources.setdefault(str(tool_name), {})[source] = chunks
-
-    tool_groups: list[dict] = []
-    for tool_name in RAG_TOOL_ORDER:
-        file_items: list[dict] = []
-        total_chunks = 0
-
-        for source, items in sorted(grouped_sources.get(tool_name, {}).items(), key=lambda item: item[0]):
-            sorted_items = sorted(items, key=lambda chunk: chunk["level"], reverse=True)
-            is_upload_source = str(source).replace("\\", "/").startswith(f"{UPLOAD_SOURCE_PREFIX}/")
-            total_chunks += len(sorted_items)
-
-            file_items.append(
-                {
-                    "source": source,
-                    "display_name": display_vector_source(source),
-                    "source_label": source,
-                    "chunk_count": len(sorted_items),
-                    "chunks": sorted_items[:limit_per_file],
-                    "tool_name": tool_name,
-                    "is_upload_source": is_upload_source,
-                    "source_kind_label": "File upload" if is_upload_source else "Seed corpus",
-                }
-            )
-
-        profile = RAG_TOOL_PROFILES[tool_name]
-        tool_groups.append(
-            {
-                "name": tool_name,
-                "label": str(profile.get("label", tool_name)),
-                "description": str(profile.get("description", "")),
-                "theme": theme_by_tool.get(tool_name, "teal"),
-                "total_files": len(file_items),
-                "total_chunks": total_chunks,
-                "files": file_items,
-            }
-        )
-
-    return tool_groups
+    return build_vector_tool_groups(
+        chunks_by_file,
+        rag_tool_order=RAG_TOOL_ORDER,
+        rag_tool_profiles=RAG_TOOL_PROFILES,
+        infer_vector_tool_name=infer_vector_tool_name,
+        is_valid_rag_tool=is_valid_rag_tool,
+        display_vector_source=display_vector_source,
+        upload_source_prefix=UPLOAD_SOURCE_PREFIX,
+        limit_per_file=limit_per_file,
+    )
 
 
 def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
     data = get_collection().get(include=["metadatas", "documents"])
+    summary = build_vector_manager_summary(
+        data,
+        rag_tool_order=RAG_TOOL_ORDER,
+        rag_tool_profiles=RAG_TOOL_PROFILES,
+        infer_vector_tool_name=infer_vector_tool_name,
+        is_valid_rag_tool=is_valid_rag_tool,
+        display_vector_source=display_vector_source,
+        upload_source_prefix=UPLOAD_SOURCE_PREFIX,
+        limit_per_file=limit_per_file,
+    )
+    payload = VectorManagerPayload(
+        chunks_by_file=summary["chunks_by_file"],
+        total_chunks=summary["total_chunks"],
+        total_files=summary["total_files"],
+        tool_groups=summary["tool_groups"],
+    )
+    return payload.to_dict()
 
     chunks_by_file: dict[str, list[dict]] = defaultdict(list)
     for doc_id, doc, meta in zip(data["ids"], data.get("documents", []), data["metadatas"]):
@@ -402,6 +375,12 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
 
 
 def _iter_seed_source_records() -> list[tuple[Path, str, str]]:
+    return iter_seed_source_records_from_pipeline(
+        settings.QA_CORPUS_ROOT,
+        default_tool=DEFAULT_RAG_TOOL,
+        detect_tool_from_path=detect_tool_from_path,
+        supported_suffixes=SUPPORTED_TEXT_SUFFIXES,
+    )
     records: list[tuple[Path, str, str]] = []
     root = settings.QA_CORPUS_ROOT
     if not root.exists():
@@ -419,6 +398,14 @@ def _iter_seed_source_records() -> list[tuple[Path, str, str]]:
 
 
 def _iter_uploaded_source_records() -> list[tuple[Path, str, str]]:
+    return iter_uploaded_source_records_from_pipeline(
+        rag_tool_order=RAG_TOOL_ORDER,
+        get_tool_upload_dir=get_tool_upload_dir,
+        build_upload_source_name=build_upload_source_name,
+        upload_dir=settings.UPLOAD_DIR,
+        default_tool=DEFAULT_RAG_TOOL,
+        supported_suffixes=SUPPORTED_TEXT_SUFFIXES,
+    )
     records: list[tuple[Path, str, str]] = []
 
     for tool_name in RAG_TOOL_ORDER:
@@ -442,33 +429,17 @@ def reingest_uploaded_documents() -> tuple[int, int]:
             continue
         seen_sources.add(normalized_source)
         source_records.append((path, tool_name, normalized_source))
-
-    if not source_records:
-        return 0, 0
-
-    reset_vectorstore()
-    total_files = 0
-    total_chunks = 0
-    for path, tool_name, source_name in source_records:
-        try:
-            before_count = get_collection().count()
-            text = path.read_text(encoding="utf-8", errors="ignore")
-            add_documents(
-                file_content=text,
-                filename=path.name,
-                source_name=source_name,
-                tool_name=tool_name,
-            )
-            total_files += 1
-            total_chunks += max(get_collection().count() - before_count, 0)
-        except Exception as exc:
-            print(f"Re-ingest lỗi {path.name}: {exc}")
-
-    clear_rag_corpus_cache()
-    return total_files, total_chunks
+    return reingest_source_records(
+        source_records,
+        reset_vectorstore=reset_vectorstore,
+        get_collection=get_collection,
+        add_documents=add_documents,
+        clear_rag_corpus_cache=clear_rag_corpus_cache,
+    )
 
 
 def get_history_page_data(page: int, per_page: int = 50) -> dict:
     payload = get_chat_history_page(page=page, per_page=per_page)
     payload["uploaded_files"] = get_uploaded_files()
     return payload
+

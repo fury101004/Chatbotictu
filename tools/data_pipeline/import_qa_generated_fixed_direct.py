@@ -18,7 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from config.rag_tools import DEFAULT_RAG_TOOL, detect_tool_from_path
 from config.settings import settings
-from services.vector_store_service import add_documents, get_collection, reset_vectorstore
+from services.vector.vector_store_service import add_documents, get_collection, reset_vectorstore
 
 
 SUPPORTED_SUFFIXES = {".md", ".markdown", ".txt"}
@@ -112,3 +112,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

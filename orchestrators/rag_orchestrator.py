@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Optional
 
 from models.chat import RAGResult
-from services.rag_types import RetrievalFlowPlan
-from services.rag_service import (
+from services.rag.rag_types import RetrievalFlowPlan
+from services.rag.rag_service import (
     retrieve_fallback_context,
     retrieve_general_context,
     retrieve_tool_context,
@@ -67,3 +67,4 @@ def retrieve_context(
         tool_name=rag_tool,
         retrieval_plan=retrieval_plan,
     )
+

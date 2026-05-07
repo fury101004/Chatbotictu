@@ -5,8 +5,8 @@ from typing import Optional
 
 from config.settings import settings
 from models.chat import ChatResponse
-from services.llm_service import PRIMARY_MODEL_NAME, get_model
-from services.vector_store_service import embedding_backend_ready
+from services.llm.llm_service import PRIMARY_MODEL_NAME, get_model
+from services.vector.vector_store_service import embedding_backend_ready
 
 
 def build_token_response(token: str) -> dict:
@@ -51,3 +51,4 @@ def build_health_response() -> dict:
         "embedding_backend_ready": embedding_backend_ready(),
         "timestamp": datetime.now().isoformat(),
     }
+

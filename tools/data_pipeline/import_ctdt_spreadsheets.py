@@ -26,7 +26,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import settings
-from services.document_service import reingest_uploaded_documents
+from services.content.document_service import reingest_uploaded_documents
 
 
 DEFAULT_SOURCE_MD = (
@@ -429,3 +429,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

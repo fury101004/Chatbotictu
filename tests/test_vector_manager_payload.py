@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from services.document_service import get_vector_manager_payload
+from services.content.document_service import get_vector_manager_payload
 
 
 class _FakeCollection:
@@ -55,7 +55,7 @@ class _FakeCollection:
 
 class VectorManagerPayloadTests(unittest.TestCase):
     def test_payload_is_grouped_into_three_rag_tools(self) -> None:
-        with patch("services.document_service.get_collection", return_value=_FakeCollection()):
+        with patch("services.content.document_service.get_collection", return_value=_FakeCollection()):
             payload = get_vector_manager_payload(limit_per_file=10)
 
         self.assertEqual(payload["total_files"], 3)
@@ -89,3 +89,4 @@ class VectorManagerPayloadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

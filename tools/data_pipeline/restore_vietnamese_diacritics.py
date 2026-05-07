@@ -224,7 +224,7 @@ def try_repair_roundtrip(text: str, encoding_name: str) -> str:
 
 def fix_mojibake(text: str) -> tuple[str, bool]:
     # Do not transform plain ASCII text. Round-trip heuristics can otherwise
-    # introduce fake Vietnamese-looking mojibake (for example "va" -> "vĂ ").
+    # introduce fake Vietnamese-looking mojibake (for example "va" -> "và").
     if text.isascii() and not contains_mojibake(text):
         return text, False
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from models.chat import RetrievedChunk
-from services.web_knowledge_service import save_web_search_answer, search_trusted_web_knowledge
+from services.content.web_knowledge_service import save_web_search_answer, search_trusted_web_knowledge
 
 
 class WebKnowledgeServiceTests(unittest.TestCase):
@@ -24,7 +24,7 @@ class WebKnowledgeServiceTests(unittest.TestCase):
 
             with (
                 patch("config.db.DB_PATH", db_path),
-                patch("services.web_knowledge_service.WEB_KB_TRUSTED_THRESHOLD", 1),
+                patch("services.content.web_knowledge_service.WEB_KB_TRUSTED_THRESHOLD", 1),
             ):
                 result = save_web_search_answer(
                     question="ICTU tuyển sinh mới nhất có gì?",
@@ -56,7 +56,7 @@ class WebKnowledgeServiceTests(unittest.TestCase):
 
             with (
                 patch("config.db.DB_PATH", db_path),
-                patch("services.web_knowledge_service.WEB_KB_TRUSTED_THRESHOLD", 1),
+                patch("services.content.web_knowledge_service.WEB_KB_TRUSTED_THRESHOLD", 1),
             ):
                 result = save_web_search_answer(
                     question="ICTU có tin gì mới?",
@@ -83,7 +83,7 @@ class WebKnowledgeServiceTests(unittest.TestCase):
 
             with (
                 patch("config.db.DB_PATH", db_path),
-                patch("services.web_knowledge_service.WEB_KB_TRUSTED_THRESHOLD", 1),
+                patch("services.content.web_knowledge_service.WEB_KB_TRUSTED_THRESHOLD", 1),
             ):
                 first = save_web_search_answer(
                     question="Hoc phi ICTU moi nhat la gi?",
@@ -104,3 +104,4 @@ class WebKnowledgeServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

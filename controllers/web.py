@@ -1,4 +1,4 @@
-﻿from controllers.web_controller import router
+from controllers.web_controller import router
 
 __all__ = ["router"]
 

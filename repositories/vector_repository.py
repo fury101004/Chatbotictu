@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.vector_store_service import get_collection, query_documents
+from services.vector.vector_store_service import get_collection, query_documents
 
 
 def get_vector_collection():
@@ -66,3 +66,4 @@ def delete_vector_source(source: str) -> None:
     if not normalized_source:
         raise ValueError("source is required")
     get_vector_collection().delete(where={"source": normalized_source})
+

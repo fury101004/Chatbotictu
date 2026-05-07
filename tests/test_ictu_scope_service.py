@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unittest
 
-from services.ictu_scope_service import is_ictu_related_query
+from services.rag.ictu_scope_service import is_ictu_related_query
 
 
 class ICTUScopeServiceTests(unittest.TestCase):
@@ -30,3 +30,4 @@ class ICTUScopeServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

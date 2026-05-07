@@ -14,7 +14,7 @@ Post-check (expect `Changed 0 files`):
 ### 2) Re-ingest after metadata schema changes
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-.\venv\Scripts\python.exe -c "from services.document_service import reingest_uploaded_documents; print(reingest_uploaded_documents())"
+.\venv\Scripts\python.exe -c "from services.content.document_service import reingest_uploaded_documents; print(reingest_uploaded_documents())"
 ```
 
 ### 3) Run regression tests (year-isolation + metadata + security)
@@ -47,3 +47,4 @@ $env:RUN_LIVE_LLM_E2E='1'
 429 metrics endpoint:
 - `GET /api/v1/metrics/rate-limit-429`
 - `POST /api/v1/metrics/rate-limit-429/reset`
+

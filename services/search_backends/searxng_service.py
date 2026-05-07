@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import FastAPI, Query
 
-from services.ictu_scope_service import is_ictu_related_query, normalize_scope_text
+from services.rag.ictu_scope_service import is_ictu_related_query, normalize_scope_text
 
 
 logger = logging.getLogger("searxng")
@@ -156,3 +156,4 @@ def search(
     query = q.strip()
     logger.info("Search: %s (time_range=%s)", query[:80], time_range or "none")
     return {"results": _search_ddgs(query, max_results=12, time_range=time_range)}
+

@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unittest
 
-from services.multilingual_service import _sanitize_model_reply
+from services.chat.multilingual_service import _sanitize_model_reply
 
 
 class MultilingualServiceTests(unittest.TestCase):
@@ -17,3 +17,4 @@ class MultilingualServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

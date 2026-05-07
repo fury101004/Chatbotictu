@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import sys
@@ -23,8 +23,8 @@ if str(ROOT) not in sys.path:
 
 from config.settings import settings  # noqa: E402
 from tools.evaluation.analyze_dataset import analyze_corpus  # noqa: E402
-from services.document_service import get_vector_manager_payload  # noqa: E402
-from services.knowledge_base_service import get_knowledge_base_payload  # noqa: E402
+from services.content.document_service import get_vector_manager_payload  # noqa: E402
+from services.content.knowledge_base_service import get_knowledge_base_payload  # noqa: E402
 
 REPORT_DIR = ROOT / "reports"
 GENERATED_DIR = REPORT_DIR / "generated"
@@ -395,3 +395,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

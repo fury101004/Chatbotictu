@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -22,7 +22,7 @@ MOJIBAKE_PATTERNS = [
     re.compile(r"â€."),
     re.compile(r"â†."),
     re.compile(r"Ä[‘ƒ]"),
-    re.compile(r"Æ°"),
+    re.compile(r"ư"),
     re.compile(r"ðŸ"),
 ]
 VIETNAMESE_CHARS = (

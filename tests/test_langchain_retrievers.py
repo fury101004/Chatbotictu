@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from services.langchain_retrievers import (
+from services.rag.langchain_retrievers import (
     CorpusLexicalRetriever,
     VectorStoreRetriever,
     WebKnowledgeRetriever,
@@ -94,3 +94,4 @@ class LangChainRetrieverTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

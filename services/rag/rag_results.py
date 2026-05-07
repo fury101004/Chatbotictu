@@ -6,14 +6,14 @@ from langchain_core.documents import Document
 
 from config.rag_tools import FALLBACK_RAG_NODE
 from models.chat import RAGResult, RetrievedChunk
-from services.citation_service import merge_sources, sources_from_metadata
-from services.context_builder import DEFAULT_CONTEXT_TEXT, build_context_entry, build_context_text
-from services.ictu_scope_service import ICTU_SCOPE_REPLY_VI, normalize_scope_text
-from services.langchain_retrievers import WebKnowledgeRetriever, WebSearchRetriever
-from services.rag_corpus import _extract_relevant_snippet, _tokenize
-from services.rag_types import CorpusDocument
-from services.web_knowledge_service import search_trusted_web_knowledge
-from services.web_search import search_web_ictu
+from services.rag.citation_service import merge_sources, sources_from_metadata
+from services.rag.context_builder import DEFAULT_CONTEXT_TEXT, build_context_entry, build_context_text
+from services.rag.ictu_scope_service import ICTU_SCOPE_REPLY_VI, normalize_scope_text
+from services.rag.langchain_retrievers import WebKnowledgeRetriever, WebSearchRetriever
+from services.rag.rag_corpus import _extract_relevant_snippet, _tokenize
+from services.rag.rag_types import CorpusDocument
+from services.content.web_knowledge_service import search_trusted_web_knowledge
+from services.content.web_search import search_web_ictu
 
 
 _EMPTY_CONTEXT_SENTINELS = (DEFAULT_CONTEXT_TEXT, "")
@@ -202,3 +202,4 @@ def build_context_from_chunks(chunks: list[RetrievedChunk], max_chunks: int = 25
 
     context_text = build_context_text(context_parts)
     return context_text, sources
+

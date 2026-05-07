@@ -17,7 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from config.settings import settings
-from services.rate_limit_monitor import record_429
+from services.llm.rate_limit_monitor import record_429
 
 
 APP_LOG_FORMAT = (
@@ -224,3 +224,4 @@ def register_middleware(app: FastAPI) -> None:
         allow_headers=["*"],
     )
     app.add_middleware(LoggingMiddleware)
+

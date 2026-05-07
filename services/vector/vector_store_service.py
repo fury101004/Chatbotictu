@@ -1,4 +1,4 @@
-﻿
+
 # vector_store.py – Vector Store với ChromaDB + Hybrid Search
 # Mục đích: Retrieval cực nhanh, chính xác, ổn định cho chatbot nội bộ
 #tiktoken + chromadb + rank_bm25 + sentence-transformers
@@ -28,15 +28,12 @@ import os
 from pathlib import Path
 from rank_bm25 import BM25Okapi
 from typing import List, Tuple, Dict, Any, Optional
-import hashlib
 import re
 import socket
 import time
-import json
 from functools import lru_cache
 from datetime import datetime
-from collections import defaultdict, deque
-import unicodedata
+from collections import defaultdict
 
 from config.settings import settings
 from pipelines.chunking_pipeline import (
@@ -49,8 +46,15 @@ from pipelines.embedding_pipeline import (
     embedding_backend_ready as embedding_backend_ready_from_pipeline,
 )
 from pipelines.indexing_pipeline import index_document
+from pipelines.vector_query_pipeline import (
+    normalize_bm25_text as normalize_bm25_text_from_pipeline,
+    normalize_scores as normalize_scores_from_pipeline,
+    rebuild_bm25_index,
+    run_hybrid_query,
+    tokenize_bm25_text as tokenize_bm25_text_from_pipeline,
+)
 from shared.token_utils import count_text_tokens
-from services.memory_service import SESSION_MEMORY, clear_memory_store
+from services.chat.memory_service import SESSION_MEMORY, clear_memory_store
 
 # Metadata (title, level, source, word_count) được dùng để cho biết chunk đến từ đâu, thuộc phần nào, quan trọng cỡ nào và hiển thị preview
 
@@ -193,70 +197,42 @@ _last_count = -1                       # để biết DB có thay đổi không 
 
 
 def _normalize_bm25_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKD", str(text or "").casefold())
-    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    normalized = normalized.replace("đ", "d").replace("&", " va ")
-    return re.sub(r"\s+", " ", normalized).strip()
+    return normalize_bm25_text_from_pipeline(text)
 
 
 def _tokenize_bm25_text(text: str) -> list[str]:
-    normalized = _normalize_bm25_text(text)
-    return [token for token in re.findall(r"[a-z0-9]+", normalized) if len(token) > 1]
+    return tokenize_bm25_text_from_pipeline(text)
 
 
 # b6 Tokenize tất cả document.Tạo BM25 index để hỗ trợ hybrid search (vector + BM25).
 def _rebuild_bm25():
     """Chỉ rebuild BM25 khi số lượng document thay đổi → cực nhẹ RAM/CPU"""
     global _bm25, _all_tokenized, _all_ids, _last_count
-    coll = get_collection()
-    current = coll.count()
-
-    # Nếu số lượng không đổi và đã có BM25 rồi → bỏ qua
-    if current == _last_count and _bm25 is not None:
-        return
-
-    # Lấy toàn bộ document + id từ Chroma
-    data = coll.get(include=["documents"])
-    docs = data["documents"]
-    ids = data["ids"]
-
-    # Tokenize đơn giản (lower + split) để BM25 dùng
-    _all_tokenized = [_tokenize_bm25_text(doc) for doc in docs]
-    _all_ids = ids
-    _bm25 = BM25Okapi(_all_tokenized) if docs else None
-    _last_count = current
-    print(f"BM25 rebuilt with {len(docs)} chunks")
+    _bm25, _all_tokenized, _all_ids, _last_count = rebuild_bm25_index(
+        collection_getter=get_collection,
+        current_bm25=_bm25,
+        current_tokenized=_all_tokenized,
+        current_ids=_all_ids,
+        current_count=_last_count,
+        bm25_factory=BM25Okapi,
+        tokenize_text_fn=_tokenize_bm25_text,
+    )
 
 
 def _normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
-    if not raw_scores:
-        return {}
-    minimum = min(raw_scores.values())
-    maximum = max(raw_scores.values())
-    if maximum <= minimum:
-        return {key: 1.0 for key in raw_scores}
-    return {
-        key: (value - minimum) / (maximum - minimum + 1e-8)
-        for key, value in raw_scores.items()
-    }
+    return normalize_scores_from_pipeline(raw_scores)
 
 
 def _top_bm25_candidates(query: str, limit: int) -> tuple[Dict[str, float], list[str]]:
-    if _bm25 is None or not _all_ids:
-        return {}, []
+    from pipelines.vector_query_pipeline import top_bm25_candidates
 
-    query_tokens = _tokenize_bm25_text(query)
-    if not query_tokens:
-        return {}, []
-
-    bm25_raw = _bm25.get_scores(query_tokens)
-    raw_scores = {doc_id: float(bm25_raw[index]) for index, doc_id in enumerate(_all_ids)}
-    ranked_ids = [
-        doc_id
-        for doc_id, score in sorted(raw_scores.items(), key=lambda item: item[1], reverse=True)
-        if score > 0
-    ][:limit]
-    return _normalize_scores(raw_scores), ranked_ids
+    return top_bm25_candidates(
+        query,
+        bm25_index=_bm25,
+        all_ids=_all_ids,
+        limit=limit,
+        tokenize_text_fn=_tokenize_bm25_text,
+    )
 
 # 3. SMART CHUNKING – delegated to ingestion pipeline
 def _extract_academic_year(source_name: str, filename: str, content: str) -> Optional[str]:
@@ -276,13 +252,6 @@ def smart_chunk(content: str, filename: str, source_name: Optional[str] = None) 
         chunk_overlap=settings.CHUNK_OVERLAP,
         count_tokens_fn=count_tokens,
     )
-
-# 4. ADD DOCUMENTS – Xóa cũ, thêm mới, tự động chunk
-def _build_chunk_id_prefix(source_name: str) -> str:
-    digest = hashlib.sha1(source_name.encode("utf-8", errors="ignore")).hexdigest()[:12]
-    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", source_name).strip("_") or "document"
-    return f"{safe_name}__{digest}"
-
 
 def add_documents(
     file_content: str,
@@ -339,11 +308,6 @@ def inject_bot_rule(force_full: bool = False):
     )
 
 # 6. HYBRID SEARCH dùng để truy vấn tài liệu với hybrid search (vector + BM25) và ép bot-rule lên đầu.
-@lru_cache(maxsize=500)
-def _cached_embedding(query: str):
-    """Cache embedding của query → vector search nhanh hơn rất nhiều"""
-    return get_embedding_function()([query])[0]
-# b4 Truy vấn tài liệu với hybrid search (vector + BM25) và ép bot-rule lên đầu.
 def query_documents(
     query: str,
     user_id: str = "default",
@@ -355,126 +319,21 @@ def query_documents(
     Trả về:
         docs, metas, extra_info (session, stats, sources)
     """
-    start = time.time()
-    STATS["total_queries"] += 1
-
     coll = get_collection()
     _rebuild_bm25()  # đảm bảo BM25 mới nhất
-    if coll.count() == 0:
-        return [], [], {"session_history": list(SESSION_MEMORY[user_id]), "stats": STATS.copy(), "sources": []}
-
-    vector_candidate_limit = max(n_results + 15, n_results * 3)
-    bm25_candidate_limit = max(n_results + 10, n_results * 2)
-
-    # vector search đầu tiên để lấy candidates
-    vec = coll.query(
-        query_texts=[query],
-        n_results=vector_candidate_limit,
-        include=["documents", "metadatas", "distances"]
+    return run_hybrid_query(
+        collection=coll,
+        query=query,
+        user_id=user_id,
+        n_results=n_results,
+        alpha=alpha,
+        bm25_index=_bm25,
+        all_ids=_all_ids,
+        tokenize_text_fn=_tokenize_bm25_text,
+        bot_rule_id=BOT_RULE_ID,
+        session_memory=SESSION_MEMORY,
+        stats=STATS,
     )
-
-    v_ids = vec["ids"][0]
-    v_distances = vec["distances"][0]   # cosine distance: 0 = giống, 2 = khác
-
-    # Chuyển distance → similarity (0-1)
-    cosine_raw = {
-        doc_id: 1.0 - distance
-        for doc_id, distance in zip(v_ids, v_distances)
-    }
-    norm_cosine = _normalize_scores(cosine_raw)
-    norm_bm25, bm25_ids = _top_bm25_candidates(query, bm25_candidate_limit)
-
-    candidate_ids = list(dict.fromkeys([*v_ids, *bm25_ids]))
-    if BOT_RULE_ID not in candidate_ids:
-        candidate_ids.append(BOT_RULE_ID)
-
-    # hybrid_scores dùng để kết hợp 2 điểm số
-    hybrid_scores: Dict[str, float] = {}
-    for doc_id in candidate_ids:
-        c_score = norm_cosine.get(doc_id, 0.0)
-        b_score = norm_bm25.get(doc_id, 0.0)
-        hybrid_scores[doc_id] = alpha * c_score + (1 - alpha) * b_score
-        if doc_id == BOT_RULE_ID:
-            hybrid_scores[doc_id] = 2.0
-
-    # Lấy top candidates
-    ranked_ids = [
-        doc_id
-        for doc_id, _score in sorted(hybrid_scores.items(), key=lambda item: item[1], reverse=True)
-    ]
-    top_ids = ranked_ids[: n_results + 5]
-
-    # Lấy nội dung thật
-    results = coll.get(ids=top_ids, include=["documents", "metadatas"])
-    docs = results["documents"]
-    metas = results["metadatas"]
-    ids = results["ids"]
-    items_by_id = {
-        doc_id: (document, metadata)
-        for doc_id, document, metadata in zip(ids, docs, metas)
-    }
-
-    # cho bot rule luôn đứng đầu
-    rule_doc = None
-    rule_meta = None
-    normal_docs = []
-    normal_metas = []
-
-    for doc_id in top_ids:
-        item = items_by_id.get(doc_id)
-        if item is None:
-            continue
-        d, m = item
-        if m.get("source") == "BOT_RULE" or doc_id == BOT_RULE_ID:
-            rule_doc = d
-            rule_meta = m
-        else:
-            enriched_meta = dict(m or {})
-            enriched_meta["hybrid_score"] = round(hybrid_scores.get(doc_id, 0.0), 6)
-            enriched_meta["vector_score"] = round(norm_cosine.get(doc_id, 0.0), 6)
-            enriched_meta["bm25_score"] = round(norm_bm25.get(doc_id, 0.0), 6)
-            normal_docs.append(d)
-            normal_metas.append(enriched_meta)
-
-    # Nếu rule không có trong top → lấy thủ công
-    if not rule_doc:
-        rule_data = coll.get(ids=[BOT_RULE_ID], include=["documents", "metadatas"])
-        if rule_data["documents"]:
-            rule_doc = rule_data["documents"][0]
-            rule_meta = rule_data["metadatas"][0]
-
-    # Ghép lại: rule luôn top 1
-    final_docs = []
-    final_metas = []
-    if rule_doc:
-        final_docs.append(rule_doc)
-        final_metas.append(rule_meta)
-
-    final_docs.extend(normal_docs[:n_results - 1])
-    final_metas.extend(normal_metas[:n_results - 1])
-
-    #lưu session memory cho user
-    SESSION_MEMORY[user_id].append({
-        "query": query,
-        "timestamp": datetime.now().isoformat(),
-        "sources": [m.get("source", "") for m in final_metas if m.get("source") != "BOT_RULE"],
-        "retrieved_ids": ranked_ids[:n_results]
-    })
-
-    # Cập nhật thống kê
-    elapsed = time.time() - start
-    STATS["avg_time"] = (STATS["avg_time"] * (STATS["total_queries"] - 1) + elapsed) / STATS["total_queries"]
-    for m in final_metas:
-        if m.get("source") not in ["BOT_RULE", None]:
-            STATS["popular_files"][m["source"]] += 1
-
-    print(f"QUERY OK | {elapsed:.3f}s | alpha={alpha} | {len(final_docs)} results | User: {user_id[-8:]}")
-
-    return final_docs, final_metas, {
-        "session_history": list(SESSION_MEMORY[user_id]),
-        "stats": STATS.copy(),
-        "sources": list(set(m.get("source") for m in final_metas if m.get("source") != "BOT_RULE"))
-    }
 
 # 7. HỖ TRỢ & RESET VECTOR STORE 
 
@@ -517,3 +376,4 @@ def initialize_vectorstore():
     print("- Hybrid search đã chuẩn hóa - Bot-rule bất tử - Session memory - Logging")
     print("- Tốc độ ~1.0-1.8s/query - RAM nhẹ - Enterprise ready")
     print("="*70)
+

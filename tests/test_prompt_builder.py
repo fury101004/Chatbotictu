@@ -3,11 +3,11 @@ from __future__ import annotations
 import unicodedata
 import unittest
 
-from services.multilingual_service import _build_final_prompt
+from services.chat.multilingual_service import _build_final_prompt
 
 
 def _ascii(text: str) -> str:
-    text = text.replace("Ä‘", "d").replace("Ä", "D")
+    text = text.replace("đ", "d").replace("Đ", "D")
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
 

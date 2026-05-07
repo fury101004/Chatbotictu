@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 import main
 from config.settings import settings
 from models.chat import RAGResult
-from services.chat_service import process_chat_message
+from services.chat.chat_service import process_chat_message
 
 
 class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
@@ -25,9 +25,9 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch("services.chat_service.route_rag_tool", return_value=("school_policy_rag", "router_policy")),
-            patch("services.chat_service.retrieve_tool_context", return_value=empty_result),
-            patch("services.chat_service.save_message"),
+            patch("services.chat.chat_service.route_rag_tool", return_value=("school_policy_rag", "router_policy")),
+            patch("services.chat.chat_service.retrieve_tool_context", return_value=empty_result),
+            patch("services.chat.chat_service.save_message"),
         ):
             result = await process_chat_message("Học phí là bao nhiêu?", session_id="clarify-1")
 
@@ -47,9 +47,9 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch("services.chat_service.route_rag_tool", return_value=("student_faq_rag", "router_faq")),
-            patch("services.chat_service.retrieve_tool_context", return_value=empty_result),
-            patch("services.chat_service.save_message"),
+            patch("services.chat.chat_service.route_rag_tool", return_value=("student_faq_rag", "router_faq")),
+            patch("services.chat.chat_service.retrieve_tool_context", return_value=empty_result),
+            patch("services.chat.chat_service.save_message"),
         ):
             result = await process_chat_message("Email phòng ban nào xử lý việc đặc biệt này?", session_id="fallback-1")
 
@@ -58,7 +58,7 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Knowledge Base", result["response"])
 
     async def test_process_chat_message_returns_local_greeting_intent(self) -> None:
-        with patch("services.chat_service.save_message"):
+        with patch("services.chat.chat_service.save_message"):
             result = await process_chat_message("Xin chào", session_id="greeting-1")
 
         self.assertEqual(result["intent"], "greeting")
@@ -124,3 +124,4 @@ class ApiEndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

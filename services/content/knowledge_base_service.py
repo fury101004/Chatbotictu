@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -17,6 +17,16 @@ from config.rag_tools import (
     is_valid_rag_tool,
 )
 from config.settings import settings
+from pipelines.knowledge_base_pipeline import (
+    build_approved_chat_markdown as build_approved_chat_markdown_from_pipeline,
+    display_timestamp as display_timestamp_from_pipeline,
+    group_chat_entries as group_chat_entries_from_pipeline,
+    group_vector_entries as group_vector_entries_from_pipeline,
+    load_vector_entries as load_vector_entries_from_pipeline,
+    pair_chat_rows as pair_chat_rows_from_pipeline,
+    search_chat_entries as search_chat_entries_from_pipeline,
+    search_vector_entries as search_vector_entries_from_pipeline,
+)
 from repositories.conversation_repository import list_chat_history_rows
 from repositories.knowledge_base_repository import (
     list_approved_chat_entry_ids,
@@ -26,9 +36,9 @@ from repositories.knowledge_base_repository import (
 from repositories.vector_repository import list_vector_chunks
 from shared.text_utils import normalize_search_text, tokenize_search_text
 from shared.vector_utils import display_vector_source, infer_vector_tool_name
-from services.ictu_scope_service import ICTU_SCOPE_REPLY_VI, is_ictu_related_query
-from services.rag_corpus import clear_rag_corpus_cache
-from services.vector_store_service import add_documents, embedding_backend_ready
+from services.rag.ictu_scope_service import ICTU_SCOPE_REPLY_VI, is_ictu_related_query
+from services.rag.rag_corpus import clear_rag_corpus_cache
+from services.vector.vector_store_service import add_documents, embedding_backend_ready
 
 
 MAX_VECTOR_CONTENT_CHARS = 7000
@@ -129,11 +139,7 @@ def _build_match_snippet(body: str, query: str, max_chars: int) -> str:
 
 
 def _display_timestamp(raw_timestamp: str) -> str:
-    try:
-        parsed = datetime.strptime(raw_timestamp.split(".")[0], "%Y-%m-%d %H:%M:%S")
-        return parsed.strftime("%d/%m %H:%M")
-    except Exception:
-        return raw_timestamp or "Vua xong"
+    return display_timestamp_from_pipeline(raw_timestamp)
 
 
 def _fetch_chat_rows() -> list[dict]:
@@ -145,6 +151,12 @@ def _build_chat_entry_id(session_id: str, answer_row_id: int) -> str:
 
 
 def _pair_chat_rows(rows: list[dict]) -> list[ChatKnowledgeEntry]:
+    return pair_chat_rows_from_pipeline(
+        rows,
+        max_chat_snippet_chars=MAX_CHAT_SNIPPET_CHARS,
+        build_chat_entry_id=_build_chat_entry_id,
+        entry_factory=ChatKnowledgeEntry,
+    )
     pending_question_by_session: dict[str, deque[dict]] = defaultdict(deque)
     pairs: list[ChatKnowledgeEntry] = []
 
@@ -233,6 +245,7 @@ def _approved_chat_source_name(tool_name: str, filename: str) -> str:
 
 
 def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> str:
+    return build_approved_chat_markdown_from_pipeline(entry, tool_name)
     title = f"Approved Chat QA - {entry.question[:120]}"
     approved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     lines = [
@@ -247,18 +260,18 @@ def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> 
         "",
         f"# {title}",
         "",
-        "## CĂ¢u há»i",
+        "## Câu hỏi",
         "",
         entry.question.strip(),
         "",
-        "## Tráº£ lá»i Ä‘Ă£ duyá»‡t",
+        "## Trả lời đã duyệt",
         "",
         entry.answer.strip(),
         "",
         "## Ghi chu",
         "",
-        "- Nguá»“n nĂ y Ä‘Æ°á»£c táº¡o tá»« cáº·p há»i Ä‘Ă¡p chatbot Ä‘Ă£ duyá»‡t thá»§ cĂ´ng.",
-        "- CĂ³ thá»ƒ Ä‘Æ°á»£c Ä‘á»“ng bá»™ vĂ o vector store Ä‘á»ƒ dĂ¹ng láº¡i trong retrieval.",
+        "- Nguồn này được tạo từ cặp hỏi đáp chatbot đã duyệt thủ công.",
+        "- Có thể được đồng bộ vào vector store để dùng lại trong retrieval.",
         "",
     ]
     return "\n".join(lines)
@@ -267,7 +280,7 @@ def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> 
 def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict:
     entry = get_chat_entry_by_id(entry_id)
     if entry is None:
-        raise ValueError("KhĂ´ng tĂ¬m tháº¥y cáº·p há»i Ä‘Ă¡p chatbot Ä‘á»ƒ duyá»‡t.")
+        raise ValueError("Không tìm thấy cặp hỏi đáp chatbot để duyệt.")
 
     selected_tool = tool_name if is_valid_rag_tool(tool_name) else DEFAULT_RAG_TOOL
     filename = _approved_chat_filename(entry)
@@ -302,9 +315,9 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
             )
             indexed = True
         except Exception as exc:
-            warning = f"ÄĂ£ lÆ°u Q&A Ä‘Ă£ duyá»‡t nhÆ°ng chÆ°a index Ä‘Æ°á»£c vĂ o vector store: {exc}"
+            warning = f"Đã lưu Q&A đã duyệt nhưng chưa index được vào vector store: {exc}"
     else:
-        warning = "ÄĂ£ lÆ°u Q&A Ä‘Ă£ duyá»‡t vĂ o knowledge base, nhÆ°ng embedding backend chÆ°a sáºµn sĂ ng Ä‘á»ƒ index."
+        warning = "Đã lưu Q&A đã duyệt vào knowledge base, nhưng embedding backend chưa sẵn sàng để index."
 
     clear_rag_corpus_cache()
     return {
@@ -316,14 +329,24 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
         "indexed": indexed,
         "warning": warning,
         "message": (
-            "ÄĂ£ duyá»‡t Q&A vĂ o knowledge base vĂ  index vector store."
+            "Đã duyệt Q&A vào knowledge base và index vector store."
             if indexed
-            else "ÄĂ£ duyá»‡t Q&A vĂ o knowledge base."
+            else "Đã duyệt Q&A vào knowledge base."
         ),
     }
 
 
 def _load_vector_entries() -> tuple[list[VectorKnowledgeEntry], int]:
+    return load_vector_entries_from_pipeline(
+        list_vector_chunks(),
+        default_rag_tool=DEFAULT_RAG_TOOL,
+        rag_tool_profiles=RAG_TOOL_PROFILES,
+        infer_vector_tool_name=infer_vector_tool_name,
+        display_vector_source=display_vector_source,
+        max_vector_content_chars=MAX_VECTOR_CONTENT_CHARS,
+        max_vector_snippet_chars=MAX_VECTOR_SNIPPET_CHARS,
+        entry_factory=VectorKnowledgeEntry,
+    )
     raw = list_vector_chunks()
 
     grouped: dict[str, dict] = {}
@@ -381,6 +404,12 @@ def _load_vector_entries() -> tuple[list[VectorKnowledgeEntry], int]:
 
 
 def _group_vector_entries(entries: list[VectorKnowledgeEntry], limit_per_tool: int = 8) -> list[dict]:
+    return group_vector_entries_from_pipeline(
+        entries,
+        rag_tool_order=RAG_TOOL_ORDER,
+        rag_tool_profiles=RAG_TOOL_PROFILES,
+        limit_per_tool=limit_per_tool,
+    )
     grouped: dict[str, list[VectorKnowledgeEntry]] = defaultdict(list)
     for entry in entries:
         grouped[entry.tool_name].append(entry)
@@ -413,6 +442,7 @@ def _group_vector_entries(entries: list[VectorKnowledgeEntry], limit_per_tool: i
 
 
 def _group_chat_entries(entries: list[ChatKnowledgeEntry], limit_per_session: int = 6) -> list[dict]:
+    return group_chat_entries_from_pipeline(entries, limit_per_session=limit_per_session)
     grouped: dict[str, list[ChatKnowledgeEntry]] = defaultdict(list)
     for entry in entries:
         grouped[entry.session_id].append(entry)
@@ -445,6 +475,14 @@ def _group_chat_entries(entries: list[ChatKnowledgeEntry], limit_per_session: in
 
 
 def _search_vector_entries(entries: list[VectorKnowledgeEntry], query: str, limit: int) -> list[dict]:
+    return search_vector_entries_from_pipeline(
+        entries,
+        query,
+        limit=limit,
+        score_text_match_fn=_score_text_match,
+        build_match_snippet_fn=_build_match_snippet,
+        max_vector_snippet_chars=MAX_VECTOR_SNIPPET_CHARS,
+    )
     results: list[dict] = []
     for entry in entries:
         score = _score_text_match(
@@ -473,6 +511,14 @@ def _search_vector_entries(entries: list[VectorKnowledgeEntry], query: str, limi
 
 
 def _search_chat_entries(entries: list[ChatKnowledgeEntry], query: str, limit: int) -> list[dict]:
+    return search_chat_entries_from_pipeline(
+        entries,
+        query,
+        limit=limit,
+        score_text_match_fn=_score_text_match,
+        build_match_snippet_fn=_build_match_snippet,
+        max_chat_snippet_chars=MAX_CHAT_SNIPPET_CHARS,
+    )
     results: list[dict] = []
     for entry in entries:
         score = _score_text_match(
@@ -509,20 +555,20 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         vector_entries, total_chunks = _load_vector_entries()
     except Exception as exc:
         vector_entries, total_chunks = [], 0
-        vector_warning = f"Vector store táº¡m thá»i chÆ°a Ä‘á»c Ä‘Æ°á»£c: {exc}"
+        vector_warning = f"Vector store tạm thời chưa đọc được: {exc}"
 
     try:
         chat_entries = _load_chat_entries()
     except Exception as exc:
         chat_entries = []
-        chat_warning = f"Chat history táº¡m thá»i chÆ°a Ä‘á»c Ä‘Æ°á»£c: {exc}"
+        chat_warning = f"Chat history tạm thời chưa đọc được: {exc}"
 
     try:
         approved_chat_entries = get_approved_chat_qas()
     except Exception as exc:
         approved_chat_entries = []
         if not chat_warning:
-            chat_warning = f"KhĂ´ng Ä‘á»c Ä‘Æ°á»£c danh sĂ¡ch Q&A Ä‘Ă£ duyá»‡t: {exc}"
+            chat_warning = f"Không đọc được danh sách Q&A đã duyệt: {exc}"
     cleaned_query = query.strip()
 
     vector_results: list[dict] = []
@@ -569,4 +615,5 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         "chat_results": chat_results,
         "search_results": merged_results,
     }
+
 

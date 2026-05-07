@@ -9,10 +9,10 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 import main
-import services.llm_service as llm_service
+import services.llm.llm_service as llm_service
 from config import middleware
 from config.settings import settings
-from services.rate_limit_monitor import record_429, reset_429_stats, snapshot_429_stats
+from services.llm.rate_limit_monitor import record_429, reset_429_stats, snapshot_429_stats
 
 
 class RateLimitMonitorTests(unittest.TestCase):
@@ -129,7 +129,7 @@ class LLMRateLimitTrackingTests(unittest.TestCase):
         response = httpx.Response(429, request=request, text="Too Many Requests")
         rate_limit_error = httpx.HTTPStatusError("429 too many requests", request=request, response=response)
 
-        with patch("services.llm_service._call_groq", side_effect=rate_limit_error):
+        with patch("services.llm.llm_service._call_groq", side_effect=rate_limit_error):
             with self.assertRaises(RuntimeError):
                 llm_service.generate_content_with_fallback("xin chao")
 
@@ -140,3 +140,4 @@ class LLMRateLimitTrackingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from services.ictu_scope_service import is_ictu_related_query, normalize_scope_text
+from services.rag.ictu_scope_service import is_ictu_related_query, normalize_scope_text
 
 
 WEB_SEARCH_RESULT_LIMIT = 4

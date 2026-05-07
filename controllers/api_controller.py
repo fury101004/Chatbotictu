@@ -9,10 +9,10 @@ from config.limiter import limiter
 from config.rag_tools import DEFAULT_RAG_TOOL
 from config.settings import settings
 from models.chat import ChatRequest, ChatResponse
-from services.chat_service import process_chat_message
-from services.document_service import upload_markdown_files
-from services.knowledge_base_service import get_knowledge_base_payload
-from services.rate_limit_monitor import reset_429_stats, snapshot_429_stats
+from services.chat.chat_service import process_chat_message
+from services.content.document_service import upload_markdown_files
+from services.content.knowledge_base_service import get_knowledge_base_payload
+from services.llm.rate_limit_monitor import reset_429_stats, snapshot_429_stats
 from views.api_view import (
     build_chat_response,
     build_health_response,
@@ -100,3 +100,4 @@ def register_api_routes(app) -> None:
     app.include_router(router_v1)
     app.include_router(router_api)
     app.include_router(router_root)
+

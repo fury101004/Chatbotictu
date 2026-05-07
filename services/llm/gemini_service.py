@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from providers.gemini_provider import GeminiProvider
 from shared.prompt_loader import render_prompt
-from services.vector_store_service import get_bot_rule_text
+from services.vector.vector_store_service import get_bot_rule_text
 
 load_dotenv()
 

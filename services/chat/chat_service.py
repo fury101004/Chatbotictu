@@ -9,13 +9,13 @@ from config.rag_tools import DEFAULT_RAG_TOOL
 from models.chat import ChatGraphState, RAGResult
 from repositories.conversation_repository import save_conversation_message
 from shared.prompt_loader import render_prompt
-from services.intent_service import detect_intent, get_intent_response
-from services.ictu_scope_service import normalize_scope_text
-from services.memory_service import append_retrieval_memory
-from services.moderation_service import contains_swear, get_swear_response
-from services.multilingual_service import chat_multilingual, get_current_language
-from services.quick_reply_service import get_quick_response
-from services.web_knowledge_service import save_web_search_answer
+from services.chat.intent_service import detect_intent, get_intent_response
+from services.rag.ictu_scope_service import normalize_scope_text
+from services.chat.memory_service import append_retrieval_memory
+from services.chat.moderation_service import contains_swear, get_swear_response
+from services.chat.multilingual_service import chat_multilingual, get_current_language
+from services.chat.quick_reply_service import get_quick_response
+from services.content.web_knowledge_service import save_web_search_answer
 
 
 logger = logging.getLogger("chat_agent")
@@ -57,6 +57,21 @@ _NORMALIZED_POLICY_TIMEFRAME_MARKERS = tuple(normalize_scope_text(marker) for ma
 _NORMALIZED_PROGRAM_SCOPE_MARKERS = tuple(normalize_scope_text(marker) for marker in _PROGRAM_SCOPE_MARKERS)
 _NORMALIZED_GRADUATION_ROUND_MARKERS = tuple(normalize_scope_text(marker) for marker in _GRADUATION_ROUND_MARKERS)
 _NORMALIZED_SCHEDULE_MARKERS = tuple(normalize_scope_text(marker) for marker in _SCHEDULE_MARKERS)
+_TOOL_SCOPED_RAG_HANDLERS = {
+    "student_handbook_rag": "student_handbook_rag",
+    "school_policy_rag": "school_policy_rag",
+    "student_faq_rag": "student_faq_rag",
+}
+_FALLBACK_PRIMARY_REPLY = {
+    "en": (
+        "I could not find relevant information in the current Knowledge Base. "
+        "Please clarify the question or add a concrete discriminator such as academic year, cohort, semester, or round."
+    ),
+    "vi": (
+        "Mình chưa tìm thấy thông tin phù hợp trong Knowledge Base hiện tại. "
+        "Bạn có thể nói rõ hơn câu hỏi hoặc nêu thêm mốc như năm học, khóa, học kỳ hay đợt áp dụng không?"
+    ),
+}
 
 
 def route_rag_tool(message: str) -> tuple[str, str]:
@@ -233,25 +248,11 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
 
     route_name = state.get("rag_route", "general_rag")
     rag_tool = state.get("rag_tool") or DEFAULT_RAG_TOOL
-    if rag_tool == "student_handbook_rag":
+    if rag_tool in _TOOL_SCOPED_RAG_HANDLERS:
         result = retrieve_tool_context(
             message=state["message"],
             session_id=state["session_id"],
-            tool_name="student_handbook_rag",
-            route_name=route_name,
-        )
-    elif rag_tool == "school_policy_rag":
-        result = retrieve_tool_context(
-            message=state["message"],
-            session_id=state["session_id"],
-            tool_name="school_policy_rag",
-            route_name=route_name,
-        )
-    elif rag_tool == "student_faq_rag":
-        result = retrieve_tool_context(
-            message=state["message"],
-            session_id=state["session_id"],
-            tool_name="student_faq_rag",
+            tool_name=_TOOL_SCOPED_RAG_HANDLERS[rag_tool],
             route_name=route_name,
         )
     elif rag_tool == "fallback_rag":
@@ -286,15 +287,18 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
 
 
 def _fallback_kb_reply(state: ChatGraphState) -> str:
+    primary_message = _FALLBACK_PRIMARY_REPLY.get(
+        get_current_language(state.get("session_id", "default")),
+        _FALLBACK_PRIMARY_REPLY["vi"],
+    )
+    clarification_question = ""
     if state.get("needs_clarification") and state.get("clarification_question"):
-        return render_prompt(
-            "fallback_prompt.md",
-            primary_message="",
-            clarification_question=state["clarification_question"],
-        )
-    return (
-        "Mình chưa tìm thấy thông tin phù hợp trong Knowledge Base hiện tại. "
-        "Bạn có thể nói rõ hơn câu hỏi hoặc nêu thêm mốc như năm học, khóa, học kỳ hay đợt áp dụng không?"
+        primary_message = ""
+        clarification_question = state["clarification_question"]
+    return render_prompt(
+        "fallback_prompt.md",
+        primary_message=primary_message,
+        clarification_question=clarification_question,
     )
 
 
@@ -393,3 +397,4 @@ async def process_chat_message(message: str, session_id: str = "default", llm_mo
             _save_history,
         ),
     )
+

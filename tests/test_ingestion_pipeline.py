@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import services.vector_store_service as vector_store_service
-from services.document_service import reingest_uploaded_documents
-from services.vector_store_service import smart_chunk
+import services.vector.vector_store_service as vector_store_service
+from services.content.document_service import reingest_uploaded_documents
+from services.vector.vector_store_service import smart_chunk
 
 
 class SmartChunkTests(unittest.TestCase):
@@ -17,7 +17,7 @@ class SmartChunkTests(unittest.TestCase):
         with (
             patch.object(vector_store_service.settings, "CHUNK_SIZE", 5),
             patch.object(vector_store_service.settings, "CHUNK_OVERLAP", 2),
-            patch("services.vector_store_service.count_tokens", side_effect=lambda value: len(value.split())),
+            patch("services.vector.vector_store_service.count_tokens", side_effect=lambda value: len(value.split())),
         ):
             chunks = smart_chunk(text, "guide.md")
 
@@ -45,7 +45,7 @@ beta1 beta2 beta3 beta4 beta5 beta6
         with (
             patch.object(vector_store_service.settings, "CHUNK_SIZE", 5),
             patch.object(vector_store_service.settings, "CHUNK_OVERLAP", 2),
-            patch("services.vector_store_service.count_tokens", side_effect=lambda value: len(value.split())),
+            patch("services.vector.vector_store_service.count_tokens", side_effect=lambda value: len(value.split())),
         ):
             chunks = smart_chunk(text, "handbook.md")
 
@@ -82,17 +82,17 @@ class ReingestPipelineTests(unittest.TestCase):
 
             with (
                 patch(
-                    "services.document_service._iter_seed_source_records",
+                    "services.content.document_service._iter_seed_source_records",
                     return_value=[(seed_path, "student_handbook_rag", "seed.md")],
                 ),
                 patch(
-                    "services.document_service._iter_uploaded_source_records",
+                    "services.content.document_service._iter_uploaded_source_records",
                     return_value=[(upload_path, "student_faq_rag", "uploads/student_faq_rag/upload.md")],
                 ),
-                patch("services.document_service.reset_vectorstore"),
-                patch("services.document_service.get_collection", return_value=collection),
-                patch("services.document_service.add_documents", side_effect=fake_add_documents) as add_documents_mock,
-                patch("services.document_service.clear_rag_corpus_cache") as clear_cache_mock,
+                patch("services.content.document_service.reset_vectorstore"),
+                patch("services.content.document_service.get_collection", return_value=collection),
+                patch("services.content.document_service.add_documents", side_effect=fake_add_documents) as add_documents_mock,
+                patch("services.content.document_service.clear_rag_corpus_cache") as clear_cache_mock,
             ):
                 total_files, total_chunks = reingest_uploaded_documents()
 
@@ -107,3 +107,4 @@ class ReingestPipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

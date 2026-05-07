@@ -16,7 +16,7 @@ from repositories.web_knowledge_repository import (
     list_trusted_web_knowledge_rows,
     upsert_web_knowledge_entry,
 )
-from services.ictu_scope_service import is_ictu_related_query, normalize_scope_text
+from services.rag.ictu_scope_service import is_ictu_related_query, normalize_scope_text
 
 
 WEB_KB_TRUSTED_THRESHOLD = int(os.getenv("WEB_KB_TRUSTED_THRESHOLD", "30"))
@@ -248,3 +248,4 @@ def search_trusted_web_knowledge(query: str, *, limit: int = 4) -> list[WebKnowl
             updated_at=_iso(_now()),
         )
     return matches
+

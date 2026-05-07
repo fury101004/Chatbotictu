@@ -1,4 +1,4 @@
-﻿# test.py — TOOL TEST CHAT SIÊU NHANH CMD (TU TIÊN 2025 – ĐÃ FIX SẠCH)
+# test.py — TOOL TEST CHAT SIÊU NHANH CMD (TU TIÊN 2025 – ĐÃ FIX SẠCH)
 import os
 import time
 

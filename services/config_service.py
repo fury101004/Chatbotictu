@@ -5,7 +5,7 @@ from pathlib import Path
 from config.settings import settings
 from config.system_prompt import get_system_prompt, save_system_prompt
 from repositories.config_repository import set_runtime_config
-from services.llm_service import PRIMARY_MODEL_NAME, get_configured_model_labels, model_rotation_mode
+from services.llm.llm_service import PRIMARY_MODEL_NAME, get_configured_model_labels, model_rotation_mode
 
 
 def _display_path(path: Path) -> str:
@@ -61,3 +61,4 @@ def update_runtime_config(
             msg = f"RE-INGEST HOÀN TẤT! {total_files} file -> {total_chunks} chunks"
 
     return {"msg": msg, "reingested": need_reingest}
+

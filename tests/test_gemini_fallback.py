@@ -1,9 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
 
-from services.gemini_service import (
+from services.llm.gemini_service import (
     FALLBACK_MODEL_NAME,
     PRIMARY_MODEL_NAME,
     generate_content_with_fallback,
@@ -38,7 +38,7 @@ class GeminiFallbackTests(unittest.TestCase):
                 return lite_model
             return None
 
-        with patch('services.gemini_service.get_model', side_effect=fake_get_model):
+        with patch('services.llm.gemini_service.get_model', side_effect=fake_get_model):
             response, used_model = generate_content_with_fallback('hello')
 
         self.assertIs(response, lite_response)
@@ -57,7 +57,7 @@ class GeminiFallbackTests(unittest.TestCase):
                 return lite_model
             return None
 
-        with patch('services.gemini_service.get_model', side_effect=fake_get_model):
+        with patch('services.llm.gemini_service.get_model', side_effect=fake_get_model):
             with self.assertRaisesRegex(RuntimeError, 'invalid argument'):
                 generate_content_with_fallback('hello')
 
@@ -67,3 +67,4 @@ class GeminiFallbackTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

@@ -10,9 +10,9 @@ from config.rag_tools import DEFAULT_RAG_TOOL, get_upload_tool_options
 from config.settings import settings
 from config.system_prompt import get_system_prompt
 from shared.web_session import ensure_csrf_token, resolve_chat_session_id, rotate_csrf_token, validate_csrf_token
-from services.chat_service import process_chat_message
+from services.chat.chat_service import process_chat_message
 from services.config_service import get_config_page_payload, update_runtime_config
-from services.document_service import (
+from services.content.document_service import (
     delete_uploaded_document,
     get_history_page_data,
     get_vector_manager_payload,
@@ -21,9 +21,9 @@ from services.document_service import (
     reset_document_store,
     upload_markdown_files,
 )
-from services.knowledge_base_service import approve_chat_entry, get_knowledge_base_payload
-from services.llm_service import get_chat_model_options
-from services.vector_admin_service import delete_chunk_by_id
+from services.content.knowledge_base_service import approve_chat_entry, get_knowledge_base_payload
+from services.llm.llm_service import get_chat_model_options
+from services.vector.vector_admin_service import delete_chunk_by_id
 from views.web_view import current_prompt_response, json_upload_result, render_page, redirect_vector_manager, unauthorized_response
 
 router = APIRouter()
@@ -266,3 +266,4 @@ async def history_page(request: Request, page: int = 1):
 
 def register_web_routes(app) -> None:
     app.include_router(router)
+

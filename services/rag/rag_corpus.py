@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
@@ -8,7 +8,7 @@ import re
 from config.rag_tools import QA_ROOT, RAG_TOOL_ORDER, RAG_UPLOAD_ROOT, get_tool_corpus_paths
 from shared.text_utils import normalize_search_text, tokenize_search_text
 
-from services.rag_types import CorpusDocument
+from services.rag.rag_types import CorpusDocument
 
 _COHORT_RE = re.compile(r"\b(?:k|khoa)\s*0*([1-9][0-9])\b")
 _YEAR_RE = re.compile(r"\b(20[0-9]{2})\b")
@@ -458,4 +458,5 @@ def detect_target_file(message_lower: str, documents: Optional[tuple[CorpusDocum
         if any(variant in message_lower for variant in variants if len(variant) > 2):
             return doc.source
     return None
+
 

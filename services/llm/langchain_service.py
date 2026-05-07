@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableLambda
 from pydantic import ConfigDict, Field
 
 from shared.message_utils import message_content
-from services.llm_service import PRIMARY_MODEL_NAME, generate_content_with_fallback
+from services.llm.llm_service import PRIMARY_MODEL_NAME, generate_content_with_fallback
 
 
 def _base_messages_to_chat_messages(input_messages: list[BaseMessage]) -> list[dict[str, str]]:
@@ -124,9 +124,10 @@ def _parse_json_payload(message: BaseMessage) -> dict[str, Any]:
     }
 
 
-def build_text_prompt_chain(
+def _build_prompt_chain(
     prompt_template: ChatPromptTemplate,
     *,
+    parser_fn: Any,
     generation_config: Optional[dict] = None,
     request_options: Optional[dict] = None,
     preferred_model: str = PRIMARY_MODEL_NAME,
@@ -138,10 +139,46 @@ def build_text_prompt_chain(
         preferred_model=preferred_model,
         rotate=rotate,
     )
-    return (
-        prompt_template
-        | model
-        | RunnableLambda(_parse_text_payload)
+    return prompt_template | model | RunnableLambda(parser_fn)
+
+
+def _invoke_prompt_chain(
+    prompt_template: ChatPromptTemplate,
+    prompt_input: dict[str, Any],
+    *,
+    parser_fn: Any,
+    generation_config: Optional[dict] = None,
+    request_options: Optional[dict] = None,
+    preferred_model: str = PRIMARY_MODEL_NAME,
+    rotate: bool = True,
+) -> dict[str, Any]:
+    chain = _build_prompt_chain(
+        prompt_template,
+        parser_fn=parser_fn,
+        generation_config=generation_config,
+        request_options=request_options,
+        preferred_model=preferred_model,
+        rotate=rotate,
+    )
+    result = chain.invoke(prompt_input)
+    return result if isinstance(result, dict) else {}
+
+
+def build_text_prompt_chain(
+    prompt_template: ChatPromptTemplate,
+    *,
+    generation_config: Optional[dict] = None,
+    request_options: Optional[dict] = None,
+    preferred_model: str = PRIMARY_MODEL_NAME,
+    rotate: bool = True,
+):
+    return _build_prompt_chain(
+        prompt_template,
+        parser_fn=_parse_text_payload,
+        generation_config=generation_config,
+        request_options=request_options,
+        preferred_model=preferred_model,
+        rotate=rotate,
     )
 
 
@@ -154,14 +191,15 @@ def invoke_text_prompt_chain(
     preferred_model: str = PRIMARY_MODEL_NAME,
     rotate: bool = True,
 ) -> tuple[str, str]:
-    chain = build_text_prompt_chain(
+    result = _invoke_prompt_chain(
         prompt_template,
+        prompt_input,
+        parser_fn=_parse_text_payload,
         generation_config=generation_config,
         request_options=request_options,
         preferred_model=preferred_model,
         rotate=rotate,
     )
-    result = chain.invoke(prompt_input)
     return str(result.get("text", "")), str(result.get("used_model", ""))
 
 
@@ -173,16 +211,13 @@ def build_json_prompt_chain(
     preferred_model: str = PRIMARY_MODEL_NAME,
     rotate: bool = False,
 ):
-    model = _build_chat_model(
+    return _build_prompt_chain(
+        prompt_template,
+        parser_fn=_parse_json_payload,
         generation_config=generation_config,
         request_options=request_options,
         preferred_model=preferred_model,
         rotate=rotate,
-    )
-    return (
-        prompt_template
-        | model
-        | RunnableLambda(_parse_json_payload)
     )
 
 
@@ -195,15 +230,17 @@ def invoke_json_prompt_chain(
     preferred_model: str = PRIMARY_MODEL_NAME,
     rotate: bool = False,
 ) -> tuple[Optional[dict[str, Any]], str, str]:
-    chain = build_json_prompt_chain(
+    result = _invoke_prompt_chain(
         prompt_template,
+        prompt_input,
+        parser_fn=_parse_json_payload,
         generation_config=generation_config,
         request_options=request_options,
         preferred_model=preferred_model,
         rotate=rotate,
     )
-    result = chain.invoke(prompt_input)
     parsed = result.get("parsed")
     raw_text = str(result.get("raw_text", ""))
     used_model = str(result.get("used_model", ""))
     return parsed if isinstance(parsed, dict) else None, raw_text, used_model
+

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 import re
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from models.chat import RAGResult
-from services.rag_types import (
+from services.rag.rag_types import (
     RETRIEVAL_HYBRID,
+    RETRIEVAL_LOCAL_DATA,
+    RETRIEVAL_LOCAL_FIRST,
     RETRIEVAL_WEB_FIRST,
     RETRIEVAL_WEB_SEARCH,
     CorpusDocument,
@@ -16,6 +21,8 @@ from services.rag_types import (
 
 TOOL_LEXICAL_RETRIEVAL_LIMIT = 8
 FALLBACK_LEXICAL_RETRIEVAL_LIMIT = 8
+ROUTER_REQUEST_TIMEOUT_SECONDS = 10
+ROUTER_EXECUTOR_TIMEOUT_SECONDS = 4
 
 
 @dataclass(slots=True)
@@ -42,6 +49,244 @@ class RetrievalRuntime:
     default_rag_tool: str
     fallback_rag_node: str
     rag_tool_order: tuple[str, ...]
+
+
+def extract_router_json(raw_text: str) -> Optional[dict]:
+    if not raw_text:
+        return None
+
+    try:
+        return json.loads(raw_text)
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"\{.*\}", raw_text, flags=re.DOTALL)
+    if not match:
+        return None
+
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+def keyword_route_score(route_name: str) -> int:
+    match = re.search(r"router_keyword_score:(\d+)", route_name)
+    if not match:
+        return 0
+    return int(match.group(1))
+
+
+def route_rag_tool_by_keyword(
+    message: str,
+    *,
+    rag_tool_profiles: Mapping[str, Mapping[str, Any]],
+    fallback_rag_node: str,
+    normalize_for_match: Callable[[str], str],
+    cue_boosts: Mapping[str, tuple[tuple[str, ...], int]],
+) -> tuple[str, str]:
+    message_lower = normalize_for_match(message)
+    scores: dict[str, int] = {}
+
+    for tool_name, profile in rag_tool_profiles.items():
+        keywords = [normalize_for_match(keyword) for keyword in profile.get("route_keywords", [])]
+        score = sum(2 for keyword in keywords if keyword in message_lower)
+        boost_cues, bonus = cue_boosts.get(tool_name, ((), 0))
+        if bonus and any(cue in message_lower for cue in boost_cues):
+            score += bonus
+        scores[tool_name] = score
+
+    best_tool = max(scores, key=scores.get)
+    best_score = scores[best_tool]
+    if best_score <= 0:
+        return fallback_rag_node, "router_fallback"
+    return best_tool, f"router_keyword_score:{best_score}"
+
+
+def _run_llm_json_decision(
+    *,
+    prompt_text: str,
+    raw_text_prompt: Any,
+    invoke_json_prompt_chain: Callable[..., tuple[Optional[dict[str, Any]], str, str]],
+    get_model: Callable[[], Any],
+    llm_network_available: Callable[[], bool],
+    generation_config: dict[str, Any],
+    request_timeout: int,
+    future_timeout: int,
+    timeout_message: str,
+    error_message: str,
+    switch_message: str,
+) -> Optional[dict[str, Any]]:
+    if get_model() is None or not llm_network_available():
+        return None
+
+    try:
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(
+            invoke_json_prompt_chain,
+            raw_text_prompt,
+            {"prompt": prompt_text},
+            generation_config=generation_config,
+            request_options={"timeout": request_timeout},
+            rotate=False,
+        )
+        try:
+            payload, raw_text, used_model = future.result(timeout=future_timeout)
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+        primary_model = get_model()
+        if primary_model is not None and used_model != primary_model.label:
+            print(switch_message.format(model=used_model))
+        return payload or extract_router_json(raw_text)
+    except FutureTimeoutError:
+        print(timeout_message)
+    except Exception as exc:
+        print(f"{error_message}: {exc}")
+    return None
+
+
+def route_rag_tool_by_llm(
+    message: str,
+    *,
+    raw_text_prompt: Any,
+    build_rag_router_prompt: Callable[[str], str],
+    invoke_json_prompt_chain: Callable[..., tuple[Optional[dict[str, Any]], str, str]],
+    get_model: Callable[[], Any],
+    llm_network_available: Callable[[], bool],
+    fallback_rag_node: str,
+    rag_tool_profiles: Mapping[str, Mapping[str, Any]],
+) -> Optional[tuple[str, str]]:
+    payload = _run_llm_json_decision(
+        prompt_text=build_rag_router_prompt(message),
+        raw_text_prompt=raw_text_prompt,
+        invoke_json_prompt_chain=invoke_json_prompt_chain,
+        get_model=get_model,
+        llm_network_available=llm_network_available,
+        generation_config={"temperature": 0, "max_output_tokens": 180, "response_mime_type": "application/json"},
+        request_timeout=ROUTER_REQUEST_TIMEOUT_SECONDS,
+        future_timeout=ROUTER_EXECUTOR_TIMEOUT_SECONDS,
+        timeout_message="LLM router timed out, falling back to keyword routing.",
+        error_message="LLM router unavailable, falling back to keyword routing",
+        switch_message="LLM router switched to fallback model: {model}",
+    )
+    if not payload:
+        return None
+
+    tool_name = str(payload.get("tool", "")).strip()
+    try:
+        confidence = float(payload.get("confidence", 0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    if tool_name == fallback_rag_node:
+        return fallback_rag_node, f"router_llm:{confidence:.2f}"
+    if tool_name in rag_tool_profiles:
+        if confidence < 0.25:
+            return fallback_rag_node, f"router_llm_low_conf:{confidence:.2f}"
+        return tool_name, f"router_llm:{tool_name}:{confidence:.2f}"
+    return None
+
+
+def normalize_retrieval_source(value: object) -> Optional[str]:
+    source = str(value or "").strip().casefold()
+    aliases = {
+        "local": RETRIEVAL_LOCAL_DATA,
+        "data": RETRIEVAL_LOCAL_DATA,
+        "local_data": RETRIEVAL_LOCAL_DATA,
+        "rag": RETRIEVAL_LOCAL_DATA,
+        "vector": RETRIEVAL_LOCAL_DATA,
+        "web": RETRIEVAL_WEB_SEARCH,
+        "web_search": RETRIEVAL_WEB_SEARCH,
+        "search": RETRIEVAL_WEB_SEARCH,
+        "online": RETRIEVAL_WEB_SEARCH,
+        "hybrid": RETRIEVAL_HYBRID,
+        "both": RETRIEVAL_HYBRID,
+        "local_and_web": RETRIEVAL_HYBRID,
+    }
+    return aliases.get(source)
+
+
+def normalize_retrieval_priority(value: object, source: str) -> str:
+    priority = str(value or "").strip().casefold()
+    if priority in {RETRIEVAL_LOCAL_FIRST, "local", "data", "rag"}:
+        return RETRIEVAL_LOCAL_FIRST
+    if priority in {RETRIEVAL_WEB_FIRST, "web", "search", "online"}:
+        return RETRIEVAL_WEB_FIRST
+    if source == RETRIEVAL_WEB_SEARCH:
+        return RETRIEVAL_WEB_FIRST
+    return RETRIEVAL_LOCAL_FIRST
+
+
+def fallback_retrieval_flow(
+    message: str,
+    *,
+    should_use_web_search: Callable[[str], bool],
+    route: str = "flow_keyword",
+) -> RetrievalFlowPlan:
+    if should_use_web_search(message):
+        return RetrievalFlowPlan(
+            source=RETRIEVAL_WEB_SEARCH,
+            priority=RETRIEVAL_WEB_FIRST,
+            reason="Realtime query likely needs web data.",
+            confidence=0.55,
+            route=f"{route}:web_search",
+        )
+    return RetrievalFlowPlan(
+        source=RETRIEVAL_LOCAL_DATA,
+        priority=RETRIEVAL_LOCAL_FIRST,
+        reason="Default to internal data for stable institutional questions.",
+        confidence=0.50,
+        route=f"{route}:local_data",
+    )
+
+
+def route_retrieval_flow_by_llm(
+    message: str,
+    rag_tool: Optional[str],
+    *,
+    raw_text_prompt: Any,
+    build_retrieval_flow_prompt: Callable[[str, Optional[str]], str],
+    invoke_json_prompt_chain: Callable[..., tuple[Optional[dict[str, Any]], str, str]],
+    get_model: Callable[[], Any],
+    llm_network_available: Callable[[], bool],
+) -> Optional[RetrievalFlowPlan]:
+    payload = _run_llm_json_decision(
+        prompt_text=build_retrieval_flow_prompt(message, rag_tool),
+        raw_text_prompt=raw_text_prompt,
+        invoke_json_prompt_chain=invoke_json_prompt_chain,
+        get_model=get_model,
+        llm_network_available=llm_network_available,
+        generation_config={"temperature": 0, "max_output_tokens": 220, "response_mime_type": "application/json"},
+        request_timeout=ROUTER_REQUEST_TIMEOUT_SECONDS,
+        future_timeout=ROUTER_EXECUTOR_TIMEOUT_SECONDS,
+        timeout_message="Retrieval flow planner timed out, falling back to keyword flow.",
+        error_message="Retrieval flow planner unavailable, falling back to keyword flow",
+        switch_message="Retrieval flow planner switched to fallback model: {model}",
+    )
+    if not payload:
+        return None
+
+    source = normalize_retrieval_source(payload.get("source"))
+    if source is None:
+        return None
+    priority = normalize_retrieval_priority(payload.get("priority"), source)
+    try:
+        confidence = float(payload.get("confidence", 0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    reason = str(payload.get("reason") or "").strip()[:240]
+
+    if confidence < 0.25:
+        return None
+
+    return RetrievalFlowPlan(
+        source=source,
+        priority=priority,
+        reason=reason or "LLM retrieval flow planner.",
+        confidence=max(0.0, min(confidence, 1.0)),
+        route=f"flow_llm:{source}:{priority}:{confidence:.2f}",
+    )
 
 
 def _plan_allows_web(plan: RetrievalFlowPlan) -> bool:
@@ -155,7 +400,7 @@ def _build_general_fallback_result(
         return result
 
     result = RAGResult(
-        context_text="ThĂ´ng tin Ä‘ang Ä‘Æ°á»£c cáº­p nháº­t.",
+        context_text="Thông tin đang được cập nhật.",
         chunks=[],
         target_file=None,
         mode="lexical_fallback_empty",
@@ -407,3 +652,4 @@ def retrieve_general_context(
         )
 
     return result
+

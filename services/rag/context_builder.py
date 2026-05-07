@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from services.ictu_scope_service import normalize_scope_text
+from services.rag.ictu_scope_service import normalize_scope_text
 
 
-DEFAULT_CONTEXT_TEXT = "ThĂ´ng tin Ä‘ang Ä‘Æ°á»£c cáº­p nháº­t."
-_UNTITLED_SENTINELS = ("KhĂ´ng cĂ³ tiĂªu Ä‘á»",)
+DEFAULT_CONTEXT_TEXT = "Thông tin đang được cập nhật."
+_UNTITLED_SENTINELS = ("Không có tiêu đề",)
 _NORMALIZED_UNTITLED_SENTINELS = tuple(normalize_scope_text(marker) for marker in _UNTITLED_SENTINELS)
 
 

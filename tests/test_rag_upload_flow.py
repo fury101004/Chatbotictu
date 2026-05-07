@@ -10,9 +10,9 @@ from unittest.mock import patch
 
 from fastapi import UploadFile
 
-import services.vector_store_service as vector_store_service
-from services.document_service import upload_markdown_files
-from services.rag_service import (
+import services.vector.vector_store_service as vector_store_service
+from services.content.document_service import upload_markdown_files
+from services.rag.rag_service import (
     CorpusDocument,
     RETRIEVAL_LOCAL_DATA,
     RETRIEVAL_LOCAL_FIRST,
@@ -27,7 +27,7 @@ from services.rag_service import (
     route_rag_tool,
     route_retrieval_flow,
 )
-from services.rag_prompts import _RAW_TEXT_PROMPT, _build_rag_router_prompt, _build_retrieval_flow_prompt
+from services.rag.rag_prompts import _RAW_TEXT_PROMPT, _build_rag_router_prompt, _build_retrieval_flow_prompt
 from models.chat import RAGResult
 
 
@@ -38,11 +38,11 @@ class UploadFlowTests(unittest.IsolatedAsyncioTestCase):
             upload = UploadFile(filename="guide.md", file=BytesIO(b"# Guide\n\nNoi dung"))
 
             with (
-                patch("services.document_service.get_tool_upload_dir", return_value=upload_dir),
-                patch("services.document_service.add_documents", side_effect=RuntimeError("vector unavailable")),
-                patch("services.document_service.get_uploaded_files", return_value=[]),
-                patch("services.document_service.add_uploaded_file") as add_uploaded_file_mock,
-                patch("services.document_service.clear_rag_corpus_cache") as clear_cache_mock,
+                patch("services.content.document_service.get_tool_upload_dir", return_value=upload_dir),
+                patch("services.content.document_service.add_documents", side_effect=RuntimeError("vector unavailable")),
+                patch("services.content.document_service.get_uploaded_files", return_value=[]),
+                patch("services.content.document_service.add_uploaded_file") as add_uploaded_file_mock,
+                patch("services.content.document_service.clear_rag_corpus_cache") as clear_cache_mock,
             ):
                 result = await upload_markdown_files(files=[upload], tool_name="student_faq_rag")
 
@@ -60,12 +60,12 @@ class UploadFlowTests(unittest.IsolatedAsyncioTestCase):
             upload = UploadFile(filename="guide.md", file=BytesIO(b"# Guide\n\nNoi dung"))
 
             with (
-                patch("services.document_service.get_tool_upload_dir", return_value=upload_dir),
-                patch("services.document_service.embedding_backend_ready", return_value=True),
-                patch("services.document_service.add_documents") as add_documents_mock,
-                patch("services.document_service.get_uploaded_files", return_value=[]),
-                patch("services.document_service.add_uploaded_file"),
-                patch("services.document_service.clear_rag_corpus_cache"),
+                patch("services.content.document_service.get_tool_upload_dir", return_value=upload_dir),
+                patch("services.content.document_service.embedding_backend_ready", return_value=True),
+                patch("services.content.document_service.add_documents") as add_documents_mock,
+                patch("services.content.document_service.get_uploaded_files", return_value=[]),
+                patch("services.content.document_service.add_uploaded_file"),
+                patch("services.content.document_service.clear_rag_corpus_cache"),
             ):
                 result = await upload_markdown_files(files=[upload], tool_name="student_faq_rag")
 
@@ -87,16 +87,16 @@ class EmbeddingBackendTests(unittest.TestCase):
 
     def test_embedding_backend_ready_when_local_model_exists_without_network(self) -> None:
         with (
-            patch("services.vector_store_service._resolve_local_embedding_model_path", return_value=Path("local-embed-cache")),
-            patch("services.vector_store_service.socket.create_connection", side_effect=OSError("blocked")),
+            patch("services.vector.vector_store_service._resolve_local_embedding_model_path", return_value=Path("local-embed-cache")),
+            patch("services.vector.vector_store_service.socket.create_connection", side_effect=OSError("blocked")),
         ):
             vector_store_service.embedding_backend_ready.cache_clear()
             self.assertTrue(vector_store_service.embedding_backend_ready())
 
     def test_get_embedding_function_forces_offline_mode_with_local_model(self) -> None:
         with (
-            patch("services.vector_store_service._resolve_local_embedding_model_path", return_value=Path("local-embed-cache")),
-            patch("services.vector_store_service.embedding_functions.SentenceTransformerEmbeddingFunction") as factory,
+            patch("services.vector.vector_store_service._resolve_local_embedding_model_path", return_value=Path("local-embed-cache")),
+            patch("services.vector.vector_store_service.embedding_functions.SentenceTransformerEmbeddingFunction") as factory,
             patch.dict(os.environ, {}, clear=True),
         ):
             vector_store_service.ef = None
@@ -124,7 +124,7 @@ class RagRouterTests(unittest.TestCase):
         self.assertIn('"tool": "<tool_name>"', formatted.messages[0].content)
 
     def test_keyword_router_is_used_when_llm_is_unavailable(self) -> None:
-        with patch("services.rag_service.get_model", return_value=None):
+        with patch("services.rag.rag_service.get_model", return_value=None):
             tool_name, route_name = route_rag_tool("quy che hoc phi")
 
         self.assertEqual(tool_name, "school_policy_rag")
@@ -133,7 +133,7 @@ class RagRouterTests(unittest.TestCase):
     def test_strong_handbook_keyword_route_skips_llm_router(self) -> None:
         question = "Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?"
 
-        with patch("services.rag_service._route_rag_tool_by_llm") as llm_router:
+        with patch("services.rag.rag_service._route_rag_tool_by_llm") as llm_router:
             tool_name, route_name = route_rag_tool(question)
 
         self.assertEqual(tool_name, "student_handbook_rag")
@@ -143,7 +143,7 @@ class RagRouterTests(unittest.TestCase):
     def test_keyword_router_prefers_handbook_for_nguoi_hoc_behavior_question(self) -> None:
         question = "Nguoi hoc khong duoc lam nhung hanh vi nao?"
 
-        with patch("services.rag_service._route_rag_tool_by_llm") as llm_router:
+        with patch("services.rag.rag_service._route_rag_tool_by_llm") as llm_router:
             tool_name, route_name = route_rag_tool(question)
 
         self.assertEqual(tool_name, "student_handbook_rag")
@@ -165,10 +165,10 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
 
     def test_llm_planner_can_choose_web_search_before_retrieval(self) -> None:
         with (
-            patch("services.rag_service.get_model", return_value=SimpleNamespace(label="planner-model")),
-            patch("services.rag_service._llm_router_network_available", return_value=True),
+            patch("services.rag.rag_service.get_model", return_value=SimpleNamespace(label="planner-model")),
+            patch("services.rag.rag_service._llm_router_network_available", return_value=True),
             patch(
-                "services.rag_service.invoke_json_prompt_chain",
+                "services.rag.rag_service.invoke_json_prompt_chain",
                 return_value=(
                     {
                         "source": "web_search",
@@ -195,14 +195,14 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
         self.assertIn("hybrid", prompt_input["prompt"])
 
     def test_flow_falls_back_to_web_search_for_realtime_question_without_llm(self) -> None:
-        with patch("services.rag_service.get_model", return_value=None):
+        with patch("services.rag.rag_service.get_model", return_value=None):
             plan = route_retrieval_flow("ICTU co thong bao moi nhat gi hom nay?", "student_faq_rag")
 
         self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
         self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
 
     def test_flow_falls_back_to_local_data_for_stable_handbook_question_without_llm(self) -> None:
-        with patch("services.rag_service.get_model", return_value=None):
+        with patch("services.rag.rag_service.get_model", return_value=None):
             plan = route_retrieval_flow("Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?", "student_handbook_rag")
 
         self.assertEqual(plan.source, RETRIEVAL_LOCAL_DATA)
@@ -226,9 +226,9 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
         )
 
         with (
-            patch("services.rag_service.is_ictu_related_query", return_value=True),
-            patch("services.rag_service._build_planned_web_result", return_value=web_result),
-            patch("services.rag_service._load_tool_corpus") as load_corpus_mock,
+            patch("services.rag.rag_service.is_ictu_related_query", return_value=True),
+            patch("services.rag.rag_service._build_planned_web_result", return_value=web_result),
+            patch("services.rag.rag_service._load_tool_corpus") as load_corpus_mock,
         ):
             result = retrieve_tool_context(
                 "ICTU có thông báo mới nhất gì hôm nay?",
@@ -375,4 +375,5 @@ Sinh vien Kha can ket qua hoc tap tu 2,50 den 3,19.
         self.assertEqual(matches[0][1].path.name, "SO TAY SINH VIEN 2025-2026.md")
 if __name__ == "__main__":
     unittest.main()
+
 

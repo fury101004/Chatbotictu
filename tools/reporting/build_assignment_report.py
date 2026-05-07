@@ -26,7 +26,7 @@ for candidate in [ROOT, REPORTING_DIR]:
         sys.path.insert(0, str(candidate))
 
 from generate_assignment_chatbot_diagram import generate_diagram_assets  # noqa: E402
-from services.document_service import get_vector_manager_payload  # noqa: E402
+from services.content.document_service import get_vector_manager_payload  # noqa: E402
 
 
 REPORT_DIR = ROOT / "reports"
@@ -60,7 +60,7 @@ def _run_analysis() -> dict:
 def _run_evaluation() -> dict:
     result = _run_subprocess([sys.executable, str(ROOT / "scripts" / "evaluate_chatbot.py")])
     if result.returncode != 0:
-        raise RuntimeError(f"Benchmark chatbot thất bại:\n{result.stdout}\n{result.stderr}")
+        raise RuntimeError(f"Benchmark chatbot tháº¥t báº¡i:\n{result.stdout}\n{result.stderr}")
     return json.loads((GENERATED_DIR / "eval_results.json").read_text(encoding="utf-8"))
 
 
@@ -311,7 +311,7 @@ def _build_docx(markdown_text: str, output_path: Path) -> None:
                    xmlns:dcterms="http://purl.org/dc/terms/"
                    xmlns:dcmitype="http://purl.org/dc/dcmitype/"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>Tổng hợp 2 nhiệm vụ chatbot ICTU</dc:title>
+  <dc:title>Tá»•ng há»£p 2 nhiá»‡m vá»¥ chatbot ICTU</dc:title>
   <dc:creator>Codex</dc:creator>
   <cp:lastModifiedBy>Codex</cp:lastModifiedBy>
   <dcterms:created xsi:type="dcterms:W3CDTF">{created_at}</dcterms:created>
@@ -348,7 +348,7 @@ def _architecture_section_lines(vector_payload: dict, diagram_ref: str) -> list[
         "",
         "- Sơ đồ được vẽ lại theo bố cục giống ảnh bạn cung cấp: khối RAG nằm ở tầng trên, AI Agent ở giữa, người dùng ở bên trái và các nhánh công cụ hỗ trợ ở bên phải.",
         "- Bên trong khối RAG, truy vấn đi qua các bước Query -> Embedding Model -> Query Embedding -> Vector Database -> Candidate chunks -> Prompt with Context -> LLM.",
-        "- Ở tầng dưới, AI Agent làm nhiệm vụ điều phối guardrail, router, tool calling, gọi web search, gọi RAG và trả đáp án về Web UI hoặc API.",
+        "- á» táº§ng dÆ°á»›i, AI Agent lĂ m nhiá»‡m vá»¥ Ä‘iá»u phá»‘i guardrail, router, tool calling, gá»i web search, gá»i RAG vĂ  tráº£ Ä‘Ă¡p Ă¡n vá» Web UI hoáº·c API.",
         "- Các nhánh ngoài như Web Search ICTU, External API, Knowledge Base/Upload, Session Memory + Logs cho thấy chatbot không chỉ trả lời từ một model đơn lẻ mà là một hệ thống phối hợp nhiều thành phần.",
         "",
         "### 7.2 Mục tiêu kiến trúc",
@@ -360,9 +360,9 @@ def _architecture_section_lines(vector_payload: dict, diagram_ref: str) -> list[
         "",
         "### 7.3 Thành phần chính",
         "",
-        "- Lớp giao tiếp: `config/app_factory.py`, `controllers/web_controller.py`, `controllers/api_controller.py`.",
+        "- Lá»›p giao tiáº¿p: `config/app_factory.py`, `controllers/web_controller.py`, `controllers/api_controller.py`.",
         "- Lớp điều phối chat: `services/chat_service.py` và `services/graph_service.py`.",
-        "- Lớp truy xuất tri thức: `services/rag_service.py`, `services/vector_store_service.py`, `services/document_service.py`.",
+        "- Lá»›p truy xuáº¥t tri thá»©c: `services/rag_service.py`, `services/vector_store_service.py`, `services/document_service.py`.",
         "- Lớp sinh câu trả lời: `services/multilingual_service.py`, `services/llm_service.py`.",
         "- Lớp lưu vết và bộ nhớ: `config/db.py`, `SESSION_MEMORY`, `logs/`, `reports/generated/`.",
         "",
@@ -416,7 +416,7 @@ def _framework_section_lines() -> list[str]:
         "- Điều phối pipeline: `services/chat_service.py`, `services/graph_service.py`.",
         "- Retrieval và evidence: `services/rag_service.py`, `services/vector_store_service.py`, `services/web_search.py`, `services/web_knowledge_service.py`.",
         "- Prompt và generation: `services/multilingual_service.py`, `services/llm_service.py`.",
-        "- Quản trị dữ liệu: `services/document_service.py`, `services/knowledge_base_service.py`.",
+        "- Quáº£n trá»‹ dá»¯ liá»‡u: `services/document_service.py`, `services/knowledge_base_service.py`.",
         "- Đo lường chất lượng: `tools/evaluation/evaluate_chatbot.py`, `tools/evaluation/analyze_dataset.py`, unittest trong `tests/`.",
         "",
         "### 8.3 Input, output và fallback của framework",
@@ -447,7 +447,7 @@ def _build_report_markdown(
     generated_at = _format_date(datetime.now().astimezone().isoformat())
 
     lines = [
-        "# Tổng hợp 2 nhiệm vụ chatbot ICTU",
+        "# Tá»•ng há»£p 2 nhiá»‡m vá»¥ chatbot ICTU",
         "",
         f"- Ngày tổng hợp: {generated_at}",
         f"- Corpus phân tích: {dataset_report['corpus_root']}",
@@ -471,7 +471,7 @@ def _build_report_markdown(
         "- Đã vẽ thêm sơ đồ tổng quát chatbot theo phong cách của ảnh tham chiếu người dùng cung cấp.",
         "- Đã cấu hình sinh báo cáo `.md` và `.docx` đồng bộ từ script này, trong đó DOCX có nhúng ảnh sơ đồ.",
         "",
-        "## 3. Tổng quan hệ thống hiện tại",
+        "## 3. Tá»•ng quan há»‡ thá»‘ng hiá»‡n táº¡i",
         "",
         "- Đây là chatbot RAG cho ICTU với Web UI, REST API, knowledge base và các trang quản trị dữ liệu.",
         "- Luồng xử lý chính hiện tại là normalize -> guardrail -> route RAG -> retrieve -> generate -> finalize.",
@@ -480,8 +480,8 @@ def _build_report_markdown(
         "",
         "## 4. Kết quả phân tích dữ liệu",
         "",
-        f"- Tổng số mẫu dữ liệu: {dataset_report['total_samples']}.",
-        f"- Tổng số cặp Q/A: {dataset_report['total_qa_pairs']}.",
+        f"- Tá»•ng sá»‘ máº«u dá»¯ liá»‡u: {dataset_report['total_samples']}.",
+        f"- Tá»•ng sá»‘ cáº·p Q/A: {dataset_report['total_qa_pairs']}.",
         f"- Title trung bình: {dataset_report['title_stats']['chars']['avg']} ký tự, min {dataset_report['title_stats']['chars']['min']}, max {dataset_report['title_stats']['chars']['max']}.",
         f"- Content trung bình: {dataset_report['content_stats']['chars']['avg']} ký tự, min {dataset_report['content_stats']['chars']['min']}, max {dataset_report['content_stats']['chars']['max']}.",
         f"- File có title dài nhất: {longest_title['path']} ({longest_title['title_chars']} ký tự).",
@@ -492,7 +492,7 @@ def _build_report_markdown(
     ]
 
     for tool_name, count in dataset_report["tool_distribution"].items():
-        lines.append(f"- {tool_name}: {count} mẫu.")
+        lines.append(f"- {tool_name}: {count} máº«u.")
 
     lines.extend(
         [
@@ -507,7 +507,7 @@ def _build_report_markdown(
             f"- Source MRR: {eval_report['source_mrr']}.",
             f"- Độ trễ trung bình: {eval_report['avg_latency_ms']} ms.",
             f"- Số chunk trung bình mỗi truy vấn: {eval_report['avg_chunks_used']}.",
-            f"- Route backend phân bố: {_join_distribution(eval_report['route_prefix_distribution'])}.",
+            f"- Route backend phĂ¢n bá»‘: {_join_distribution(eval_report['route_prefix_distribution'])}.",
             f"- Failing case: {len(eval_report['failing_cases'])}.",
             f"- Unittest: {unittest_report['tests_ran']} test, trạng thái {unittest_report['status']}, thời gian {unittest_report['duration_seconds']} giây.",
             "",
@@ -535,14 +535,14 @@ def _build_report_markdown(
             "## 10. Tệp bàn giao",
             "",
             "- `docs/ai_agent_design.md`: tài liệu chi tiết cho 2 nhiệm vụ bổ sung.",
-            "- `reports/bao_cao_nhiem_vu_chatbot.md`: bản Markdown nguồn.",
+            "- `reports/bao_cao_nhiem_vu_chatbot.md`: báº£n Markdown nguá»“n.",
             "- `reports/bao_cao_nhiem_vu_chatbot.docx`: file DOCX đã gộp 2 nhiệm vụ.",
             "- `reports/generated/assignment_chatbot_diagrams/chatbot_tong_quat_chi_tiet.png`: sơ đồ thiết kế chatbot tổng quát.",
             "- `reports/generated/dataset_analysis.json`: thống kê corpus.",
-            "- `reports/generated/eval_results.json`: kết quả benchmark.",
-            "- `reports/generated/unittest_summary.json`: tổng hợp unit test.",
+            "- `reports/generated/eval_results.json`: káº¿t quáº£ benchmark.",
+            "- `reports/generated/unittest_summary.json`: tá»•ng há»£p unit test.",
             "",
-            "## 11. Kết luận ngắn",
+            "## 11. Káº¿t luáº­n ngáº¯n",
             "",
             "- Hai nhiệm vụ bổ sung đã được gộp vào cùng một file DOCX, thay vì tách rời từng phần riêng lẻ.",
             "- Sơ đồ mới giúp phần 'bản thiết kế chatbot tổng quát' trực quan hơn, bám theo bố cục ảnh tham chiếu nhưng đã chuyển thành đúng hệ thống ICTU hiện tại.",
@@ -554,7 +554,7 @@ def _build_report_markdown(
             "",
             "Qua quá trình đối chiếu giữa tài liệu thiết kế, mã nguồn triển khai, sơ đồ hệ thống, kết quả benchmark và bộ unit test, có thể kết luận rằng hai nhiệm vụ \"bản thiết kế chatbot tổng quát\" và \"framework hỗ trợ cho từng bước xử lý chatbot\" đã được hoàn thành ở mức có thể sử dụng trực tiếp trong báo cáo và buổi bảo vệ. Bản thiết kế chatbot tổng quát đã mô tả rõ các thành phần chính của hệ thống, bao gồm lớp giao tiếp Web/API, lớp điều phối hội thoại, lớp truy xuất tri thức, lớp sinh câu trả lời và lớp lưu vết bộ nhớ; đồng thời thể hiện được mối liên hệ giữa người dùng, AI Agent, RAG pipeline, vector store, SQLite, web knowledge cache và LLM. Nhờ đó, chatbot không còn được trình bày như một hàm trả lời đơn lẻ mà đã được mô hình hóa như một hệ thống hoàn chỉnh, có kiến trúc rõ ràng và có khả năng mở rộng.",
             "",
-            "Ở nhiệm vụ thứ hai, framework xử lý chatbot đã được mô tả theo đúng chuỗi bước thực thi của hệ thống hiện tại: tiếp nhận request, chuẩn hóa input, lưu lịch sử hội thoại, guardrail, định tuyến nhóm tri thức, tạo retrieval query, kiểm tra phạm vi ICTU, truy xuất ngữ cảnh, sinh câu trả lời, lưu phản hồi và cập nhật session memory. Điểm quan trọng là mỗi bước đều đã được gắn với hàm hoặc module cụ thể trong codebase để chứng minh đây là framework đang vận hành thật, không chỉ là sơ đồ ý tưởng. Bên cạnh đó, benchmark và unit test đóng vai trò minh chứng định lượng cho chất lượng router, retrieval, fallback và prompt pipeline. Vì vậy, trong phạm vi hai nhiệm vụ được giao, có thể chốt rằng sản phẩm đã hoàn thành phần nội dung cốt lõi, đủ cơ sở để đưa vào báo cáo học phần, thuyết trình demo và làm nền cho các bước mở rộng tiếp theo như Clarification Agent, Ingestion Agent hoặc Evaluation Agent.",
+            "á» nhiá»‡m vá»¥ thá»© hai, framework xá»­ lĂ½ chatbot Ä‘Ă£ Ä‘Æ°á»£c mĂ´ táº£ theo Ä‘Ăºng chuá»—i bÆ°á»›c thá»±c thi cá»§a há»‡ thá»‘ng hiá»‡n táº¡i: tiáº¿p nháº­n request, chuáº©n hĂ³a input, lÆ°u lá»‹ch sá»­ há»™i thoáº¡i, guardrail, Ä‘á»‹nh tuyáº¿n nhĂ³m tri thá»©c, táº¡o retrieval query, kiá»ƒm tra pháº¡m vi ICTU, truy xuáº¥t ngá»¯ cáº£nh, sinh cĂ¢u tráº£ lá»i, lÆ°u pháº£n há»“i vĂ  cáº­p nháº­t session memory. Äiá»ƒm quan trá»ng lĂ  má»—i bÆ°á»›c Ä‘á»u Ä‘Ă£ Ä‘Æ°á»£c gáº¯n vá»›i hĂ m hoáº·c module cá»¥ thá»ƒ trong codebase Ä‘á»ƒ chá»©ng minh Ä‘Ă¢y lĂ  framework Ä‘ang váº­n hĂ nh tháº­t, khĂ´ng chá»‰ lĂ  sÆ¡ Ä‘á»“ Ă½ tÆ°á»Ÿng. BĂªn cáº¡nh Ä‘Ă³, benchmark vĂ  unit test Ä‘Ă³ng vai trĂ² minh chá»©ng Ä‘á»‹nh lÆ°á»£ng cho cháº¥t lÆ°á»£ng router, retrieval, fallback vĂ  prompt pipeline. VĂ¬ váº­y, trong pháº¡m vi hai nhiá»‡m vá»¥ Ä‘Æ°á»£c giao, cĂ³ thá»ƒ chá»‘t ráº±ng sáº£n pháº©m Ä‘Ă£ hoĂ n thĂ nh pháº§n ná»™i dung cá»‘t lĂµi, Ä‘á»§ cÆ¡ sá»Ÿ Ä‘á»ƒ Ä‘Æ°a vĂ o bĂ¡o cĂ¡o há»c pháº§n, thuyáº¿t trĂ¬nh demo vĂ  lĂ m ná»n cho cĂ¡c bÆ°á»›c má»Ÿ rá»™ng tiáº¿p theo nhÆ° Clarification Agent, Ingestion Agent hoáº·c Evaluation Agent.",
             "",
             "### 12.2 Bản rút gọn cho slide hoặc phần trình bày miệng",
             "",
@@ -617,3 +617,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from providers.base_llm_provider import ModelCandidate, ProviderResponse
 from providers.provider_factory import create_llm_providers
 from shared.message_utils import message_content
-from services.rate_limit_monitor import record_429
+from services.llm.rate_limit_monitor import record_429
 
 load_dotenv()
 
@@ -318,3 +318,4 @@ def generate_content_with_fallback(
     if not errors:
         raise RuntimeError("No LLM backend is configured. Set GROQ_API_KEY or configure Ollama.")
     raise RuntimeError("All LLM backends failed: " + " | ".join(errors))
+

@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-import services.llm_service as llm_service
+import services.llm.llm_service as llm_service
 
 
 class LLMRotationTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class LLMRotationTests(unittest.TestCase):
         def fake_call_groq(**kwargs):
             return llm_service.LLMResponse(text=kwargs["model"])
 
-        with patch("services.llm_service._call_groq", side_effect=fake_call_groq):
+        with patch("services.llm.llm_service._call_groq", side_effect=fake_call_groq):
             used_models = [
                 llm_service.generate_content_with_fallback("hello")[1]
                 for _ in range(4)
@@ -62,7 +62,7 @@ class LLMRotationTests(unittest.TestCase):
                 raise RuntimeError("model-b unavailable")
             return llm_service.LLMResponse(text=kwargs["model"])
 
-        with patch("services.llm_service._call_groq", side_effect=fake_call_groq):
+        with patch("services.llm.llm_service._call_groq", side_effect=fake_call_groq):
             response, used_model = llm_service.generate_content_with_fallback("hello")
 
         self.assertEqual(response.text, "model-c")
@@ -81,7 +81,7 @@ class LLMRotationTests(unittest.TestCase):
         def fake_call_groq(**kwargs):
             return llm_service.LLMResponse(text=kwargs["model"])
 
-        with patch("services.llm_service._call_groq", side_effect=fake_call_groq):
+        with patch("services.llm.llm_service._call_groq", side_effect=fake_call_groq):
             used_models = [
                 llm_service.generate_content_with_fallback("hello", rotate=False)[1]
                 for _ in range(3)
@@ -104,8 +104,8 @@ class LLMRotationTests(unittest.TestCase):
             return llm_service.LLMResponse(text=kwargs["model"])
 
         with (
-            patch("services.llm_service._call_groq", side_effect=fake_call_groq),
-            patch("services.llm_service._call_ollama") as call_ollama,
+            patch("services.llm.llm_service._call_groq", side_effect=fake_call_groq),
+            patch("services.llm.llm_service._call_ollama") as call_ollama,
         ):
             used_models = [
                 llm_service.generate_content_with_fallback("hello")[1]
@@ -129,7 +129,7 @@ class LLMRotationTests(unittest.TestCase):
         def fake_call_groq(**kwargs):
             return llm_service.LLMResponse(text=kwargs["model"])
 
-        with patch("services.llm_service._call_groq", side_effect=fake_call_groq):
+        with patch("services.llm.llm_service._call_groq", side_effect=fake_call_groq):
             used_models = [
                 llm_service.generate_content_with_fallback("hello")[1]
                 for _ in range(3)
@@ -164,3 +164,4 @@ class LLMRotationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

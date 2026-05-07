@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unittest
 from pathlib import Path
 
-from services.rag_corpus import _normalize_for_match, _search_documents, _tokenize
-from services.rag_types import CorpusDocument
+from services.rag.rag_corpus import _normalize_for_match, _search_documents, _tokenize
+from services.rag.rag_types import CorpusDocument
 
 
 class GoldenHandbookYearRegressionTests(unittest.TestCase):
@@ -74,3 +74,4 @@ class GoldenHandbookYearRegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

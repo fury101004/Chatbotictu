@@ -49,7 +49,7 @@ def import_corpus(root: Path, *, reset_first: bool = False, dry_run: bool = Fals
         return len(files), 0
 
     try:
-        from services.vector_store_service import add_documents, get_collection, reset_vectorstore
+        from services.vector.vector_store_service import add_documents, get_collection, reset_vectorstore
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
             "Khong the khoi tao vector store. Kiem tra model embedding da duoc tai ve local "
@@ -123,3 +123,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

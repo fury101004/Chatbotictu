@@ -1,4 +1,4 @@
-﻿# Hướng dẫn scale chatbot API trên chính máy cá nhân (VPS/Server) -- Không tốn thêm tiền
+# Hướng dẫn scale chatbot API trên chính máy cá nhân (VPS/Server) -- Không tốn thêm tiền
 
 ### Yêu cầu
 

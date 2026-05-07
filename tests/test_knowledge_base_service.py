@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from services.knowledge_base_service import (
+from services.content.knowledge_base_service import (
     ChatKnowledgeEntry,
     VectorKnowledgeEntry,
     _pair_chat_rows,
@@ -73,10 +73,10 @@ class KnowledgeBasePayloadTests(unittest.TestCase):
         ]
 
         with (
-            patch("services.knowledge_base_service._load_vector_entries", return_value=(vector_entries, 3)),
-            patch("services.knowledge_base_service._fetch_chat_rows", return_value=chat_rows),
-            patch("services.knowledge_base_service.get_approved_chat_entry_ids", return_value=set()),
-            patch("services.knowledge_base_service.get_approved_chat_qas", return_value=[]),
+            patch("services.content.knowledge_base_service._load_vector_entries", return_value=(vector_entries, 3)),
+            patch("services.content.knowledge_base_service._fetch_chat_rows", return_value=chat_rows),
+            patch("services.content.knowledge_base_service.get_approved_chat_entry_ids", return_value=set()),
+            patch("services.content.knowledge_base_service.get_approved_chat_qas", return_value=[]),
         ):
             payload = get_knowledge_base_payload(query="hoc phi", limit=10)
 
@@ -100,10 +100,10 @@ class KnowledgeBasePayloadTests(unittest.TestCase):
         ]
 
         with (
-            patch("services.knowledge_base_service._load_vector_entries", return_value=(vector_entries, 3)),
-            patch("services.knowledge_base_service._fetch_chat_rows", return_value=[]),
-            patch("services.knowledge_base_service.get_approved_chat_entry_ids", return_value=set()),
-            patch("services.knowledge_base_service.get_approved_chat_qas", return_value=[]),
+            patch("services.content.knowledge_base_service._load_vector_entries", return_value=(vector_entries, 3)),
+            patch("services.content.knowledge_base_service._fetch_chat_rows", return_value=[]),
+            patch("services.content.knowledge_base_service.get_approved_chat_entry_ids", return_value=set()),
+            patch("services.content.knowledge_base_service.get_approved_chat_qas", return_value=[]),
         ):
             payload = get_knowledge_base_payload(query="thoi tiet Ha Noi hom nay", limit=10)
 
@@ -130,12 +130,12 @@ class ApproveChatEntryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             upload_dir = Path(temp_dir)
             with (
-                patch("services.knowledge_base_service.get_chat_entry_by_id", return_value=entry),
-                patch("services.knowledge_base_service.get_tool_upload_dir", return_value=upload_dir),
-                patch("services.knowledge_base_service.embedding_backend_ready", return_value=True),
-                patch("services.knowledge_base_service.add_documents") as add_documents_mock,
-                patch("services.knowledge_base_service.upsert_approved_chat_qa") as upsert_mock,
-                patch("services.knowledge_base_service.clear_rag_corpus_cache") as clear_cache_mock,
+                patch("services.content.knowledge_base_service.get_chat_entry_by_id", return_value=entry),
+                patch("services.content.knowledge_base_service.get_tool_upload_dir", return_value=upload_dir),
+                patch("services.content.knowledge_base_service.embedding_backend_ready", return_value=True),
+                patch("services.content.knowledge_base_service.add_documents") as add_documents_mock,
+                patch("services.content.knowledge_base_service.upsert_approved_chat_qa") as upsert_mock,
+                patch("services.content.knowledge_base_service.clear_rag_corpus_cache") as clear_cache_mock,
             ):
                 result = approve_chat_entry(entry_id=entry.entry_id)
 
@@ -148,3 +148,4 @@ class ApproveChatEntryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

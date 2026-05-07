@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from services.web_search import search_web_ictu
+from services.content.web_search import search_web_ictu
 
 
 class WebSearchServiceTests(unittest.TestCase):
@@ -24,9 +24,9 @@ class WebSearchServiceTests(unittest.TestCase):
         ]
 
         with (
-            patch("services.web_search._search_base_url", return_value="https://search.local"),
-            patch("services.web_search._extract_text", return_value=""),
-            patch("services.web_search._search_raw", side_effect=[official_results, broader_results]) as search_raw,
+            patch("services.content.web_search._search_base_url", return_value="https://search.local"),
+            patch("services.content.web_search._extract_text", return_value=""),
+            patch("services.content.web_search._search_raw", side_effect=[official_results, broader_results]) as search_raw,
         ):
             docs = search_web_ictu("học phí mới nhất", limit=3)
 
@@ -37,8 +37,8 @@ class WebSearchServiceTests(unittest.TestCase):
 
     def test_search_skips_unrelated_queries(self) -> None:
         with (
-            patch("services.web_search._search_base_url", return_value="https://search.local"),
-            patch("services.web_search._search_raw") as search_raw,
+            patch("services.content.web_search._search_base_url", return_value="https://search.local"),
+            patch("services.content.web_search._search_raw") as search_raw,
         ):
             docs = search_web_ictu("giá Bitcoin hôm nay", limit=3)
 
@@ -48,3 +48,4 @@ class WebSearchServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

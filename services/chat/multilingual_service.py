@@ -1,4 +1,4 @@
-﻿from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional
 import re
 import time
 
@@ -7,7 +7,7 @@ from config.rag_tools import get_tool_profile, is_valid_rag_tool
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from shared.prompt_loader import render_prompt
-from services.session_service import (
+from services.chat.session_service import (
     append_session_history,
     get_last_call_at,
     get_session_history,
@@ -17,9 +17,9 @@ from services.session_service import (
     set_session_language,
 )
 
-from services.langchain_service import invoke_text_prompt_chain
-from services.llm_service import get_model, resolve_model_choice
-from services.ictu_scope_service import normalize_scope_text
+from services.llm.langchain_service import invoke_text_prompt_chain
+from services.llm.llm_service import get_model, resolve_model_choice
+from services.rag.ictu_scope_service import normalize_scope_text
 
 _GENERATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
     [
@@ -355,3 +355,4 @@ def chat_multilingual(
         else "I'm checking the documents again. Please try asking again in a moment."
     )
     return fallback_reply, "llm:error"
+

@@ -23,13 +23,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from config.rag_tools import FALLBACK_RAG_NODE  # noqa: E402
-from services.llm_service import get_model  # noqa: E402
-from services.rag_service import (  # noqa: E402
+from services.llm.llm_service import get_model  # noqa: E402
+from services.rag.rag_service import (  # noqa: E402
     retrieve_fallback_context,
     retrieve_tool_context,
     route_rag_tool,
 )
-from services.vector_store_service import get_collection  # noqa: E402
+from services.vector.vector_store_service import get_collection  # noqa: E402
 
 
 def _normalize(text: str) -> str:
@@ -267,3 +267,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
