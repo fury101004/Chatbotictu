@@ -118,92 +118,10 @@
         </div>
     </div>
 
-    <!-- Floating Button -->
-    <div id="floating-cskh" class="floating-btn" style="display:none;">
-        <div class="floating-pulse"></div>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-            <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z"/>
-        </svg>
-        <span class="floating-badge">!</span>
-    </div>
 </div>
 
 <script>
-// ==================== GIỮ NGUYÊN CHỨC NĂNG CSKH + WEBSOCKET ====================
-let ws = null;
-window.cskhConnected = false;
 let activeChatSessionId = "";
-
-function safeParse(data) {
-    if (typeof data === "object") return data;
-    try { return JSON.parse(data); } catch { return { message: data }; }
-}
-
-window.connectToCSKH = function(sessionId, firstMessage) {
-    if (window.cskhConnected) return;
-    window.cskhConnected = true;
-
-    document.getElementById("userInput").placeholder = "Đang chat với nhân viên...";
-    document.getElementById("typing").textContent = "Nhân viên đang gõ...";
-
-    const protocol = location.protocol === "https:" ? "wss://" : "ws://";
-    ws = new WebSocket(`${protocol}${location.host}/ws-customer/${sessionId}`);
-
-    ws.onopen = () => addMessage("user", firstMessage, "Bạn");
-
-    ws.onmessage = (e) => {
-        const data = safeParse(e.data);
-        if (data.from === "cskh" || data.trigger_floating === true) {
-            if (navigator.vibrate) navigator.vibrate([200]);
-            new Audio('https://assets.mixkit.co/sfx/preview/mixkit-message-pop-alert-2354.mp3').play().catch(()=>{});
-            addMessage("bot", data.message || data, "CSKH", "#00ff88");
-            showFloating();
-            document.getElementById("typing").textContent = "Nhân viên online";
-        }
-    };
-
-    ws.onclose = () => {
-        window.cskhConnected = false;
-        ws = null;
-        addMessage("system", "Nhân viên đã rời phòng. ICTU AI tiếp tục hỗ trợ!", "Hệ thống");
-        document.getElementById("typing").textContent = "Đang online";
-        document.getElementById("userInput").placeholder = "Hỏi đại ca đi...";
-    };
-
-    window.sendToCSKH = (msg) => {
-        if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(msg);
-            addMessage("user", msg, "Bạn");
-        }
-    };
-};
-
-function showFloating() {
-    const btn = document.getElementById("floating-cskh");
-    const area = document.getElementById("messages");
-    const isNearBottom = area.scrollHeight - area.clientHeight <= area.scrollTop + 150;
-    if (isNearBottom) return;
-
-    btn.style.display = "flex";
-    setTimeout(() => btn.style.opacity = "1", 10);
-    
-    const hide = () => {
-        btn.style.opacity = "0";
-        setTimeout(() => btn.style.display = "none", 300);
-    };
-    
-    btn.onclick = () => {
-        area.scrollTop = area.scrollHeight;
-        hide();
-    };
-    
-    area.addEventListener("scroll", function check() {
-        if (area.scrollHeight - area.clientHeight <= area.scrollTop + 50) {
-            hide();
-            area.removeEventListener("scroll", check);
-        }
-    });
-}
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -390,13 +308,6 @@ document.getElementById("chatForm").onsubmit = async (e) => {
     const msg = input.value.trim();
     if (!msg) return;
 
-    if (window.cskhConnected && window.sendToCSKH) {
-        window.sendToCSKH(msg);
-        input.value = "";
-        updateCharCount(0);
-        return;
-    }
-
     addMessage("user", msg, "Bạn");
     input.value = "";
     updateCharCount(0);
@@ -427,13 +338,6 @@ document.getElementById("chatForm").onsubmit = async (e) => {
         const data = await res.json();
         thinking.remove();
         if (data.session_id) activeChatSessionId = data.session_id;
-
-        if (data.is_cskh) {
-            document.getElementById("messages").insertAdjacentHTML("beforeend", data.response || "");
-            if (data.session_id) window.connectToCSKH(data.session_id, msg);
-            showFloating();
-            return;
-        }
 
         if (data.response) {
             addMessage("bot", data.response, "ICTU AI", null, {
@@ -1458,58 +1362,6 @@ body[data-chat-theme="light"] {
     padding: 0 0.4rem;
 }
 
-/* Floating button */
-.floating-btn {
-    position: fixed;
-    bottom: 100px;
-    right: 30px;
-    width: 56px;
-    height: 56px;
-    background: linear-gradient(135deg, #00ff88, #00ffff);
-    border-radius: 16px;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 8px 25px rgba(0, 255, 136, 0.4);
-    z-index: 1000;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    animation: float 3s ease-in-out infinite;
-}
-
-.floating-pulse {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    border-radius: 16px;
-    background: inherit;
-    animation: pulseRing 2s ease-out infinite;
-    opacity: 0.6;
-}
-
-.floating-btn svg {
-    position: relative;
-    z-index: 2;
-}
-
-.floating-badge {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 22px;
-    height: 22px;
-    background: #ff4757;
-    border-radius: 50%;
-    color: white;
-    font-size: 0.7rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: bounce 2s infinite;
-}
-
 /* Animations */
 @keyframes messageAppear {
     from {
@@ -1539,35 +1391,6 @@ body[data-chat-theme="light"] {
     40% {
         transform: scale(1);
         opacity: 1;
-    }
-}
-
-@keyframes float {
-    0%, 100% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(-8px);
-    }
-}
-
-@keyframes pulseRing {
-    0% {
-        transform: scale(1);
-        opacity: 0.6;
-    }
-    100% {
-        transform: scale(1.5);
-        opacity: 0;
-    }
-}
-
-@keyframes bounce {
-    0%, 100% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(-4px);
     }
 }
 
@@ -1636,14 +1459,6 @@ body[data-chat-theme="light"] {
     .model-menu {
         min-width: min(340px, calc(100vw - 2rem));
     }
-    
-    .floating-btn {
-        width: 52px;
-        height: 52px;
-        bottom: 90px;
-        right: 20px;
-        border-radius: 14px;
-    }
 }
 
 @media (max-width: 480px) {
@@ -1674,13 +1489,6 @@ body[data-chat-theme="light"] {
     .model-menu {
         left: -38px;
         width: calc(100vw - 2rem);
-    }
-    
-    .floating-btn {
-        width: 48px;
-        height: 48px;
-        bottom: 80px;
-        right: 15px;
     }
 }
 </style>

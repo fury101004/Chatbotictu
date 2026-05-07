@@ -7,12 +7,12 @@ from services.multilingual_service import _build_final_prompt
 
 
 def _ascii(text: str) -> str:
-    text = text.replace("đ", "d").replace("Đ", "D")
+    text = text.replace("Ä‘", "d").replace("Ä", "D")
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
 
 class PromptBuilderTests(unittest.TestCase):
-    def test_vietnamese_prompt_includes_policy_guidance_and_exact_fallback(self) -> None:
+    def test_vietnamese_prompt_uses_single_contract_with_scope_and_fallback(self) -> None:
         prompt = _build_final_prompt(
             system_prompt="BASE SYSTEM PROMPT",
             current_lang="vi",
@@ -23,15 +23,14 @@ class PromptBuilderTests(unittest.TestCase):
         prompt_ascii = _ascii(prompt)
 
         self.assertIn("BASE SYSTEM PROMPT", prompt)
-        self.assertIn("Nhom tri thuc hien tai: Quy dinh va chinh sach.", prompt_ascii)
-        self.assertIn("so van ban, nam", prompt_ascii)
-        self.assertIn("ap dung", prompt_ascii)
-        self.assertIn("thoi han hoac", prompt_ascii)
-        self.assertIn("giai thich du chi tiet", prompt_ascii)
-        self.assertIn("Khong tra loi cut lun", prompt_ascii)
+        self.assertIn("LUAT CHO LUOT HIEN TAI:", prompt_ascii)
+        self.assertIn("Pham vi tri thuc hien tai:", prompt_ascii)
+        self.assertIn("ngu canh hien tai ben duoi", prompt_ascii)
+        self.assertIn("Neu cau hoi thieu moc phan biet bat buoc", prompt_ascii)
+        self.assertIn("Khong neu ten nguon, ten file, route, tool", prompt_ascii)
         self.assertIn('"Thong tin nay hien chua co trong tai lieu cua em."', prompt_ascii)
 
-    def test_english_prompt_uses_english_contract_and_faq_guidance(self) -> None:
+    def test_english_prompt_uses_single_contract_with_scope_and_fallback(self) -> None:
         prompt = _build_final_prompt(
             system_prompt="BASE SYSTEM PROMPT",
             current_lang="en",
@@ -41,10 +40,11 @@ class PromptBuilderTests(unittest.TestCase):
         )
         prompt_ascii = _ascii(prompt)
 
-        self.assertIn("TURN-SPECIFIC RULES:", prompt)
-        self.assertIn("Current knowledge group: FAQ sinh vien.", prompt_ascii)
-        self.assertIn("FAQ and operational guidance", prompt)
-        self.assertIn("professional detail", prompt)
+        self.assertIn("TURN RULES:", prompt)
+        self.assertIn("Current knowledge scope: FAQ sinh vien.", prompt_ascii)
+        self.assertIn("Only answer from the current context below.", prompt)
+        self.assertIn("ask exactly one short clarification question instead of guessing", prompt)
+        self.assertIn("Do not mention sources, filenames, routes, tool names", prompt)
         self.assertIn('"This information is not currently available in my documents."', prompt)
 
 

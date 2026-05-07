@@ -1,14 +1,18 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from config.settings import settings
+from pathlib import Path
+
 from config.db import set_config
+from config.settings import settings
 from config.system_prompt import get_system_prompt, save_system_prompt
-from services.llm_service import (
-    PRIMARY_MODEL_NAME,
-    get_configured_model_labels,
-    model_rotation_mode,
-)
+from services.llm_service import PRIMARY_MODEL_NAME, get_configured_model_labels, model_rotation_mode
 
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(settings.PROJECT_ROOT)).replace("\\", "/")
+    except ValueError:
+        return str(path)
 
 
 def get_config_page_payload() -> dict:
@@ -26,8 +30,8 @@ def get_config_page_payload() -> dict:
         "model_name": PRIMARY_MODEL_NAME,
         "model_names": get_configured_model_labels(),
         "model_rotation": model_rotation_mode(),
+        "prompt_source": _display_path(settings.SYSTEM_PROMPT_PATH),
     }
-
 
 
 def update_runtime_config(
@@ -57,4 +61,3 @@ def update_runtime_config(
             msg = f"RE-INGEST HOÀN TẤT! {total_files} file -> {total_chunks} chunks"
 
     return {"msg": msg, "reingested": need_reingest}
-

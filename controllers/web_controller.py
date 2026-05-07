@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import secrets
 from urllib.parse import quote_plus
@@ -6,51 +6,51 @@ from urllib.parse import quote_plus
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from config.limiter import limiter
 from config.rag_tools import DEFAULT_RAG_TOOL, get_upload_tool_options
 from config.settings import settings
-from config.limiter import limiter
+from config.system_prompt import get_system_prompt
 from services.chat_service import process_chat_message
 from services.config_service import get_config_page_payload, update_runtime_config
 from services.document_service import (
     delete_uploaded_document,
     get_history_page_data,
-    import_seed_corpus,
     get_vector_manager_payload,
+    import_seed_corpus,
     reingest_uploaded_documents,
     reset_document_store,
     upload_markdown_files,
 )
 from services.knowledge_base_service import approve_chat_entry, get_knowledge_base_payload
 from services.llm_service import get_chat_model_options
-from views.web_view import (
-    current_prompt_response,
-    json_upload_result,
-    redirect_vector_manager,
-    render_chat_page,
-    render_config_page,
-    render_data_loader_page,
-    render_history_page,
-    render_home,
-    render_knowledge_base_page,
-    render_vector_manager_page,
-    unauthorized_response,
-)
-from config.system_prompt import get_system_prompt
 from services.vector_store_service import get_collection
+from views.web_view import current_prompt_response, json_upload_result, render_page, redirect_vector_manager, unauthorized_response
 
 router = APIRouter()
+
+HOME_TEMPLATE = "pages/index.html"
+CHAT_TEMPLATE = "pages/chat.html"
+DATA_LOADER_TEMPLATE = "pages/data_loader.html"
+VECTOR_MANAGER_TEMPLATE = "pages/vector_manager_v2.html"
+KNOWLEDGE_BASE_TEMPLATE = "pages/knowledge_base.html"
+CONFIG_TEMPLATE = "pages/config.html"
+HISTORY_TEMPLATE = "pages/history.html"
 
 
 @router.get("/")
 async def home(request: Request):
-    return render_home(request)
+    return render_page(request, HOME_TEMPLATE)
 
 
 @router.get("/chat")
 async def chat_page(request: Request):
     if "chat_session_id" not in request.session:
         request.session["chat_session_id"] = secrets.token_hex(16)
-    return render_chat_page(request, chat_model_options=get_chat_model_options())
+    return render_page(
+        request,
+        CHAT_TEMPLATE,
+        context={"chat_model_options": get_chat_model_options()},
+    )
 
 
 @router.post("/chat")
@@ -93,13 +93,16 @@ async def data_loader_page(request: Request):
     if "csrf_token" not in request.session:
         request.session["csrf_token"] = secrets.token_hex(16)
 
-    return render_data_loader_page(
+    return render_page(
         request,
-        chunk_size=settings.CHUNK_SIZE,
-        chunk_overlap=settings.CHUNK_OVERLAP,
-        tool_options=get_upload_tool_options(),
-        default_tool=DEFAULT_RAG_TOOL,
-        csrf_token=request.session["csrf_token"],
+        DATA_LOADER_TEMPLATE,
+        context={
+            "chunk_size": settings.CHUNK_SIZE,
+            "chunk_overlap": settings.CHUNK_OVERLAP,
+            "tool_options": get_upload_tool_options(),
+            "default_tool": DEFAULT_RAG_TOOL,
+            "csrf_token": request.session["csrf_token"],
+        },
     )
 
 
@@ -161,10 +164,13 @@ async def vector_manager(request: Request, limit_per_file: int = 50):
         request.session["csrf_token"] = secrets.token_hex(16)
 
     payload = get_vector_manager_payload(limit_per_file)
-    return render_vector_manager_page(
+    return render_page(
         request,
-        payload=payload,
-        csrf_token=request.session["csrf_token"],
+        VECTOR_MANAGER_TEMPLATE,
+        context={
+            **payload,
+            "csrf_token": request.session["csrf_token"],
+        },
     )
 
 
@@ -183,7 +189,7 @@ async def knowledge_base_page(
     payload["csrf_token"] = request.session["csrf_token"]
     payload["flash_status"] = status
     payload["flash_message"] = message
-    return render_knowledge_base_page(request, payload=payload)
+    return render_page(request, KNOWLEDGE_BASE_TEMPLATE, context=payload)
 
 
 @router.post("/knowledge-base/approve-chat")
@@ -222,7 +228,14 @@ async def config_page(request: Request):
     if "csrf_token" not in request.session:
         request.session["csrf_token"] = secrets.token_hex(16)
     payload = get_config_page_payload()
-    return render_config_page(request, csrf_token=request.session["csrf_token"], **payload)
+    return render_page(
+        request,
+        CONFIG_TEMPLATE,
+        context={
+            **payload,
+            "csrf_token": request.session["csrf_token"],
+        },
+    )
 
 
 @router.post("/update-config")
@@ -268,9 +281,8 @@ async def history_page(request: Request, page: int = 1):
 
     payload = get_history_page_data(page=page, per_page=50)
     payload["csrf_token"] = request.session["csrf_token"]
-    return render_history_page(request, payload=payload)
+    return render_page(request, HISTORY_TEMPLATE, context=payload)
 
 
 def register_web_routes(app) -> None:
     app.include_router(router)
-

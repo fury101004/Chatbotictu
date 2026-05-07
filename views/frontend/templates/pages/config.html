@@ -7,7 +7,7 @@
 {% block content %}
 <div class="config-page">
     <h1 class="page-title">CẤU HÌNH BOT LẦY</h1>
-    <p class="page-desc">Bot sẽ hành xử đúng y chang file <code>data/systemprompt.md</code> dưới đây!</p>
+    <p class="page-desc">Bot sẽ hành xử đúng y chang file <code>{{ prompt_source }}</code> dưới đây!</p>
 
     <div class="config-container">
         <div class="info-box">
@@ -17,7 +17,7 @@
                 <div><strong>Luân phiên model:</strong> {{ model_rotation }}</div>
                 <div><strong>Chunk Size:</strong> {{ chunk_size }} từ</div>
                 <div><strong>Chunk Overlap:</strong> {{ chunk_overlap }} từ</div>
-                <div><strong>Prompt Source:</strong> data/systemprompt.md</div>
+                <div><strong>Prompt Source:</strong> {{ prompt_source }}</div>
             </div>
             {% if model_names %}
             <div class="model-rotation-list">
@@ -56,7 +56,7 @@
             <div class="form-group">
                 <label class="label-with-btn">
                     <span>Bot Rules (System Prompt)</span>
-                    <span style="color:#00d2d3; font-size:0.9em;">→ Lưu tự động vào <code>data/systemprompt.md</code></span>
+                    <span style="color:#00d2d3; font-size:0.9em;">→ Lưu tự động vào <code>{{ prompt_source }}</code></span>
                     <button type="button" id="copyPrompt" class="btn-small" title="Copy toàn bộ prompt">
                         Copy
                     </button>

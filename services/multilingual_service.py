@@ -113,56 +113,6 @@ def _build_language_instruction(current_lang: str) -> str:
     )
 
 
-def _build_tool_instruction(current_lang: str, rag_tool: Optional[str]) -> str:
-    profile = get_tool_profile(rag_tool) if is_valid_rag_tool(rag_tool) else None
-    tool_label = str(profile.get("label", rag_tool)) if profile else None
-
-    if current_lang == "en":
-        if rag_tool == "school_policy_rag":
-            detail = (
-                "This turn is grounded in policy and regulation documents. Preserve document years, target audience, "
-                "conditions, deadlines, and official constraints whenever they appear in context."
-            )
-        elif rag_tool == "student_handbook_rag":
-            detail = (
-                "This turn is grounded in handbook documents. Start with a short orientation-style explanation, "
-                "then add practical details only if the context clearly contains them."
-            )
-        elif rag_tool == "student_faq_rag":
-            detail = (
-                "This turn is grounded in FAQ and operational guidance. Answer the user's question directly first, "
-                "then list the next step, contact point, or location only if the context provides it."
-            )
-        else:
-            detail = "Use the current context as the highest-priority source for this turn."
-
-        if tool_label:
-            return f"Current knowledge group: {tool_label}. {detail}"
-        return detail
-
-    if rag_tool == "school_policy_rag":
-        detail = (
-            "Lượt này ưu tiên tài liệu quy định/chính sách. Nếu ngữ cảnh có số văn bản, năm, đối tượng áp dụng, "
-            "thời hạn hoặc điều kiện thì phải giữ nguyên các chi tiết đó."
-        )
-    elif rag_tool == "student_handbook_rag":
-        detail = (
-            "Lượt này ưu tiên sổ tay/cẩm nang. Hãy giải thích theo hướng định hướng, nêu bối cảnh áp dụng, "
-            "sau đó trình bày các chi tiết thực hiện nếu ngữ cảnh có."
-        )
-    elif rag_tool == "student_faq_rag":
-        detail = (
-            "Lượt này ưu tiên FAQ/quy trình tác vụ. Hãy trả lời thẳng vào câu hỏi trước, "
-            "sau đó mới nêu bước làm, nơi xử lý hoặc đầu mối liên hệ nếu ngữ cảnh có."
-        )
-    else:
-        detail = "Ưu tiên độ chính xác của ngữ cảnh hiện tại hơn lịch sử hội thoại trước đó."
-
-    if tool_label:
-        return f"Nhóm tri thức hiện tại: {tool_label}. {detail}"
-    return detail
-
-
 def _build_output_instruction(current_lang: str) -> str:
     if current_lang == "en":
         return (
@@ -210,6 +160,13 @@ def _sanitize_model_reply(reply: str) -> str:
     return cleaned.strip()
 
 
+def _knowledge_scope_label(current_lang: str, rag_tool: Optional[str]) -> str:
+    profile = get_tool_profile(rag_tool) if is_valid_rag_tool(rag_tool) else None
+    if profile:
+        return str(profile.get("label", "")).strip()
+    return "General ICTU knowledge" if current_lang == "en" else "Tri thức ICTU tổng quát"
+
+
 def _build_final_prompt(
     system_prompt: str,
     current_lang: str,
@@ -218,8 +175,8 @@ def _build_final_prompt(
     rag_tool: Optional[str] = None,
 ) -> str:
     language_instruction = _build_language_instruction(current_lang)
-    tool_instruction = _build_tool_instruction(current_lang, rag_tool)
     output_instruction = _build_output_instruction(current_lang)
+    knowledge_scope = _knowledge_scope_label(current_lang, rag_tool)
     no_info_reply = (
         "This information is not currently available in my documents."
         if current_lang == "en"
@@ -227,49 +184,66 @@ def _build_final_prompt(
     )
 
     if current_lang == "en":
-        return f"""{system_prompt}
-
-TURN-SPECIFIC RULES:
-- {language_instruction}
-- {tool_instruction}
-- If prior chat history conflicts with the current context, prioritize the current context.
-- Only answer from the CURRENT CONTEXT section below.
-- If CURRENT CONTEXT contains a matching **Question:**/**Answer:** pair, use the **Answer:** text as the primary answer and preserve its numbers, thresholds, years, and conditions exactly.
-- If the current context contains relevant but partial information, state the reliable part first and then ask exactly one short clarification question for the missing discriminator.
-- Reply with exactly "{no_info_reply}" only when the current context is empty or not relevant to the user's question.
-- If the question is ambiguous because it lacks a required discriminator such as academic year, semester, round, intake, training system, or target group, and the context already hints at likely discriminators, mention those hints before asking exactly one short clarification question.
-- Do not mention sources, filenames, tool names, routing, or internal system details.
-
-OUTPUT STYLE:
-{output_instruction}
-
-CURRENT CONTEXT:
-{safe_context}
-
-USER QUESTION:
-{user_question}
-"""
+        rules_heading = "TURN RULES"
+        output_heading = "OUTPUT CONTRACT"
+        context_heading = "CURRENT CONTEXT"
+        question_heading = "USER QUESTION"
+        scope_instruction = f"Current knowledge scope: {knowledge_scope}."
+        context_instruction = "Only answer from the current context below."
+        qa_instruction = (
+            "If the context contains a matching Question/Answer pair, use that answer as the main basis and preserve its "
+            "numbers, thresholds, years, and conditions exactly."
+        )
+        clarification_instruction = (
+            "If the context is relevant but incomplete, state the reliable part first and then ask exactly one short "
+            "clarification question."
+        )
+        ambiguity_instruction = (
+            "If the question lacks a required discriminator such as academic year, semester, round, cohort, training "
+            "system, or target group, ask exactly one short clarification question instead of guessing."
+        )
+        privacy_instruction = "Do not mention sources, filenames, routes, tool names, or internal system details."
+    else:
+        rules_heading = "LUẬT CHO LƯỢT HIỆN TẠI"
+        output_heading = "YÊU CẦU ĐẦU RA"
+        context_heading = "NGỮ CẢNH HIỆN TẠI"
+        question_heading = "CÂU HỎI NGƯỜI DÙNG"
+        scope_instruction = f"Phạm vi tri thức hiện tại: {knowledge_scope}."
+        context_instruction = "Chỉ được trả lời từ ngữ cảnh hiện tại bên dưới."
+        qa_instruction = (
+            "Nếu ngữ cảnh có cặp Question/Answer khớp với câu hỏi, hãy lấy Answer làm căn cứ chính và giữ nguyên số "
+            "liệu, ngưỡng điểm, năm học, điều kiện."
+        )
+        clarification_instruction = (
+            "Nếu ngữ cảnh liên quan nhưng chưa đủ để kết luận đầy đủ, hãy nêu rõ phần chắc chắn trước rồi hỏi lại đúng "
+            "một câu ngắn để làm rõ."
+        )
+        ambiguity_instruction = (
+            "Nếu câu hỏi thiếu mốc phân biệt bắt buộc như năm học, học kỳ, đợt, khóa, hệ đào tạo hoặc đối tượng áp "
+            "dụng, hãy hỏi lại đúng một câu ngắn thay vì tự đoán."
+        )
+        privacy_instruction = "Không nêu tên nguồn, tên file, route, tool hay chi tiết hệ thống nội bộ."
 
     return f"""{system_prompt}
 
-LUẬT CHO LƯỢT HIỆN TẠI:
+{rules_heading}:
 - {language_instruction}
-- {tool_instruction}
-- Nếu lịch sử hội thoại trước mâu thuẫn với ngữ cảnh hiện tại, hãy ưu tiên ngữ cảnh hiện tại.
-- Chỉ được trả lời từ phần NGỮ CẢNH HIỆN TẠI bên dưới.
-- Nếu NGỮ CẢNH HIỆN TẠI có cặp `**Question:**`/`**Answer:**` khớp câu hỏi, hãy lấy phần `**Answer:**` làm căn cứ chính và giữ nguyên các số liệu, ngưỡng điểm, năm học, điều kiện.
-- Nếu ngữ cảnh hiện tại có thông tin liên quan nhưng chưa đủ để kết luận đầy đủ, hãy nêu rõ phần chắc chắn trước rồi hỏi lại đúng 1 câu ngắn để làm rõ phần còn thiếu.
-- Chỉ được trả lời đúng câu "{no_info_reply}" khi ngữ cảnh hiện tại không có thông tin liên quan đến câu hỏi của người dùng.
-- Nếu câu hỏi mơ hồ vì thiếu mốc phân biệt bắt buộc như năm học, học kỳ, đợt, khóa, hệ đào tạo hoặc đối tượng áp dụng, và ngữ cảnh đã gợi ý được các mốc cần phân biệt, hãy nêu các mốc đó trước rồi hỏi lại đúng 1 câu ngắn để làm rõ.
-- Không nêu tên nguồn, tên file, tên tool, route hay chi tiết hệ thống nội bộ.
+- {scope_instruction}
+- If prior chat history conflicts with the current context, prioritize the current context.
+- {context_instruction}
+- {qa_instruction}
+- {clarification_instruction}
+- Reply with exactly "{no_info_reply}" only when the current context is empty or not relevant to the user's question.
+- {ambiguity_instruction}
+- {privacy_instruction}
 
-YÊU CẦU ĐẦU RA:
+{output_heading}:
 {output_instruction}
 
-NGỮ CẢNH HIỆN TẠI:
+{context_heading}:
 {safe_context}
 
-CÂU HỎI NGƯỜI DÙNG:
+{question_heading}:
 {user_question}
 """
 
