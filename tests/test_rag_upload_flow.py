@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from fastapi import UploadFile
 
+from pipelines.retrieval_pipeline import build_retrieval_query
 import services.vector.vector_store_service as vector_store_service
 from services.content.document_service import upload_markdown_files
 from services.rag.rag_service import (
@@ -242,6 +243,60 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
         load_corpus_mock.assert_not_called()
 
 
+class RetrievalQueryBuilderTests(unittest.TestCase):
+    def test_build_retrieval_query_keeps_short_follow_up_context(self) -> None:
+        runtime = SimpleNamespace(
+            session_memory={"session-1": [{"query": "So tay sinh vien K24 ap dung cho doi tuong nao?"}]},
+            history_loader=lambda _sid: [],
+        )
+
+        query = build_retrieval_query(runtime, "session-1", "khóa k24")
+
+        self.assertEqual(query, "So tay sinh vien K24 ap dung cho doi tuong nao? khóa k24")
+
+    def test_build_retrieval_query_does_not_mix_previous_topic_into_standalone_realtime_question(self) -> None:
+        runtime = SimpleNamespace(
+            session_memory={"session-1": [{"query": "Điểm chuẩn ngành CNTT năm 2023 là bao nhiêu?"}]},
+            history_loader=lambda _sid: [],
+        )
+
+        query = build_retrieval_query(runtime, "session-1", "ictu hôm nay có j mới")
+
+        self.assertEqual(query, "ictu hôm nay có j mới")
+
+    def test_build_retrieval_query_does_not_expand_short_question_with_explicit_new_topic(self) -> None:
+        runtime = SimpleNamespace(
+            session_memory={"session-1": [{"query": "Điểm chuẩn ngành CNTT năm 2023 là bao nhiêu?"}]},
+            history_loader=lambda _sid: [],
+        )
+
+        query = build_retrieval_query(runtime, "session-1", "ictu tuyển sinh 2025")
+
+        self.assertEqual(query, "ictu tuyển sinh 2025")
+
+    def test_build_retrieval_query_does_not_mix_previous_topic_into_short_standalone_topic(self) -> None:
+        runtime = SimpleNamespace(
+            session_memory={"session-1": [{"query": "Điểm chuẩn ngành CNTT năm 2023 là bao nhiêu?"}]},
+            history_loader=lambda _sid: [],
+        )
+
+        for message in ("học phí", "bhyt", "tốt nghiệp"):
+            with self.subTest(message=message):
+                query = build_retrieval_query(runtime, "session-1", message)
+
+                self.assertEqual(query, message)
+
+    def test_build_retrieval_query_keeps_explicit_follow_up_prefix(self) -> None:
+        runtime = SimpleNamespace(
+            session_memory={"session-1": [{"query": "Sổ tay sinh viên K24 áp dụng cho đối tượng nào?"}]},
+            history_loader=lambda _sid: [],
+        )
+
+        query = build_retrieval_query(runtime, "session-1", "còn học phí")
+
+        self.assertEqual(query, "Sổ tay sinh viên K24 áp dụng cho đối tượng nào? còn học phí")
+
+
 class RagLexicalQaTests(unittest.TestCase):
     def _doc(
         self,
@@ -375,5 +430,3 @@ Sinh vien Kha can ket qua hoc tap tu 2,50 den 3,19.
         self.assertEqual(matches[0][1].path.name, "SO TAY SINH VIEN 2025-2026.md")
 if __name__ == "__main__":
     unittest.main()
-
-

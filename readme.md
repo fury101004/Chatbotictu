@@ -92,7 +92,7 @@ Mục tiêu của dự án là xây một chatbot có thể:
 ├── data/
 │   ├── bot-rule.md
 │   ├── intents/
-│   ├── qa_generated_fixed/
+│   ├── primary_corpus/
 │   ├── rag_uploads/
 │   └── systemprompt.md
 ├── docs/

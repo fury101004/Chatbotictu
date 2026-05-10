@@ -30,7 +30,7 @@ REPORT_MD = REPORT_DIR / "bao_cao_ai_agent_chatbot.md"
 REPORT_DOCX = REPORT_DIR / "bao_cao_ai_agent_chatbot.docx"
 REPORT_JSON = GENERATED_DIR / "ai_agent_chatbot_report_payload.json"
 
-QA_ROOT = ROOT / "data" / "qa_generated_fixed"
+QA_ROOT = ROOT / "data" / "primary_corpus"
 EVAL_DATASET = ROOT / "evaluation" / "chatbot_eval_dataset.json"
 EVAL_RESULTS = GENERATED_DIR / "eval_results.json"
 UNITTEST_SUMMARY = GENERATED_DIR / "unittest_summary.json"
@@ -207,7 +207,7 @@ def build_markdown(payload: dict[str, Any]) -> str:
         "",
         "- Hệ thống hiện đã có nền tảng chatbot RAG theo pipeline agent: normalize, guardrail, router, retrieval, response composer và memory/logging.",
         "- Báo cáo này đóng gói lại các phần đã có, bổ sung diễn giải và nhúng trực tiếp sơ đồ vào file DOCX.",
-        f"- Corpus hiện có {corpus['total_files']} file trong data/qa_generated_fixed; có {corpus['question_files']} file .questions.md và {corpus['handbook_question_files']} file câu hỏi thuộc Sổ tay sinh viên.",
+        f"- Corpus hiện có {corpus['total_files']} file trong data/primary_corpus; có {corpus['question_files']} file .questions.md và {corpus['handbook_question_files']} file câu hỏi thuộc Sổ tay sinh viên.",
         f"- Vector database hiện có {vector['sources']} nguồn tài liệu, {vector['embeddings']} embeddings/chunks và {vector['question_sources']} source .questions.md.",
         f"- Bộ test hiện có {eval_data['total_cases']} ca, trong đó {eval_data['labeled_source_cases']} ca có nhãn nguồn để đo retrieval.",
         "",

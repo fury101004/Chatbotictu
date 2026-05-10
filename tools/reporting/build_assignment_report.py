@@ -463,7 +463,7 @@ def _build_report_markdown(
         "## 2. Các đầu mục đã hoàn thành",
         "",
         "- Đã rà soát cấu trúc dự án chatbot/RAG và xác định kiến trúc pipeline-agent hiện tại.",
-        "- Đã phân tích corpus trong `data/qa_generated_fixed` theo số mẫu, độ dài title, độ dài content và phân bố nhóm tri thức.",
+        "- Đã phân tích corpus trong `data/primary_corpus` theo số mẫu, độ dài title, độ dài content và phân bố nhóm tri thức.",
         "- Đã tạo và duy trì bộ benchmark tại `evaluation/chatbot_eval_dataset.json` để đo router và retrieval.",
         "- Đã chạy lại benchmark hệ thống và lưu kết quả vào `reports/generated/eval_results.*`.",
         "- Đã chạy unit test và lưu tổng hợp vào `reports/generated/unittest_summary.json`.",
@@ -617,4 +617,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

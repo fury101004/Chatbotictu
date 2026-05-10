@@ -53,8 +53,8 @@ data/qa_generated/
 data/qa_generated_fixed/
 clean_data/
 datapdf/
-evaluation/
-reports/
+/evaluation/
+/reports/
 vectorstore/
 *.db
 *.sqlite3

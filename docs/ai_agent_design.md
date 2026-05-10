@@ -36,7 +36,7 @@ Hệ thống phải đạt 4 yêu cầu:
 ### 2.3 Thành phần dữ liệu
 
 - Corpus tài liệu gốc trong `clean_data/`.
-- Corpus hỏi đáp đã chuẩn hóa trong `data/qa_generated_fixed/`.
+- Corpus hỏi đáp đã chuẩn hóa trong `data/primary_corpus/`.
 - Tài liệu upload thêm trong `data/rag_uploads/`.
 - Vector store lưu trong `vectorstore/`.
 - SQLite runtime trong `data/bot_config.db`.

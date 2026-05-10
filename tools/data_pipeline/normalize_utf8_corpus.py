@@ -8,7 +8,7 @@ from pathlib import Path
 
 TEXT_SUFFIXES = {".md", ".markdown", ".txt", ".html", ".js", ".css", ".json", ".yml", ".yaml", ".py"}
 DEFAULT_TARGETS = [
-    "data/qa_generated_fixed",
+    "data/primary_corpus",
     "data/systemprompt.md",
     "data/bot-rule.md",
     "services/rag_prompts.py",

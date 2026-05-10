@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
 
 from models.chat import RAGResult
+from services.rag.ictu_scope_service import normalize_scope_text
 from services.rag.rag_types import (
     RETRIEVAL_HYBRID,
     RETRIEVAL_LOCAL_DATA,
@@ -23,6 +24,48 @@ TOOL_LEXICAL_RETRIEVAL_LIMIT = 8
 FALLBACK_LEXICAL_RETRIEVAL_LIMIT = 8
 ROUTER_REQUEST_TIMEOUT_SECONDS = 10
 ROUTER_EXECUTOR_TIMEOUT_SECONDS = 4
+FOLLOW_UP_MAX_TOKENS = 3
+FOLLOW_UP_PREFIX_MAX_TOKENS = 6
+_FOLLOW_UP_QUERY_PREFIXES = tuple(
+    normalize_scope_text(marker)
+    for marker in (
+        "còn",
+        "thế còn",
+        "vậy còn",
+        "thế",
+        "vậy",
+        "chi tiết",
+        "cụ thể",
+        "thêm",
+        "nữa",
+        "ý là",
+    )
+)
+_SELF_CONTAINED_QUERY_MARKERS = tuple(
+    normalize_scope_text(marker)
+    for marker in (
+        "ictu",
+        "trường",
+        "đại học",
+        "ngành",
+        "điểm chuẩn",
+        "tuyển sinh",
+        "học phí",
+        "học bổng",
+        "miễn giảm",
+        "thông báo",
+        "lịch",
+        "lịch học",
+        "lịch thi",
+        "tốt nghiệp",
+        "bhyt",
+        "bảo hiểm",
+        "chương trình",
+        "tín chỉ",
+        "email",
+        "hồ sơ",
+    )
+)
 
 
 @dataclass(slots=True)
@@ -313,6 +356,38 @@ def _normalize_message_key(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip().casefold()
 
 
+def _contains_normalized_marker(text: str, markers: tuple[str, ...]) -> bool:
+    padded_text = f" {text} "
+    return any(f" {marker} " in padded_text for marker in markers)
+
+
+def _starts_with_normalized_prefix(text: str, prefixes: tuple[str, ...]) -> bool:
+    return any(text == prefix or text.startswith(f"{prefix} ") for prefix in prefixes)
+
+
+def _should_expand_with_previous_query(previous_q: str, current_message: str) -> bool:
+    normalized_previous = normalize_scope_text(previous_q)
+    normalized_current = normalize_scope_text(current_message)
+    if not normalized_previous or not normalized_current or normalized_previous == normalized_current:
+        return False
+
+    current_tokens = normalized_current.split()
+    if not current_tokens:
+        return False
+
+    has_follow_up_prefix = _starts_with_normalized_prefix(normalized_current, _FOLLOW_UP_QUERY_PREFIXES)
+    if has_follow_up_prefix:
+        return len(current_tokens) <= FOLLOW_UP_PREFIX_MAX_TOKENS
+
+    if _contains_normalized_marker(normalized_current, _SELF_CONTAINED_QUERY_MARKERS):
+        return False
+
+    if len(current_tokens) <= FOLLOW_UP_MAX_TOKENS:
+        return True
+
+    return False
+
+
 def _get_previous_user_message_from_db(runtime: RetrievalRuntime, session_id: str, current_message: str) -> str:
     try:
         history = runtime.history_loader(session_id)
@@ -349,7 +424,7 @@ def build_retrieval_query(runtime: RetrievalRuntime, session_id: str, message: s
 
     if not previous_q:
         return current_message
-    if _normalize_message_key(previous_q) == _normalize_message_key(current_message):
+    if not _should_expand_with_previous_query(previous_q, current_message):
         return current_message
     return f"{previous_q} {current_message}"
 
@@ -652,4 +727,3 @@ def retrieve_general_context(
         )
 
     return result
-
