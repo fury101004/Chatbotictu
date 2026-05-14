@@ -33,7 +33,6 @@ def index_document(
     if not clean_name:
         clean_name = Path(filename).name or "document.md"
 
-    collection.delete(where={"source": clean_name})
     selected_tool_name = str(tool_name or "unassigned")
     academic_year = extract_academic_year_fn(clean_name, filename, file_content)
     document_type = infer_document_type_fn(clean_name, filename, selected_tool_name, file_content)
@@ -42,10 +41,15 @@ def index_document(
         print(f"No chunks generated from {filename}")
         return
 
+    collection.delete(where={"source": clean_name})
+
     documents = [chunk["text"] for chunk in chunks]
+    id_prefix = build_chunk_id_prefix(clean_name)
+    ids = [f"{id_prefix}__{index:05d}" for index in range(len(chunks))]
     metadatas = [
         {
             "source": clean_name,
+            "source_path": clean_name,
             "title": chunk["title"],
             "title_clean": re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", chunk["title"].lower())).strip(),
             "level": chunk.get("level", 1),
@@ -54,19 +58,18 @@ def index_document(
             "word_count": chunk.get("word_count", len(chunk["text"].split())),
             "file_name": Path(clean_name).name,
             "academic_year": academic_year or "",
+            "chunk_id": ids[index],
             "chapter": chunk.get("chapter", ""),
             "section": chunk.get("section", chunk.get("title", "")),
+            "section_title": chunk.get("title", ""),
             "page_number": chunk.get("page_number") if chunk.get("page_number") is not None else -1,
             "document_type": document_type,
             "created_at": datetime.now().isoformat(),
             "version": version,
             "tool_name": selected_tool_name,
         }
-        for chunk in chunks
+        for index, chunk in enumerate(chunks)
     ]
-
-    id_prefix = build_chunk_id_prefix(clean_name)
-    ids = [f"{id_prefix}__{index:05d}" for index in range(len(chunks))]
 
     batch_size = 50
     for start in range(0, len(documents), batch_size):

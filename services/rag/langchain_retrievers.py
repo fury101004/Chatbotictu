@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
@@ -8,6 +9,76 @@ from langchain_core.retrievers import BaseRetriever
 from pydantic import ConfigDict, Field
 
 from shared.text_utils import tokenize_search_text
+
+
+_YEAR_RANGE_RE = re.compile(r"\b(20[0-9]{2})\s*[-/]\s*(20[0-9]{2})\b")
+_YEAR_RE = re.compile(r"\b(20[0-9]{2})\b")
+
+
+def _extract_query_year_ranges(query: str) -> set[str]:
+    return {
+        f"{match.group(1)}-{match.group(2)}"
+        for match in _YEAR_RANGE_RE.finditer(str(query or ""))
+    }
+
+
+def _extract_query_years(query: str) -> set[str]:
+    ranges = _extract_query_year_ranges(query)
+    range_years = {year for year_range in ranges for year in year_range.split("-")}
+    return {
+        match.group(1)
+        for match in _YEAR_RE.finditer(str(query or ""))
+        if match.group(1) not in range_years
+    }
+
+
+def _metadata_year_haystack(metadata: dict[str, Any]) -> str:
+    fields = (
+        "academic_year",
+        "source",
+        "source_path",
+        "file_name",
+        "title",
+        "section",
+        "section_title",
+    )
+    return " ".join(str(metadata.get(field, "") or "") for field in fields).casefold()
+
+
+def _filter_by_query_years(
+    query: str,
+    pairs: list[tuple[str, dict[str, Any]]],
+) -> list[tuple[str, dict[str, Any]]]:
+    query_ranges = _extract_query_year_ranges(query)
+    query_years = _extract_query_years(query)
+    if not query_ranges and not query_years:
+        return pairs
+
+    rule_pairs = [
+        (document, metadata)
+        for document, metadata in pairs
+        if metadata.get("source") == "BOT_RULE"
+    ]
+    normal_pairs = [
+        (document, metadata)
+        for document, metadata in pairs
+        if metadata.get("source") != "BOT_RULE"
+    ]
+
+    if query_ranges:
+        filtered = [
+            (document, metadata)
+            for document, metadata in normal_pairs
+            if any(year_range in _metadata_year_haystack(metadata) for year_range in query_ranges)
+        ]
+    else:
+        filtered = [
+            (document, metadata)
+            for document, metadata in normal_pairs
+            if any(year in _metadata_year_haystack(metadata) for year in query_years)
+        ]
+
+    return [*rule_pairs, *filtered] if filtered else pairs
 
 
 class CorpusLexicalRetriever(BaseRetriever):
@@ -88,9 +159,15 @@ class VectorStoreRetriever(BaseRetriever):
                 alpha=self.alpha,
             )
 
-        return [
-            Document(page_content=str(document or ""), metadata=dict(metadata or {}))
+        pairs = [
+            (str(document or ""), dict(metadata or {}))
             for document, metadata in zip(documents, metadatas)
+        ]
+        pairs = _filter_by_query_years(query, pairs)
+
+        return [
+            Document(page_content=document, metadata=metadata)
+            for document, metadata in pairs
         ]
 
 

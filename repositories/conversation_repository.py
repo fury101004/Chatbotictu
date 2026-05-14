@@ -7,8 +7,8 @@ from config.db import get_chat_history as _get_chat_history
 from config.db import get_conn, save_message as _save_message
 
 
-def save_conversation_message(role: str, content: str, *, session_id: str = "default") -> None:
-    _save_message(role, content, session_id=session_id)
+def save_conversation_message(role: str, content: str, *, session_id: str = "default") -> int:
+    return _save_message(role, content, session_id=session_id)
 
 
 def load_chat_history(session_id: str = "default") -> list[dict[str, str]]:

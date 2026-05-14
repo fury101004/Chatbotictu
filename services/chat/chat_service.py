@@ -72,6 +72,10 @@ _FALLBACK_PRIMARY_REPLY = {
         "Bạn có thể nói rõ hơn câu hỏi hoặc nêu thêm mốc như năm học, khóa, học kỳ hay đợt áp dụng không?"
     ),
 }
+_STUDENT_HANDBOOK_NO_INFO_REPLY = {
+    "en": "I could not find this information in the student handbook.",
+    "vi": "Không tìm thấy thông tin này trong sổ tay sinh viên.",
+}
 
 
 def route_rag_tool(message: str) -> tuple[str, str]:
@@ -287,10 +291,17 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
 
 
 def _fallback_kb_reply(state: ChatGraphState) -> str:
-    primary_message = _FALLBACK_PRIMARY_REPLY.get(
-        get_current_language(state.get("session_id", "default")),
-        _FALLBACK_PRIMARY_REPLY["vi"],
-    )
+    current_language = get_current_language(state.get("session_id", "default"))
+    if state.get("rag_tool") == "student_handbook_rag" and not state.get("needs_clarification"):
+        primary_message = _STUDENT_HANDBOOK_NO_INFO_REPLY.get(
+            current_language,
+            _STUDENT_HANDBOOK_NO_INFO_REPLY["vi"],
+        )
+    else:
+        primary_message = _FALLBACK_PRIMARY_REPLY.get(
+            current_language,
+            _FALLBACK_PRIMARY_REPLY["vi"],
+        )
     clarification_question = ""
     if state.get("needs_clarification") and state.get("clarification_question"):
         primary_message = ""
@@ -300,6 +311,30 @@ def _fallback_kb_reply(state: ChatGraphState) -> str:
         primary_message=primary_message,
         clarification_question=clarification_question,
     )
+
+
+def _append_source_citations(response: str, state: ChatGraphState) -> str:
+    """Append block nguồn tham khảo vào cuối response text.
+
+    Đảm bảo client không render field `sources` vẫn thấy được nguồn.
+    """
+    sources = state.get("sources", [])
+    if not sources or not response:
+        return response
+
+    unique_sources = list(dict.fromkeys(
+        s for s in sources
+        if s and s != "BOT_RULE" and len(s) > 2
+    ))
+    if not unique_sources:
+        return response
+
+    current_lang = get_current_language(state.get("session_id", "default"))
+    heading = "📚 Nguồn tham khảo:" if current_lang == "vi" else "📚 References:"
+    source_lines = [f"- {source}" for source in unique_sources[:5]]
+    citation_block = f"\n\n---\n{heading}\n" + "\n".join(source_lines)
+
+    return response.rstrip() + citation_block
 
 
 def _generate_answer(state: ChatGraphState) -> ChatGraphState:
@@ -335,6 +370,7 @@ def _generate_answer(state: ChatGraphState) -> ChatGraphState:
         rag_tool=state.get("rag_tool"),
         selected_model=state.get("selected_llm_model"),
     )
+    response = _append_source_citations(response, state)
     state["response"] = response
     state["llm_model"] = llm_model
     state["language"] = get_current_language(state["session_id"])
@@ -342,15 +378,39 @@ def _generate_answer(state: ChatGraphState) -> ChatGraphState:
     return state
 
 
+def _build_auto_approve_entry_id(session_id: str, answer_row_id: int) -> str:
+    """Build entry_id matching knowledge_base_service._build_chat_entry_id format."""
+    return f"chat::{session_id}::{answer_row_id}"
+
+
+def _should_auto_approve(state: ChatGraphState) -> bool:
+    """Determine if this Q&A should be auto-approved into the knowledge base.
+
+    Auto-approve ALL chat Q&A pairs. Only skip empty or moderation-blocked messages.
+    """
+    # Skip if no response or empty message
+    if not state.get("response") or not state.get("message"):
+        return False
+
+    # Skip moderation-blocked messages (swear filter)
+    intent = str(state.get("intent", "") or "")
+    if intent == "moderation":
+        return False
+
+    return True
+
+
 def _save_history(state: ChatGraphState) -> ChatGraphState:
     message = state.get("message", "")
     response = state.get("response", "")
     session_id = state.get("session_id", "default")
 
+    user_row_id = 0
+    bot_row_id = 0
     if message:
-        save_message("user", message, session_id=session_id)
+        user_row_id = save_message("user", message, session_id=session_id)
     if response:
-        save_message("bot", response, session_id=session_id)
+        bot_row_id = save_message("bot", response, session_id=session_id)
 
     if response and "web_search" in str(state.get("mode", "")):
         state["web_kb_status"] = save_web_search_answer(
@@ -373,6 +433,22 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
             ],
             rag_tool=state.get("rag_tool"),
         )
+
+    # --- Auto-approve Q&A into knowledge base ---
+    if bot_row_id and user_row_id and _should_auto_approve(state):
+        entry_id = _build_auto_approve_entry_id(session_id, bot_row_id)
+        try:
+            from services.content.knowledge_base_service import approve_chat_entry
+            result = approve_chat_entry(entry_id=entry_id)
+            state["auto_approved_kb"] = True
+            logger.info(
+                "[chat_agent] auto_approve_kb entry_id=%s indexed=%s",
+                entry_id,
+                result.get("indexed"),
+            )
+        except Exception as exc:
+            state["auto_approved_kb"] = False
+            logger.warning("[chat_agent] auto_approve_kb failed: %s", exc)
 
     state["language"] = get_current_language(session_id)
     _log_step("save_history", state, saved_response=bool(response))
@@ -397,4 +473,3 @@ async def process_chat_message(message: str, session_id: str = "default", llm_mo
             _save_history,
         ),
     )
-

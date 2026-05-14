@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -26,8 +27,20 @@ REALTIME_MARKERS = (
     "tuyển sinh",
     "lịch",
     "thông báo mới",
+    # Hỏi tin / thông báo động (thường không có trong corpus tĩnh)
+    "có thông báo",
+    "thông báo gì",
+    "thông báo nào",
+    "thông báo không",
+    "tin chính thức",
 )
 NORMALIZED_REALTIME_MARKERS = tuple(normalize_scope_text(marker) for marker in REALTIME_MARKERS)
+
+# Sau normalize_scope_text, ngày dạng 13/5/2026 thành "13 5 2026" (khoảng trắng).
+_DATED_THONG_BAO_RE = re.compile(
+    r"(?:\d{1,2}\s+\d{1,2}\s+20\d{2}.+thong\s+bao|thong\s+bao.+\d{1,2}\s+\d{1,2}\s+20\d{2})",
+    re.IGNORECASE,
+)
 
 ICTU_WEB_QUERY_MARKER = '"Trường Đại học Công nghệ Thông tin và Truyền thông Thái Nguyên" ICTU'
 ICTU_OFFICIAL_DOMAIN = "ictu.edu.vn"
@@ -70,7 +83,12 @@ def web_search_configured() -> bool:
 
 def should_use_web_search(query: str) -> bool:
     normalized = normalize_scope_text(query or "")
-    return any(marker in normalized for marker in NORMALIZED_REALTIME_MARKERS)
+    if any(marker in normalized for marker in NORMALIZED_REALTIME_MARKERS):
+        return True
+    # Câu hỏi gắn ngày cụ thể + "thông báo" (vd: ngày 13/5/2026 có thông báo gì) — cần web, không chỉ RAG tĩnh.
+    if "thong bao" in normalized and _DATED_THONG_BAO_RE.search(normalized):
+        return True
+    return False
 
 
 def _with_search_path(base_url: str) -> str:

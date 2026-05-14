@@ -76,10 +76,13 @@ Thông tin cho sinh viên.
         self.assertEqual(first_meta["tool_name"], "student_handbook_rag")
         self.assertEqual(first_meta["academic_year"], "2025-2026")
         self.assertEqual(first_meta["document_type"], "student_handbook")
+        self.assertEqual(first_meta["source_path"], "uploads/student_handbook_rag/SO TAY SINH VIEN 2025-2026.md")
+        self.assertIn("chunk_id", first_meta)
+        self.assertIn("section_title", first_meta)
+        self.assertTrue(first_meta["chunk_id"].endswith("__00000"))
         self.assertTrue(any(meta["page_number"] == 8 for meta in metadatas))
         self.assertTrue(any("Điều kiện học bổng" in meta["section"] for meta in metadatas))
 
 
 if __name__ == "__main__":
     unittest.main()
-

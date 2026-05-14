@@ -42,7 +42,7 @@ def build_chat_response_payload(state: ChatGraphState, *, response_time_ms: int)
         "response_time_ms": response_time_ms,
     }
 
-    for key in ("sources", "mode", "chunks_used", "rag_tool", "rag_route", "llm_model", "web_kb_status"):
+    for key in ("sources", "mode", "chunks_used", "rag_tool", "rag_route", "llm_model", "web_kb_status", "auto_approved_kb"):
         if state.get(key) is not None:
             result[key] = state.get(key)
     return result

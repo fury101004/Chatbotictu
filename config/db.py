@@ -158,7 +158,7 @@ def _chat_history_has_session_id(cursor: sqlite3.Cursor) -> bool:
     return "session_id" in columns
 
 
-def save_message(role: str, content: str, session_id: str = "default") -> None:
+def save_message(role: str, content: str, session_id: str = "default") -> int:
     conn = get_conn()
     cursor = conn.cursor()
 
@@ -173,8 +173,10 @@ def save_message(role: str, content: str, session_id: str = "default") -> None:
             (role, content),
         )
 
+    row_id = cursor.lastrowid or 0
     conn.commit()
     conn.close()
+    return row_id
 
 
 def add_uploaded_file(filename: str, tool_name: str, storage_path: str) -> None:

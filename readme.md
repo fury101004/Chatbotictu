@@ -108,6 +108,13 @@ Mục tiêu của dự án là xây một chatbot có thể:
 
 ## 5. Cài đặt
 
+### Phiên bản Python (bắt buộc)
+
+Dự án yêu cầu **Python 3.11 trở lên** (khớp `Dockerfile` và `pyproject.toml`). Python **3.9 không chạy được** toàn bộ codebase vì dùng `@dataclass(slots=True)` và một số dependency (ví dụ `click` trong `requirements.txt`) chỉ phân phối wheel cho Python ≥ 3.10.
+
+- Cài [Python 3.11](https://www.python.org/downloads/) hoặc 3.12, rồi tạo venv bằng launcher Windows `py -3.11` như bên dưới.
+- Nếu dùng **pyenv**: file `.python-version` trong repo đã ghi `3.11`.
+
 ### Tạo môi trường ảo
 
 ```powershell

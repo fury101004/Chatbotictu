@@ -173,6 +173,20 @@ def _knowledge_scope_label(current_lang: str, rag_tool: Optional[str]) -> str:
     return "General ICTU knowledge" if current_lang == "en" else "Tri thức ICTU tổng quát"
 
 
+def _no_info_reply(current_lang: str, rag_tool: Optional[str]) -> str:
+    if rag_tool == "student_handbook_rag":
+        return (
+            "I could not find this information in the student handbook."
+            if current_lang == "en"
+            else "Không tìm thấy thông tin này trong sổ tay sinh viên."
+        )
+    return (
+        "This information is not currently available in my documents."
+        if current_lang == "en"
+        else "Thông tin này hiện chưa có trong tài liệu của em."
+    )
+
+
 def _build_final_prompt(
     system_prompt: str,
     current_lang: str,
@@ -183,11 +197,7 @@ def _build_final_prompt(
     language_instruction = _build_language_instruction(current_lang)
     output_instruction = _build_output_instruction(current_lang)
     knowledge_scope = _knowledge_scope_label(current_lang, rag_tool)
-    no_info_reply = (
-        "This information is not currently available in my documents."
-        if current_lang == "en"
-        else "Thông tin này hiện chưa có trong tài liệu của em."
-    )
+    no_info_reply = _no_info_reply(current_lang, rag_tool)
 
     if current_lang == "en":
         rules_heading = "TURN RULES"
@@ -258,7 +268,7 @@ def chat_multilingual(
     rag_tool: Optional[str] = None,
     selected_model: Optional[str] = None,
 ) -> tuple[str, Optional[str]]:
-    session = _get_session(session_id)
+    _get_session(session_id)
 
     switch = _detect_switch(user_question)
     if switch:
@@ -288,9 +298,10 @@ def chat_multilingual(
 
     now = time.time()
     last_call_at = get_last_call_at(session_id)
+    next_allowed_at = now
     if last_call_at is not None and now - last_call_at < 0.7:
-        time.sleep(0.5)
-    mark_call(session_id, now)
+        next_allowed_at = last_call_at + 0.7
+    mark_call(session_id, next_allowed_at)
 
     safe_context = _clean_context(context_text) or _empty_context_text(current_lang)
     system_prompt = get_system_prompt().strip()

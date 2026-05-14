@@ -1,0 +1,242 @@
+[
+  {
+    "id": "local_001",
+    "group": "local_data",
+    "question": "Sổ tay sinh viên 2025-2026 áp dụng cho đối tượng nào?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["8. SO TAY SINH VIEN 2025-2026"]
+  },
+  {
+    "id": "local_002",
+    "group": "local_data",
+    "question": "Sinh viên khóa 24 dùng sổ tay sinh viên năm học nào?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["8. SO TAY SINH VIEN 2025-2026"]
+  },
+  {
+    "id": "local_003",
+    "group": "local_data",
+    "question": "Trong sổ tay 2025-2026, giá trị cốt lõi của Trường là gì?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["8. SO TAY SINH VIEN 2025-2026"]
+  },
+  {
+    "id": "local_004",
+    "group": "local_data",
+    "question": "Trong sổ tay 2025-2026, triết lý giáo dục của Trường được nêu như thế nào?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["8. SO TAY SINH VIEN 2025-2026"]
+  },
+  {
+    "id": "local_005",
+    "group": "local_data",
+    "question": "Sổ tay 2025-2026 nêu địa chỉ và thông tin liên hệ của Trường là gì?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["8. SO TAY SINH VIEN 2025-2026"]
+  },
+  {
+    "id": "local_006",
+    "group": "local_data",
+    "question": "Quy định về công tác người học áp dụng cho ai?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_007",
+    "group": "local_data",
+    "question": "Mục đích của công tác người học là gì?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_008",
+    "group": "local_data",
+    "question": "Người học tại ICTU có nhiệm vụ gì?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_009",
+    "group": "local_data",
+    "question": "Người học được hưởng những quyền gì?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_010",
+    "group": "local_data",
+    "question": "Người học không được làm những hành vi nào?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_011",
+    "group": "local_data",
+    "question": "Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_012",
+    "group": "local_data",
+    "question": "Sinh viên học lực bình thường phải đăng ký tối thiểu bao nhiêu tín chỉ mỗi học kỳ chính?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_013",
+    "group": "local_data",
+    "question": "Sinh viên học lực yếu được đăng ký bao nhiêu tín chỉ?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_014",
+    "group": "local_data",
+    "question": "Học kỳ phụ được đăng ký tối đa bao nhiêu tín chỉ?",
+    "expected_tool": "student_handbook_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "local_015",
+    "group": "local_data",
+    "question": "Sinh viên cần nộp chứng chỉ trước đợt xét tốt nghiệp bao lâu?",
+    "expected_tool": "student_faq_rag",
+    "expected_flow": "local_data",
+    "expected_source_contains": ["SO TAY SINH VIEN"]
+  },
+  {
+    "id": "web_001",
+    "group": "web_search",
+    "question": "ICTU hôm nay có thông báo mới nhất gì cho sinh viên?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_002",
+    "group": "web_search",
+    "question": "ICTU tuyển sinh năm nay có thông tin mới nhất nào?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_003",
+    "group": "web_search",
+    "question": "ICTU có lịch tuyển sinh mới nhất không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_004",
+    "group": "web_search",
+    "question": "ICTU có tin tức mới nhất về học phí không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_005",
+    "group": "web_search",
+    "question": "ICTU có thông báo mới về bảo hiểm y tế sinh viên không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_006",
+    "group": "web_search",
+    "question": "ICTU cập nhật lịch học mới nhất ở đâu?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_007",
+    "group": "web_search",
+    "question": "ICTU cập nhật lịch thi mới nhất cho sinh viên ở đâu?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_008",
+    "group": "web_search",
+    "question": "ICTU gần đây có thông báo xét tốt nghiệp nào?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_009",
+    "group": "web_search",
+    "question": "ICTU có tin mới về việc làm hoặc tuyển dụng sinh viên không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_010",
+    "group": "web_search",
+    "question": "ICTU năm nay có thông báo học bổng mới nhất không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_011",
+    "group": "web_search",
+    "question": "ICTU có cập nhật mới nhất về email sinh viên không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_012",
+    "group": "web_search",
+    "question": "ICTU có thông báo mới về nhập học cho tân sinh viên không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_013",
+    "group": "web_search",
+    "question": "ICTU có tin tức mới nhất về cổng thông tin sinh viên không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_014",
+    "group": "web_search",
+    "question": "ICTU có thông báo mới nhất về ký túc xá không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  },
+  {
+    "id": "web_015",
+    "group": "web_search",
+    "question": "ICTU có lịch sự kiện sinh viên mới nhất hôm nay không?",
+    "expected_tool": "any",
+    "expected_flow": "web_search",
+    "expected_source_contains": []
+  }
+]

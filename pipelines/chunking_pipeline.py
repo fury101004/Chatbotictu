@@ -11,6 +11,8 @@ _PAGE_PATTERNS = (
     re.compile(r"^(?:trang|page)\s*[:\-]?\s*(\d{1,4})(?:\b|/)", re.IGNORECASE),
     re.compile(r"^\[\s*(?:trang|page)\s*(\d{1,4})\s*\]", re.IGNORECASE),
 )
+_SENTENCE_END_RE = re.compile(r"[.!?。！？…]+[\"')\]]*$")
+_CLAUSE_END_RE = re.compile(r"[,;:，；：]+[\"')\]]*$")
 
 
 def _detect_chunk_type(text: str) -> str:
@@ -23,6 +25,27 @@ def _detect_chunk_type(text: str) -> str:
     return "text"
 
 
+def _find_sentence_boundary(words: list[str], start: int, hard_end: int, max_words: int) -> int:
+    """Tìm điểm cắt tốt nhất: cuối câu (.!?) > dấu phẩy (,;:) > word boundary."""
+    if hard_end >= len(words):
+        return hard_end
+
+    minimum_end = start + max(1, int(max_words * 0.6))
+
+    # Ưu tiên 1: dấu kết câu (. ! ? …)
+    for index in range(hard_end - 1, minimum_end - 1, -1):
+        if _SENTENCE_END_RE.search(words[index]):
+            return index + 1
+
+    # Ưu tiên 2: dấu phân cách mệnh đề (, ; :) — tránh cắt giữa câu dài
+    for index in range(hard_end - 1, minimum_end - 1, -1):
+        if _CLAUSE_END_RE.search(words[index]):
+            return index + 1
+
+    # Ưu tiên 3: cắt tại hard_end (luôn là word boundary)
+    return hard_end
+
+
 def _split_text_windows(text: str, max_words: int, overlap_words: int) -> list[str]:
     words = text.split()
     if not words:
@@ -32,17 +55,18 @@ def _split_text_windows(text: str, max_words: int, overlap_words: int) -> list[s
         return [text.strip()]
 
     overlap_words = max(0, min(overlap_words, max_words - 1))
-    step = max(1, max_words - overlap_words)
     windows: list[str] = []
     start = 0
 
     while start < len(words):
-        window = " ".join(words[start : start + max_words]).strip()
+        hard_end = min(start + max_words, len(words))
+        end = _find_sentence_boundary(words, start, hard_end, max_words)
+        window = " ".join(words[start:end]).strip()
         if window:
             windows.append(window)
-        if start + max_words >= len(words):
+        if end >= len(words):
             break
-        start += step
+        start = max(start + 1, end - overlap_words)
 
     return windows
 

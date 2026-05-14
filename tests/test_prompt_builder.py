@@ -47,6 +47,17 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Do not mention sources, filenames, routes, tool names", prompt)
         self.assertIn('"This information is not currently available in my documents."', prompt)
 
+    def test_student_handbook_prompt_uses_required_no_info_reply(self) -> None:
+        prompt = _build_final_prompt(
+            system_prompt="BASE SYSTEM PROMPT",
+            current_lang="vi",
+            safe_context="Không có ngữ cảnh liên quan.",
+            user_question="Thông tin không tồn tại trong sổ tay?",
+            rag_tool="student_handbook_rag",
+        )
+
+        self.assertIn('"Không tìm thấy thông tin này trong sổ tay sinh viên."', prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

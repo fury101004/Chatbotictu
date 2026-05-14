@@ -132,24 +132,39 @@ def build_vector_manager_summary(
     limit_per_file: int,
 ) -> dict[str, Any]:
     chunks_by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for doc_id, doc, meta in zip(data["ids"], data.get("documents", []), data["metadatas"]):
+    ids = data.get("ids", [])
+    documents = data.get("documents", [])
+    metadatas = data.get("metadatas", [])
+    if not isinstance(ids, list) or not isinstance(documents, list) or not isinstance(metadatas, list):
+        raise ValueError("Vector store payload must provide list values for ids, documents, and metadatas.")
+    if not (len(ids) == len(documents) == len(metadatas)):
+        raise ValueError(
+            f"Mismatched vector payload lengths: ids={len(ids)}, documents={len(documents)}, metadatas={len(metadatas)}"
+        )
+
+    for doc_id, doc, meta in zip(ids, documents, metadatas):
         source = meta.get("source", "unknown.md")
-        preview_text = " ".join(doc.strip().split()[:30])
-        if len(doc.strip().split()) > 30:
+        doc_text = str(doc or "").strip()
+        doc_words = doc_text.split()
+        preview_text = " ".join(doc_words[:30])
+        if len(doc_words) > 30:
             preview_text += "..."
 
         chunks_by_file[source].append(
             {
                 "id": doc_id,
-                "content": doc.strip(),
+                "chunk_id": meta.get("chunk_id", doc_id),
+                "content": doc_text,
                 "preview": preview_text,
                 "title": meta.get("title", "Không có tiêu đề"),
                 "level": meta.get("level", 1),
-                "word_count": meta.get("word_count", len(doc.split())),
+                "word_count": meta.get("word_count", len(doc_words)),
                 "tool_name": meta.get("tool_name", "unassigned"),
                 "academic_year": meta.get("academic_year", ""),
                 "chapter": meta.get("chapter", ""),
                 "section": meta.get("section", ""),
+                "section_title": meta.get("section_title", meta.get("title", "")),
+                "source_path": meta.get("source_path", source),
                 "page_number": meta.get("page_number", -1),
                 "document_type": meta.get("document_type", ""),
             }
@@ -205,7 +220,7 @@ def reingest_source_records(
             )
             total_files += 1
             total_chunks += max(get_collection().count() - before_count, 0)
-        except Exception as exc:
+        except (OSError, UnicodeError, ValueError, RuntimeError) as exc:
             print(f"Re-ingest lỗi {path.name}: {exc}")
 
     clear_rag_corpus_cache()

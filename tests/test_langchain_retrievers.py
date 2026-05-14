@@ -56,6 +56,31 @@ class LangChainRetrieverTests(unittest.TestCase):
         self.assertEqual(documents[0].page_content, "Chunk A")
         self.assertEqual(documents[0].metadata["source"], "policy.md")
 
+    def test_vector_store_retriever_filters_exact_academic_year(self) -> None:
+        retriever = VectorStoreRetriever(
+            query_fn=lambda query, user_id, n_results, alpha: (
+                ["Rule", "Chunk 2024", "Chunk 2025", "Other"],
+                [
+                    {"source": "BOT_RULE"},
+                    {"source": "student_handbooks/SO TAY SINH VIEN 2024-2025.md", "academic_year": "2024-2025"},
+                    {"source": "student_handbooks/SO TAY SINH VIEN 2025-2026.md", "academic_year": "2025-2026"},
+                    {"source": "student_handbooks/guide.md", "academic_year": ""},
+                ],
+                {},
+            ),
+            collection_getter=lambda: None,
+            user_id="session-1",
+            n_results=20,
+            alpha=0.5,
+        )
+
+        documents = retriever.invoke("Sổ tay sinh viên 2025-2026 áp dụng cho đối tượng nào?")
+
+        self.assertEqual([doc.metadata["source"] for doc in documents], [
+            "BOT_RULE",
+            "student_handbooks/SO TAY SINH VIEN 2025-2026.md",
+        ])
+
     def test_web_retrievers_wrap_web_matches_as_documents(self) -> None:
         knowledge_retriever = WebKnowledgeRetriever(
             search_fn=lambda query, limit=4: [

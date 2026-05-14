@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from services.content.web_search import search_web_ictu
+from services.content.web_search import search_web_ictu, should_use_web_search
 
 
 class WebSearchServiceTests(unittest.TestCase):
@@ -44,6 +44,19 @@ class WebSearchServiceTests(unittest.TestCase):
 
         self.assertEqual(docs, [])
         search_raw.assert_not_called()
+
+    def test_should_use_web_search_for_dated_announcement_question(self) -> None:
+        self.assertTrue(
+            should_use_web_search("ngày 13/5/2026 ICTU có thông báo j ko?")
+        )
+
+    def test_should_use_web_search_for_co_thong_bao_phrase(self) -> None:
+        self.assertTrue(should_use_web_search("ICTU có thông báo gì mới không?"))
+
+    def test_should_not_use_web_search_for_stable_handbook_style_question(self) -> None:
+        self.assertFalse(
+            should_use_web_search("Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?")
+        )
 
 
 if __name__ == "__main__":

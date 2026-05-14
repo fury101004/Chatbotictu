@@ -202,6 +202,13 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
         self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
         self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
 
+    def test_flow_falls_back_to_web_search_for_dated_thong_bao_question_without_llm(self) -> None:
+        with patch("services.rag.rag_service.get_model", return_value=None):
+            plan = route_retrieval_flow("ngày 13/5/2026 ICTU có thông báo j ko?", "student_faq_rag")
+
+        self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
+        self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
+
     def test_flow_falls_back_to_local_data_for_stable_handbook_question_without_llm(self) -> None:
         with patch("services.rag.rag_service.get_model", return_value=None):
             plan = route_retrieval_flow("Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?", "student_handbook_rag")
