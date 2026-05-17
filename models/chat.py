@@ -25,6 +25,8 @@ class ChatResponse(BaseModel):
     needs_clarification: Optional[bool] = None
     response_time_ms: Optional[int] = None
     web_kb_status: Optional[dict[str, Any]] = None
+    qa_review_status: Optional[str] = None
+    qa_review_entry_id: Optional[str] = None
     timestamp: str
     session_id: str
 
@@ -68,4 +70,6 @@ class ChatGraphState(TypedDict, total=False):
     llm_model: str
     selected_llm_model: str
     web_kb_status: dict[str, Any]
+    qa_review_status: str
+    qa_review_entry_id: str
     response_time_ms: int

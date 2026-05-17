@@ -34,6 +34,14 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("SESSION_SECRET", "SESSION_MIDDLEWARE_SECRET"),
     )
+    ADMIN_USERNAME: str = Field(
+        default="admin",
+        validation_alias=AliasChoices("ADMIN_USERNAME"),
+    )
+    ADMIN_PASSWORD: str = Field(
+        default="admin",
+        validation_alias=AliasChoices("ADMIN_PASSWORD"),
+    )
     CORS_ALLOW_ORIGINS: str = Field(
         default="http://127.0.0.1:8000,http://localhost:8000",
         validation_alias=AliasChoices("CORS_ALLOW_ORIGINS", "ALLOWED_ORIGINS"),
@@ -45,6 +53,10 @@ class Settings(BaseSettings):
 
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
+    AUTO_APPROVE_CHAT_QA: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AUTO_APPROVE_CHAT_QA"),
+    )
 
     API_RATE_CHAT: str = "100/minute"
     API_RATE_UPLOAD: str = "10/hour"
@@ -125,11 +137,12 @@ def _validate_production_security_config(settings_obj: Settings) -> None:
     insecure_partner_key = settings_obj.PARTNER_API_KEY.strip() in {"", "dev-partner-key"}
     insecure_jwt_secret = settings_obj.JWT_SECRET.strip() in {"", "dev-jwt-secret"}
     insecure_session_secret = settings_obj.SESSION_SECRET.strip() in {"", "dev-jwt-secret"}
+    insecure_admin_password = settings_obj.ADMIN_PASSWORD.strip() in {"", "admin"}
 
-    if insecure_partner_key or insecure_jwt_secret or insecure_session_secret:
+    if insecure_partner_key or insecure_jwt_secret or insecure_session_secret or insecure_admin_password:
         raise RuntimeError(
-            "Production security config invalid: PARTNER_API_KEY/JWT_SECRET/SESSION_SECRET must be set "
-            "to non-default values."
+            "Production security config invalid: PARTNER_API_KEY/JWT_SECRET/SESSION_SECRET/ADMIN_PASSWORD "
+            "must be set to non-default values."
         )
 
     origins = settings_obj.cors_allowed_origins

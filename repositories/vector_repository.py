@@ -2,15 +2,23 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.vector.vector_store_service import get_collection, query_documents
+from services.vector.vector_store_service import get_collection, get_collection_readonly, query_documents
 
 
 def get_vector_collection():
     return get_collection()
 
 
+def get_vector_collection_readonly():
+    return get_collection_readonly()
+
+
 def count_vector_chunks() -> int:
     return get_vector_collection().count()
+
+
+def count_vector_chunks_readonly() -> int:
+    return get_vector_collection_readonly().count()
 
 
 def list_vector_chunks(*, include_documents: bool = True) -> dict[str, list[Any]]:

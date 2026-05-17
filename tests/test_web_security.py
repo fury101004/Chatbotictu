@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import re
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -22,6 +23,41 @@ class UploadPathSecurityTests(unittest.TestCase):
 
 
 class WebCsrfSecurityTests(unittest.TestCase):
+    def test_admin_pages_redirect_to_login_when_not_authenticated(self) -> None:
+        client = TestClient(main.app)
+        response = client.get("/data-loader", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("/admin/login", response.headers["location"])
+
+    def test_public_chat_page_does_not_require_admin_login(self) -> None:
+        client = TestClient(main.app)
+        response = client.get("/chat")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_admin_login_allows_access_to_admin_page(self) -> None:
+        client = TestClient(main.app)
+        login_page = client.get("/admin/login?next=/data-loader")
+        csrf_match = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text)
+        self.assertIsNotNone(csrf_match)
+
+        login_response = client.post(
+            "/admin/login",
+            data={
+                "username": settings.ADMIN_USERNAME,
+                "password": settings.ADMIN_PASSWORD,
+                "next_path": "/data-loader",
+                "csrf_token": csrf_match.group(1),
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(login_response.status_code, 303)
+        self.assertEqual(login_response.headers["location"], "/data-loader")
+
+        admin_page = client.get("/data-loader")
+        self.assertEqual(admin_page.status_code, 200)
+
     def test_upload_rejects_invalid_csrf(self) -> None:
         client = TestClient(main.app)
         response = client.post(

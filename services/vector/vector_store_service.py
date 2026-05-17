@@ -61,6 +61,8 @@ from services.chat.memory_service import SESSION_MEMORY, clear_memory_store
 # Vector embeddings chỉ được load khi thật sự cần để app vẫn có thể boot offline.
 EMBEDDING_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 ef = None
+COLLECTION_NAME = "markdown_docs_v2"
+COLLECTION_METADATA = {"hnsw:space": "cosine"}
 
 # Chroma client cũng được khởi tạo lazy để tránh side effects lúc import module.
 client = None
@@ -184,10 +186,21 @@ def get_collection():
     Dùng cosine distance (phù hợp với sentence transformer)
     """
     return get_client().get_or_create_collection(
-        name="markdown_docs_v2",
+        name=COLLECTION_NAME,
         embedding_function=get_embedding_function(),
-        metadata={"hnsw:space": "cosine"}  # HNSW index dùng cosine
+        metadata=COLLECTION_METADATA  # HNSW index dùng cosine
     )
+
+
+def get_collection_readonly():
+    """Read vector metadata/documents without loading the embedding backend."""
+    try:
+        return get_client().get_collection(name=COLLECTION_NAME)
+    except Exception:
+        return get_client().get_or_create_collection(
+            name=COLLECTION_NAME,
+            metadata=COLLECTION_METADATA,
+        )
 
 # 2. BM25 – Keyword search siêu nhanh (lazy rebuild)
 _bm25: Optional[BM25Okapi] = None

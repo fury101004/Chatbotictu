@@ -31,6 +31,11 @@
         <a href="/knowledge-base" class="nav-btn">Kho tri thức</a>
         <a href="/config" class="nav-btn">Cấu hình</a>
         <a href="/history" class="nav-btn history">Lịch sử chat</a>
+        {% if admin_authenticated %}
+        <a href="/admin/logout" class="nav-btn">Đăng xuất admin</a>
+        {% else %}
+        <a href="/admin/login" class="nav-btn">Admin</a>
+        {% endif %}
     </nav>
 
     <main>

@@ -5,6 +5,8 @@ from typing import Any, Mapping
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
+from services.admin_auth_service import is_admin_authenticated
+
 
 def render_page(
     request: Request,
@@ -13,7 +15,9 @@ def render_page(
     context: Mapping[str, Any] | None = None,
 ):
     templates = request.app.state.templates
-    return templates.TemplateResponse(request, template_name, dict(context or {}))
+    page_context = dict(context or {})
+    page_context.setdefault("admin_authenticated", is_admin_authenticated(request))
+    return templates.TemplateResponse(request, template_name, page_context)
 
 
 def current_prompt_response(prompt: str):

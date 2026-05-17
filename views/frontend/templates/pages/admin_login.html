@@ -1,0 +1,97 @@
+{% extends "layouts/base.html" %}
+{% block title %}Admin Login{% endblock %}
+
+{% block content %}
+<section class="admin-login-page">
+    <form method="post" action="/admin/login" class="admin-login-card">
+        <span class="login-kicker">Admin Console</span>
+        <h1>Đăng nhập quản trị</h1>
+        <p>Đăng nhập để quản lý corpus, vector store, cấu hình và workflow duyệt Knowledge Base.</p>
+
+        {% if error %}
+        <div class="login-error">{{ error }}</div>
+        {% endif %}
+
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="next_path" value="{{ next_path }}">
+
+        <label for="username">Tài khoản</label>
+        <input id="username" name="username" type="text" autocomplete="username" required>
+
+        <label for="password">Mật khẩu</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <button type="submit">Đăng nhập</button>
+    </form>
+</section>
+
+<style>
+.admin-login-page {
+    min-height: calc(100vh - 90px);
+    display: grid;
+    place-items: center;
+    padding: 2rem 1rem;
+    color: #edf2ff;
+}
+
+.admin-login-card {
+    width: min(460px, 100%);
+    display: grid;
+    gap: 0.8rem;
+    padding: 2rem;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(20, 27, 45, 0.96), rgba(10, 14, 26, 0.98));
+    box-shadow: 0 18px 50px rgba(0,0,0,0.25);
+}
+
+.login-kicker {
+    color: #ffd36e;
+    font-weight: 800;
+}
+
+.admin-login-card h1 {
+    margin: 0;
+    font-size: 2rem;
+}
+
+.admin-login-card p {
+    margin: 0 0 0.6rem;
+    color: #cbd5e1;
+    line-height: 1.6;
+}
+
+.admin-login-card label {
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.admin-login-card input {
+    width: 100%;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    background: rgba(9, 12, 22, 0.84);
+    color: #f8fafc;
+}
+
+.admin-login-card button {
+    margin-top: 0.4rem;
+    border: none;
+    border-radius: 8px;
+    padding: 0.95rem 1.1rem;
+    background: linear-gradient(135deg, #f6b93b, #e55039);
+    color: #111827;
+    font-weight: 850;
+    cursor: pointer;
+}
+
+.login-error {
+    border: 1px solid rgba(248, 113, 113, 0.32);
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    color: #fecaca;
+    background: rgba(127, 29, 29, 0.3);
+}
+</style>
+{% endblock %}

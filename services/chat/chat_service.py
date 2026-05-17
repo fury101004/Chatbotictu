@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+from functools import lru_cache
 
-from orchestrators.chat_orchestrator import process_chat_message as process_chat_message_via_orchestrator
+from orchestrators.chat_orchestrator import build_chat_response_payload
 from orchestrators.rag_orchestrator import retrieve_context as retrieve_rag_context, route_tool as route_rag_tool_via_orchestrator
+from config.settings import settings
 from config.rag_tools import DEFAULT_RAG_TOOL
 from models.chat import ChatGraphState, RAGResult
 from repositories.conversation_repository import save_conversation_message
@@ -16,6 +19,7 @@ from services.chat.moderation_service import contains_swear, get_swear_response
 from services.chat.multilingual_service import chat_multilingual, get_current_language
 from services.chat.quick_reply_service import get_quick_response
 from services.content.web_knowledge_service import save_web_search_answer
+from services.llm.graph_service import RAGChatGraph
 
 
 logger = logging.getLogger("chat_agent")
@@ -383,21 +387,31 @@ def _build_auto_approve_entry_id(session_id: str, answer_row_id: int) -> str:
     return f"chat::{session_id}::{answer_row_id}"
 
 
-def _should_auto_approve(state: ChatGraphState) -> bool:
-    """Determine if this Q&A should be auto-approved into the knowledge base.
-
-    Auto-approve ALL chat Q&A pairs. Only skip empty or moderation-blocked messages.
-    """
-    # Skip if no response or empty message
+def _is_source_grounded_review_candidate(state: ChatGraphState) -> bool:
     if not state.get("response") or not state.get("message"):
         return False
 
-    # Skip moderation-blocked messages (swear filter)
     intent = str(state.get("intent", "") or "")
-    if intent == "moderation":
+    if intent in {"moderation", "empty_input"}:
         return False
 
-    return True
+    mode = str(state.get("mode", "") or "")
+    blocked_modes = (
+        "fallback",
+        "clarification",
+        "guardrail",
+        "quick_reply",
+        "web_search",
+    )
+    if any(marker in mode for marker in blocked_modes):
+        return False
+
+    return bool(state.get("sources")) and int(state.get("chunks_used") or 0) > 0
+
+
+def _should_auto_approve(state: ChatGraphState) -> bool:
+    """Return True only for explicitly enabled, source-grounded auto approval."""
+    return settings.AUTO_APPROVE_CHAT_QA and _is_source_grounded_review_candidate(state)
 
 
 def _save_history(state: ChatGraphState) -> ChatGraphState:
@@ -434,21 +448,37 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
             rag_tool=state.get("rag_tool"),
         )
 
-    # --- Auto-approve Q&A into knowledge base ---
-    if bot_row_id and user_row_id and _should_auto_approve(state):
+    if bot_row_id and user_row_id and _is_source_grounded_review_candidate(state):
         entry_id = _build_auto_approve_entry_id(session_id, bot_row_id)
-        try:
-            from services.content.knowledge_base_service import approve_chat_entry
-            result = approve_chat_entry(entry_id=entry_id)
-            state["auto_approved_kb"] = True
-            logger.info(
-                "[chat_agent] auto_approve_kb entry_id=%s indexed=%s",
-                entry_id,
-                result.get("indexed"),
-            )
-        except Exception as exc:
-            state["auto_approved_kb"] = False
-            logger.warning("[chat_agent] auto_approve_kb failed: %s", exc)
+        state["qa_review_entry_id"] = entry_id
+        if _should_auto_approve(state):
+            try:
+                from services.content.knowledge_base_service import approve_chat_entry
+                result = approve_chat_entry(entry_id=entry_id, tool_name=state.get("rag_tool") or DEFAULT_RAG_TOOL)
+                state["auto_approved_kb"] = True
+                state["qa_review_status"] = "approved"
+                logger.info(
+                    "[chat_agent] auto_approve_kb entry_id=%s indexed=%s",
+                    entry_id,
+                    result.get("indexed"),
+                )
+            except Exception as exc:
+                state["auto_approved_kb"] = False
+                state["qa_review_status"] = "pending"
+                logger.warning("[chat_agent] auto_approve_kb failed: %s", exc)
+        else:
+            try:
+                from services.content.knowledge_base_service import mark_chat_entry_pending
+                mark_chat_entry_pending(
+                    entry_id=entry_id,
+                    tool_name=state.get("rag_tool") or DEFAULT_RAG_TOOL,
+                    reason="source_grounded_answer",
+                )
+                state["auto_approved_kb"] = False
+                state["qa_review_status"] = "pending"
+            except Exception as exc:
+                state["qa_review_status"] = "untracked"
+                logger.warning("[chat_agent] queue_review failed: %s", exc)
 
     state["language"] = get_current_language(session_id)
     _log_step("save_history", state, saved_response=bool(response))
@@ -456,20 +486,41 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
 
 
 def get_chat_graph_engine() -> str:
-    return "sequential_agent"
+    return _build_chat_graph().engine
+
+
+def _pass_through_step(state: ChatGraphState) -> ChatGraphState:
+    return state
+
+
+@lru_cache(maxsize=1)
+def _build_chat_graph() -> RAGChatGraph:
+    tool_nodes = {
+        "student_handbook_rag": _retrieve_context,
+        "school_policy_rag": _retrieve_context,
+        "student_faq_rag": _retrieve_context,
+        "fallback_rag": _retrieve_context,
+    }
+    return RAGChatGraph(
+        normalize=_normalize_input,
+        persist_user=_classify_intent,
+        guardrails=_pass_through_step,
+        route_rag=_route_rag_tool_step,
+        tool_nodes=tool_nodes,
+        default_tool=DEFAULT_RAG_TOOL,
+        generate=_generate_answer,
+        finalize=_save_history,
+    )
 
 
 async def process_chat_message(message: str, session_id: str = "default", llm_model: str = "auto") -> dict:
-    return await process_chat_message_via_orchestrator(
-        message=message,
-        session_id=session_id,
-        llm_model=llm_model,
-        steps=(
-            _normalize_input,
-            _classify_intent,
-            _route_rag_tool_step,
-            _retrieve_context,
-            _generate_answer,
-            _save_history,
-        ),
-    )
+    started_at = time.perf_counter()
+    state: ChatGraphState = {
+        "message": message,
+        "session_id": session_id,
+        "selected_llm_model": llm_model,
+    }
+    state = _build_chat_graph().invoke(state)
+    response_time_ms = int((time.perf_counter() - started_at) * 1000)
+    state["response_time_ms"] = response_time_ms
+    return build_chat_response_payload(state, response_time_ms=response_time_ms)

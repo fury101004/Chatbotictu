@@ -50,6 +50,14 @@
             <strong>{{ summary.approved_chat_qas }}</strong>
         </div>
         <div class="stat-card">
+            <span class="stat-label">Q&A chờ duyệt</span>
+            <strong>{{ summary.pending_chat_qas }}</strong>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Q&A từ chối</span>
+            <strong>{{ summary.rejected_chat_qas }}</strong>
+        </div>
+        <div class="stat-card">
             <span class="stat-label">Kết quả hợp nhất</span>
             <strong>{{ summary.matched_results }}</strong>
         </div>
@@ -209,7 +217,10 @@
                     <div class="chat-card-actions">
                         {% if item.is_approved %}
                         <span class="approved-badge">Đã duyệt vào KB</span>
-                        {% else %}
+                        {% elif item.review_status == "rejected" %}
+                        <span class="rejected-badge">Đã từ chối</span>
+                        {% elif item.review_status == "pending" %}
+                        <span class="pending-badge">Chờ duyệt</span>
                         <form method="post" action="/knowledge-base/approve-chat" class="approve-form">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="entry_id" value="{{ item.entry_id }}">
@@ -217,6 +228,14 @@
                             <input type="hidden" name="return_q" value="{{ query }}">
                             <button type="submit" class="approve-btn">Duyệt vào KB</button>
                         </form>
+                        <form method="post" action="/knowledge-base/reject-chat" class="approve-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="entry_id" value="{{ item.entry_id }}">
+                            <input type="hidden" name="return_q" value="{{ query }}">
+                            <button type="submit" class="reject-btn">Từ chối</button>
+                        </form>
+                        {% else %}
+                        <span class="untracked-badge">Chưa đủ điều kiện duyệt</span>
                         {% endif %}
                     </div>
                 </article>
@@ -242,7 +261,10 @@
                             <div class="chat-card-actions">
                                 {% if entry.is_approved %}
                                 <span class="approved-badge">Đã duyệt vào KB</span>
-                                {% else %}
+                                {% elif entry.review_status == "rejected" %}
+                                <span class="rejected-badge">Đã từ chối</span>
+                                {% elif entry.review_status == "pending" %}
+                                <span class="pending-badge">Chờ duyệt</span>
                                 <form method="post" action="/knowledge-base/approve-chat" class="approve-form">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="entry_id" value="{{ entry.entry_id }}">
@@ -250,6 +272,14 @@
                                     <input type="hidden" name="return_q" value="{{ query }}">
                                     <button type="submit" class="approve-btn">Duyệt vào KB</button>
                                 </form>
+                                <form method="post" action="/knowledge-base/reject-chat" class="approve-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="entry_id" value="{{ entry.entry_id }}">
+                                    <input type="hidden" name="return_q" value="{{ query }}">
+                                    <button type="submit" class="reject-btn">Từ chối</button>
+                                </form>
+                                {% else %}
+                                <span class="untracked-badge">Chưa đủ điều kiện duyệt</span>
                                 {% endif %}
                             </div>
                         </article>
@@ -650,7 +680,11 @@
 }
 
 .approve-btn,
-.approved-badge {
+.approved-badge,
+.pending-badge,
+.rejected-badge,
+.untracked-badge,
+.reject-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -671,6 +705,26 @@
     background: rgba(56, 239, 125, 0.12);
     border: 1px solid rgba(56, 239, 125, 0.24);
     color: #9bffbf;
+}
+
+.pending-badge {
+    background: rgba(246, 185, 59, 0.13);
+    border: 1px solid rgba(246, 185, 59, 0.28);
+    color: #ffd36e;
+}
+
+.rejected-badge,
+.untracked-badge {
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+}
+
+.reject-btn {
+    border: 1px solid rgba(248, 113, 113, 0.24);
+    background: rgba(127, 29, 29, 0.38);
+    color: #fecaca;
+    cursor: pointer;
 }
 
 .session-pill {

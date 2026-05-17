@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 import time
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Optional
 
 from config.rag_tools import (
@@ -17,11 +17,9 @@ from config.rag_tools import (
     resolve_upload_source_path,
 )
 from config.settings import settings
-from models.document import HistoryEntry, UploadBatchResult, VectorManagerPayload
+from models.document import UploadBatchResult, VectorManagerPayload
 from pipelines.document_admin_pipeline import (
     build_vector_manager_summary,
-    build_vector_tool_groups,
-    iter_importable_paths as iter_importable_paths_from_pipeline,
     iter_seed_source_records as iter_seed_source_records_from_pipeline,
     iter_uploaded_source_records as iter_uploaded_source_records_from_pipeline,
     reingest_source_records,
@@ -36,6 +34,7 @@ from repositories.upload_repository import (
 from repositories.vector_repository import (
     delete_vector_source,
     get_vector_collection as get_collection,
+    get_vector_collection_readonly,
 )
 from shared.vector_utils import display_vector_source, infer_vector_tool_name
 from services.rag.rag_corpus import clear_rag_corpus_cache
@@ -44,10 +43,6 @@ from services.vector.vector_store_service import add_documents, embedding_backen
 SUPPORTED_TEXT_SUFFIXES = {".md", ".markdown", ".txt"}
 get_uploaded_files = list_uploaded_files
 add_uploaded_file = record_uploaded_file
-
-
-def _iter_importable_paths(root: Path) -> list[Path]:
-    return iter_importable_paths_from_pipeline(root, supported_suffixes=SUPPORTED_TEXT_SUFFIXES)
 
 
 def _normalize_tool_name(tool_name: Optional[str]) -> str:
@@ -109,7 +104,7 @@ async def upload_markdown_files(
             continue
 
         if Path(filename).suffix.lower() not in SUPPORTED_TEXT_SUFFIXES:
-            failed_files.append(f"{filename} -> chi ho tro .md/.markdown/.txt")
+            failed_files.append(f"{filename} -> unsupported file type; only .md/.markdown/.txt are allowed")
             continue
 
         source_name = build_upload_source_name(selected_tool, filename)
@@ -136,7 +131,7 @@ async def upload_markdown_files(
             existing_sources.add(source_name)
 
             if not embedding_backend_ready():
-                warning_files.append(f"{filename} -> đã lưu file nhưng bỏ qua index vì embedding backend chưa sẵn sàng")
+                warning_files.append(f"{filename} -> saved but skipped indexing because embedding backend is not ready")
             else:
                 try:
                     t_chunk = time.time()
@@ -151,10 +146,10 @@ async def upload_markdown_files(
                     print(f"[CHUNK + ADD] {filename}: {chunk_speed:.2f} MB/s")
                 except Exception as exc:
                     print(f"[INDEX WARNING] {filename}: {exc}")
-                    warning_files.append(f"{filename} -> đã lưu file nhưng chưa index được: {exc}")
+                    warning_files.append(f"{filename} -> saved but indexing failed: {exc}")
         except Exception as exc:
-            print(f"[LỖI] {filename}: {exc}")
-            failed_files.append(f"{filename} -> lỗi: {exc}")
+            print(f"[ERROR] {filename}: {exc}")
+            failed_files.append(f"{filename} -> error: {exc}")
 
     clear_rag_corpus_cache()
 
@@ -181,10 +176,10 @@ async def upload_markdown_files(
         indexed=len(indexed_files),
         warnings=len(warning_files),
         msg=(
-            "<strong>HOÀN TẤT!</strong><br>"
-            f"Nhóm: {selected_tool} | Thêm: {len(success_files)} | "
-            f"Cập nhật: {len(updated_files)} | Index: {len(indexed_files)} | "
-            f"Cảnh báo: {len(warning_files)} | Lỗi: {len(failed_files)}"
+            "<strong>DONE!</strong><br>"
+            f"Tool: {selected_tool} | Added: {len(success_files)} | "
+            f"Updated: {len(updated_files)} | Indexed: {len(indexed_files)} | "
+            f"Warnings: {len(warning_files)} | Failed: {len(failed_files)}"
         ),
         real_speed=f"{real_speed:.2f}" if real_speed else None,
         tool_name=selected_tool,
@@ -204,7 +199,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     if not root.exists():
         return {
             "status": "error",
-            "msg": f"Không tìm thấy thư mục corpus: {root}",
+            "msg": f"Corpus directory not found: {root}",
             "total_files": 0,
             "imported_files": 0,
             "failed_files": 0,
@@ -215,7 +210,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     if not corpus_records:
         return {
             "status": "error",
-            "msg": f"Thư mục {root} chưa có file .md/.txt để import",
+            "msg": f"Directory {root} has no .md/.txt files to import",
             "total_files": 0,
             "imported_files": 0,
             "failed_files": 0,
@@ -251,7 +246,7 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
         f"Vector store hien co {total_chunks} chunks."
     )
     if failed_sources:
-        msg += f" Lỗi: {len(failed_sources)} file."
+        msg += f" Failed: {len(failed_sources)} file."
 
     return {
         "status": status,
@@ -283,7 +278,7 @@ def delete_uploaded_document(source_name: str) -> None:
         try:
             delete_vector_source(candidate)
         except Exception as exc:
-            print(f"Bỏ qua xóa vector cho {candidate}: {exc}")
+            print(f"Skip vector delete for {candidate}: {exc}")
     clear_rag_corpus_cache()
 
 
@@ -299,21 +294,8 @@ def reset_document_store() -> None:
     clear_rag_corpus_cache()
 
 
-def _build_vector_tool_groups(chunks_by_file: dict[str, list[dict]], limit_per_file: int) -> list[dict]:
-    return build_vector_tool_groups(
-        chunks_by_file,
-        rag_tool_order=RAG_TOOL_ORDER,
-        rag_tool_profiles=RAG_TOOL_PROFILES,
-        infer_vector_tool_name=infer_vector_tool_name,
-        is_valid_rag_tool=is_valid_rag_tool,
-        display_vector_source=display_vector_source,
-        upload_source_prefix=UPLOAD_SOURCE_PREFIX,
-        limit_per_file=limit_per_file,
-    )
-
-
 def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
-    data = get_collection().get(include=["metadatas", "documents"])
+    data = get_vector_collection_readonly().get(include=["metadatas", "documents"])
     summary = build_vector_manager_summary(
         data,
         rag_tool_order=RAG_TOOL_ORDER,
@@ -332,47 +314,6 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
     )
     return payload.to_dict()
 
-    chunks_by_file: dict[str, list[dict]] = defaultdict(list)
-    for doc_id, doc, meta in zip(data["ids"], data.get("documents", []), data["metadatas"]):
-        source = meta.get("source", "unknown.md")
-        preview_text = " ".join(doc.strip().split()[:30])
-        if len(doc.strip().split()) > 30:
-            preview_text += "..."
-
-        chunks_by_file[source].append(
-            {
-                "id": doc_id,
-                "content": doc.strip(),
-                "preview": preview_text,
-                "title": meta.get("title", "Không có tiêu đề"),
-                "level": meta.get("level", 1),
-                "word_count": meta.get("word_count", len(doc.split())),
-                "tool_name": meta.get("tool_name", "unassigned"),
-                "academic_year": meta.get("academic_year", ""),
-                "chapter": meta.get("chapter", ""),
-                "section": meta.get("section", ""),
-                "page_number": meta.get("page_number", -1),
-                "document_type": meta.get("document_type", ""),
-            }
-        )
-
-    tool_groups = _build_vector_tool_groups(dict(chunks_by_file), limit_per_file)
-    visible_chunks_by_file = {
-        file_item["source"]: file_item["chunks"]
-        for group in tool_groups
-        for file_item in group["files"]
-    }
-    total_chunks = sum(group["total_chunks"] for group in tool_groups)
-    total_files = sum(group["total_files"] for group in tool_groups)
-
-    payload = VectorManagerPayload(
-        chunks_by_file=visible_chunks_by_file,
-        total_chunks=total_chunks,
-        total_files=total_files,
-        tool_groups=tool_groups,
-    )
-    return payload.to_dict()
-
 
 def _iter_seed_source_records() -> list[tuple[Path, str, str]]:
     return iter_seed_source_records_from_pipeline(
@@ -381,20 +322,6 @@ def _iter_seed_source_records() -> list[tuple[Path, str, str]]:
         detect_tool_from_path=detect_tool_from_path,
         supported_suffixes=SUPPORTED_TEXT_SUFFIXES,
     )
-    records: list[tuple[Path, str, str]] = []
-    root = settings.QA_CORPUS_ROOT
-    if not root.exists():
-        return records
-
-    for path in _iter_importable_paths(root):
-        try:
-            source_name = path.relative_to(root).as_posix()
-        except ValueError:
-            source_name = path.name
-        tool_name = detect_tool_from_path(path) or DEFAULT_RAG_TOOL
-        records.append((path, tool_name, source_name))
-
-    return records
 
 
 def _iter_uploaded_source_records() -> list[tuple[Path, str, str]]:
@@ -406,16 +333,6 @@ def _iter_uploaded_source_records() -> list[tuple[Path, str, str]]:
         default_tool=DEFAULT_RAG_TOOL,
         supported_suffixes=SUPPORTED_TEXT_SUFFIXES,
     )
-    records: list[tuple[Path, str, str]] = []
-
-    for tool_name in RAG_TOOL_ORDER:
-        for path in _iter_importable_paths(get_tool_upload_dir(tool_name)):
-            records.append((path, tool_name, build_upload_source_name(tool_name, path.name)))
-
-    for path in _iter_importable_paths(settings.UPLOAD_DIR):
-        records.append((path, DEFAULT_RAG_TOOL, path.name))
-
-    return records
 
 
 def reingest_uploaded_documents() -> tuple[int, int]:
@@ -442,4 +359,3 @@ def get_history_page_data(page: int, per_page: int = 50) -> dict:
     payload = get_chat_history_page(page=page, per_page=per_page)
     payload["uploaded_files"] = get_uploaded_files()
     return payload
-

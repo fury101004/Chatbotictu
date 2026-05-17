@@ -11,6 +11,8 @@ from services.content.knowledge_base_service import (
     _pair_chat_rows,
     approve_chat_entry,
     get_knowledge_base_payload,
+    mark_chat_entry_pending,
+    reject_chat_entry,
 )
 
 
@@ -77,12 +79,18 @@ class KnowledgeBasePayloadTests(unittest.TestCase):
             patch("services.content.knowledge_base_service._fetch_chat_rows", return_value=chat_rows),
             patch("services.content.knowledge_base_service.get_approved_chat_entry_ids", return_value=set()),
             patch("services.content.knowledge_base_service.get_approved_chat_qas", return_value=[]),
+            patch(
+                "services.content.knowledge_base_service.list_chat_qa_review_states",
+                return_value={"chat::s1::2": {"status": "pending", "reason": "source_grounded_answer"}},
+            ),
         ):
             payload = get_knowledge_base_payload(query="hoc phi", limit=10)
 
         self.assertEqual(payload["summary"]["vector_files"], 1)
         self.assertEqual(payload["summary"]["chat_pairs"], 1)
+        self.assertEqual(payload["summary"]["pending_chat_qas"], 1)
         self.assertEqual(payload["summary"]["matched_results"], 2)
+        self.assertEqual(payload["recent_chat_entries"][0]["review_status"], "pending")
         self.assertEqual({item["kind"] for item in payload["search_results"]}, {"vector", "chatbot"})
 
     def test_payload_blocks_non_ictu_search_query(self) -> None:
@@ -104,6 +112,7 @@ class KnowledgeBasePayloadTests(unittest.TestCase):
             patch("services.content.knowledge_base_service._fetch_chat_rows", return_value=[]),
             patch("services.content.knowledge_base_service.get_approved_chat_entry_ids", return_value=set()),
             patch("services.content.knowledge_base_service.get_approved_chat_qas", return_value=[]),
+            patch("services.content.knowledge_base_service.list_chat_qa_review_states", return_value={}),
         ):
             payload = get_knowledge_base_payload(query="thoi tiet Ha Noi hom nay", limit=10)
 
@@ -135,6 +144,7 @@ class ApproveChatEntryTests(unittest.TestCase):
                 patch("services.content.knowledge_base_service.embedding_backend_ready", return_value=True),
                 patch("services.content.knowledge_base_service.add_documents") as add_documents_mock,
                 patch("services.content.knowledge_base_service.upsert_approved_chat_qa") as upsert_mock,
+                patch("services.content.knowledge_base_service.save_chat_qa_review_state") as review_state_mock,
                 patch("services.content.knowledge_base_service.clear_rag_corpus_cache") as clear_cache_mock,
             ):
                 result = approve_chat_entry(entry_id=entry.entry_id)
@@ -143,9 +153,48 @@ class ApproveChatEntryTests(unittest.TestCase):
             self.assertTrue(Path(result["storage_path"]).exists())
             add_documents_mock.assert_called_once()
             upsert_mock.assert_called_once()
+            review_state_mock.assert_called_once()
             clear_cache_mock.assert_called_once()
+
+    def test_mark_chat_entry_pending_does_not_index_vector(self) -> None:
+        with patch("services.content.knowledge_base_service.save_chat_qa_review_state") as review_state_mock:
+            mark_chat_entry_pending("chat::s1::2", tool_name="student_handbook_rag", reason="source_grounded_answer")
+
+        review_state_mock.assert_called_once_with(
+            entry_id="chat::s1::2",
+            status="pending",
+            tool_name="student_handbook_rag",
+            reason="source_grounded_answer",
+            reviewer="system",
+        )
+
+    def test_reject_chat_entry_sets_rejected_status_without_indexing(self) -> None:
+        entry = ChatKnowledgeEntry(
+            entry_id="chat::s1::2",
+            question_row_id=1,
+            answer_row_id=2,
+            session_id="s1",
+            question="Hoc phi dong khi nao?",
+            answer="Hoc phi duoc thong bao theo tung dot trong nam hoc.",
+            timestamp="2026-04-09 09:00:08",
+            time_label="09/04 09:00",
+            preview="Hoc phi duoc thong bao theo tung dot trong nam hoc.",
+            content="Q: Hoc phi dong khi nao?\nA: Hoc phi duoc thong bao theo tung dot trong nam hoc.",
+        )
+
+        with (
+            patch("services.content.knowledge_base_service.get_chat_entry_by_id", return_value=entry),
+            patch("services.content.knowledge_base_service.save_chat_qa_review_state") as review_state_mock,
+            patch("services.content.knowledge_base_service.add_documents") as add_documents_mock,
+            patch("services.content.knowledge_base_service.clear_rag_corpus_cache") as clear_cache_mock,
+        ):
+            result = reject_chat_entry(entry.entry_id, reason="answer_not_grounded")
+
+        self.assertEqual(result["status"], "rejected")
+        review_state_mock.assert_called_once()
+        add_documents_mock.assert_not_called()
+        clear_cache_mock.assert_called_once()
 
 
 if __name__ == "__main__":
     unittest.main()
-

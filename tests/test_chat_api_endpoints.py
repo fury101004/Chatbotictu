@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 import main
 from config.settings import settings
-from models.chat import RAGResult
+from models.chat import RAGResult, RetrievedChunk
 from services.chat.chat_service import process_chat_message
 
 
@@ -64,6 +64,37 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["intent"], "greeting")
         self.assertEqual(result["llm_model"], "local:quick_reply")
         self.assertTrue(result["response"])
+
+
+    async def test_process_chat_message_queues_source_grounded_answer_for_review(self) -> None:
+        rag_result = RAGResult(
+            context_text="Thong tin dieu kien tot nghiep trong so tay sinh vien.",
+            chunks=[
+                RetrievedChunk(
+                    document="Dieu kien tot nghiep",
+                    metadata={"path": "student_handbooks/2025.md", "id": "chunk-1"},
+                )
+            ],
+            mode="hybrid_search",
+            sources=["student_handbooks/2025.md"],
+            chunks_used=1,
+            rag_tool="student_handbook_rag",
+            rag_route="router_handbook",
+        )
+
+        with (
+            patch("services.chat.chat_service.route_rag_tool", return_value=("student_handbook_rag", "router_handbook")),
+            patch("services.chat.chat_service.retrieve_tool_context", return_value=rag_result),
+            patch("services.chat.chat_service.chat_multilingual", return_value=("Dieu kien tot nghiep can du tin chi.", "local:test")),
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
+            patch("services.content.knowledge_base_service.mark_chat_entry_pending") as pending_mock,
+            patch("services.chat.chat_service.append_retrieval_memory"),
+        ):
+            result = await process_chat_message("Dieu kien tot nghiep la gi?", session_id="review-1")
+
+        self.assertEqual(result["qa_review_status"], "pending")
+        self.assertEqual(result["qa_review_entry_id"], "chat::review-1::2")
+        pending_mock.assert_called_once()
 
 
 class ApiEndpointTests(unittest.TestCase):
@@ -124,4 +155,3 @@ class ApiEndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

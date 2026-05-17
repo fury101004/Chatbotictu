@@ -110,6 +110,7 @@ class SecuritySettingsTests(unittest.TestCase):
             "PARTNER_API_KEY": "prod-partner-key-123",
             "JWT_SECRET": "prod-jwt-secret-123",
             "SESSION_SECRET": "prod-session-secret-123",
+            "ADMIN_PASSWORD": "prod-admin-password-123",
             "CORS_ALLOW_ORIGINS": "*",
         }
 
@@ -126,6 +127,7 @@ class SecuritySettingsTests(unittest.TestCase):
             "PARTNER_API_KEY": "prod-partner-key-123",
             "JWT_SECRET": "prod-jwt-secret-123",
             "SESSION_SECRET": "prod-session-secret-123",
+            "ADMIN_PASSWORD": "prod-admin-password-123",
             "CORS_ALLOW_ORIGINS": "https://chat.ictu.edu.vn,http://localhost:8000",
         }
 

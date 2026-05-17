@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Optional
 import re
 
@@ -12,11 +10,9 @@ from config.rag_tools import (
     RAG_TOOL_ORDER,
     RAG_TOOL_PROFILES,
     UPLOAD_SOURCE_PREFIX,
-    detect_tool_from_path,
     get_tool_upload_dir,
     is_valid_rag_tool,
 )
-from config.settings import settings
 from pipelines.knowledge_base_pipeline import (
     build_approved_chat_markdown as build_approved_chat_markdown_from_pipeline,
     display_timestamp as display_timestamp_from_pipeline,
@@ -31,7 +27,9 @@ from repositories.conversation_repository import list_chat_history_rows
 from repositories.knowledge_base_repository import (
     list_approved_chat_entry_ids,
     list_approved_chat_qas,
+    list_chat_qa_review_states,
     save_approved_chat_qa,
+    save_chat_qa_review_state,
 )
 from repositories.vector_repository import list_vector_chunks
 from shared.text_utils import normalize_search_text, tokenize_search_text
@@ -75,6 +73,9 @@ class ChatKnowledgeEntry:
     preview: str
     content: str
     is_approved: bool = False
+    review_status: str = "unreviewed"
+    review_reason: str = ""
+    is_reviewable: bool = False
 
 
 def _normalize_search_text(text: str) -> str:
@@ -157,59 +158,6 @@ def _pair_chat_rows(rows: list[dict]) -> list[ChatKnowledgeEntry]:
         build_chat_entry_id=_build_chat_entry_id,
         entry_factory=ChatKnowledgeEntry,
     )
-    pending_question_by_session: dict[str, deque[dict]] = defaultdict(deque)
-    pairs: list[ChatKnowledgeEntry] = []
-
-    for row in rows:
-        role = str(row.get("role", "")).strip().lower()
-        session_id = str(row.get("session_id") or "default").strip() or "default"
-        content = str(row.get("content") or "").strip()
-        if not content:
-            continue
-
-        if role == "user":
-            pending_question_by_session[session_id].append(row)
-            continue
-
-        if role not in {"bot", "assistant"}:
-            continue
-
-        pending_queue = pending_question_by_session.get(session_id)
-        if not pending_queue:
-            continue
-        pending = pending_queue.popleft()
-        if not pending_queue:
-            pending_question_by_session.pop(session_id, None)
-
-        question = str(pending.get("content") or "").strip()
-        answer = content
-        if not question or not answer:
-            continue
-
-        timestamp = str(row.get("timestamp") or pending.get("timestamp") or "")
-        preview = re.sub(r"\s+", " ", answer)
-        if len(preview) > MAX_CHAT_SNIPPET_CHARS:
-            preview = preview[:MAX_CHAT_SNIPPET_CHARS].rstrip() + " ..."
-
-        question_row_id = int(pending.get("id") or 0)
-        answer_row_id = int(row.get("id") or 0)
-        pairs.append(
-            ChatKnowledgeEntry(
-                entry_id=_build_chat_entry_id(session_id, answer_row_id),
-                question_row_id=question_row_id,
-                answer_row_id=answer_row_id,
-                session_id=session_id,
-                question=question,
-                answer=answer,
-                timestamp=timestamp,
-                time_label=_display_timestamp(timestamp),
-                preview=preview,
-                content=f"Q: {question}\nA: {answer}",
-            )
-        )
-
-    pairs.sort(key=lambda item: (item.timestamp, item.entry_id), reverse=True)
-    return pairs
 
 
 def _load_chat_entries() -> list[ChatKnowledgeEntry]:
@@ -217,9 +165,18 @@ def _load_chat_entries() -> list[ChatKnowledgeEntry]:
         approved_entry_ids = get_approved_chat_entry_ids()
     except Exception:
         approved_entry_ids = set()
+    try:
+        review_states = list_chat_qa_review_states()
+    except Exception:
+        review_states = {}
     entries = _pair_chat_rows(_fetch_chat_rows())
     for entry in entries:
-        entry.is_approved = entry.entry_id in approved_entry_ids
+        state = review_states.get(entry.entry_id, {})
+        status = str(state.get("status") or "unreviewed")
+        entry.is_approved = entry.entry_id in approved_entry_ids or status == "approved"
+        entry.review_status = "approved" if entry.is_approved else status
+        entry.review_reason = str(state.get("reason") or "")
+        entry.is_reviewable = entry.review_status in {"pending", "unreviewed"}
     return entries
 
 
@@ -246,41 +203,12 @@ def _approved_chat_source_name(tool_name: str, filename: str) -> str:
 
 def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> str:
     return build_approved_chat_markdown_from_pipeline(entry, tool_name)
-    title = f"Approved Chat QA - {entry.question[:120]}"
-    approved_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    lines = [
-        "---",
-        f'title: "{title.replace(chr(34), chr(39))}"',
-        f'source_entry_id: "{entry.entry_id}"',
-        f'session_id: "{entry.session_id}"',
-        f'tool_name: "{tool_name}"',
-        f'approved_at: "{approved_at}"',
-        f'generator: "knowledge_base_service.approve_chat_entry"',
-        "---",
-        "",
-        f"# {title}",
-        "",
-        "## Câu hỏi",
-        "",
-        entry.question.strip(),
-        "",
-        "## Trả lời đã duyệt",
-        "",
-        entry.answer.strip(),
-        "",
-        "## Ghi chu",
-        "",
-        "- Nguồn này được tạo từ cặp hỏi đáp chatbot đã duyệt thủ công.",
-        "- Có thể được đồng bộ vào vector store để dùng lại trong retrieval.",
-        "",
-    ]
-    return "\n".join(lines)
 
 
 def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict:
     entry = get_chat_entry_by_id(entry_id)
     if entry is None:
-        raise ValueError("Không tìm thấy cặp hỏi đáp chatbot để duyệt.")
+        raise ValueError("Khong tim thay cap hoi dap chatbot de duyet.")
 
     selected_tool = tool_name if is_valid_rag_tool(tool_name) else DEFAULT_RAG_TOOL
     filename = _approved_chat_filename(entry)
@@ -302,6 +230,13 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
         source_name=source_name,
         storage_path=str(storage_path),
     )
+    save_chat_qa_review_state(
+        entry_id=entry.entry_id,
+        status="approved",
+        tool_name=selected_tool,
+        reason="",
+        reviewer="admin",
+    )
 
     indexed = False
     warning = ""
@@ -315,9 +250,9 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
             )
             indexed = True
         except Exception as exc:
-            warning = f"Đã lưu Q&A đã duyệt nhưng chưa index được vào vector store: {exc}"
+            warning = f"Saved approved Q&A but vector indexing failed: {exc}"
     else:
-        warning = "Đã lưu Q&A đã duyệt vào knowledge base, nhưng embedding backend chưa sẵn sàng để index."
+        warning = "Saved approved Q&A, but embedding backend is not ready for indexing."
 
     clear_rag_corpus_cache()
     return {
@@ -329,10 +264,41 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
         "indexed": indexed,
         "warning": warning,
         "message": (
-            "Đã duyệt Q&A vào knowledge base và index vector store."
+            "Approved Q&A into knowledge base and indexed vector store."
             if indexed
-            else "Đã duyệt Q&A vào knowledge base."
+            else "Approved Q&A into knowledge base."
         ),
+    }
+
+
+def mark_chat_entry_pending(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL, reason: str = "") -> None:
+    selected_tool = tool_name if is_valid_rag_tool(tool_name) else DEFAULT_RAG_TOOL
+    save_chat_qa_review_state(
+        entry_id=entry_id,
+        status="pending",
+        tool_name=selected_tool,
+        reason=reason,
+        reviewer="system",
+    )
+
+
+def reject_chat_entry(entry_id: str, reason: str = "", reviewer: str = "admin") -> dict:
+    entry = get_chat_entry_by_id(entry_id)
+    if entry is None:
+        raise ValueError("Khong tim thay cap hoi dap chatbot de tu choi.")
+
+    save_chat_qa_review_state(
+        entry_id=entry.entry_id,
+        status="rejected",
+        tool_name="",
+        reason=reason,
+        reviewer=reviewer,
+    )
+    clear_rag_corpus_cache()
+    return {
+        "entry_id": entry.entry_id,
+        "status": "rejected",
+        "message": "Da tu choi Q&A, khong index vao Knowledge Base.",
     }
 
 
@@ -347,60 +313,6 @@ def _load_vector_entries() -> tuple[list[VectorKnowledgeEntry], int]:
         max_vector_snippet_chars=MAX_VECTOR_SNIPPET_CHARS,
         entry_factory=VectorKnowledgeEntry,
     )
-    raw = list_vector_chunks()
-
-    grouped: dict[str, dict] = {}
-    total_chunks = 0
-
-    for document, metadata in zip(raw.get("documents", []), raw.get("metadatas", [])):
-        source = str((metadata or {}).get("source", "")).strip()
-        if not source or source == "BOT_RULE":
-            continue
-
-        total_chunks += 1
-        bucket = grouped.setdefault(
-            source,
-            {
-                "source": source,
-                "tool_name": infer_vector_tool_name(source, (metadata or {}).get("tool_name")) or DEFAULT_RAG_TOOL,
-                "titles": [],
-                "documents": [],
-            },
-        )
-
-        title = str((metadata or {}).get("title", "")).strip()
-        if title:
-            bucket["titles"].append(title)
-        bucket["documents"].append(str(document or "").strip())
-
-    entries: list[VectorKnowledgeEntry] = []
-    for source, bucket in grouped.items():
-        tool_name = str(bucket["tool_name"])
-        tool_label = str(RAG_TOOL_PROFILES.get(tool_name, {}).get("label", tool_name))
-        combined_content = "\n\n".join(piece for piece in bucket["documents"] if piece).strip()
-        if len(combined_content) > MAX_VECTOR_CONTENT_CHARS:
-            combined_content = combined_content[:MAX_VECTOR_CONTENT_CHARS].rstrip() + " ..."
-
-        preview = re.sub(r"\s+", " ", combined_content)
-        if len(preview) > MAX_VECTOR_SNIPPET_CHARS:
-            preview = preview[:MAX_VECTOR_SNIPPET_CHARS].rstrip() + " ..."
-
-        unique_titles = list(dict.fromkeys(title for title in bucket["titles"] if title))
-        entries.append(
-            VectorKnowledgeEntry(
-                source=source,
-                display_name=display_vector_source(source),
-                tool_name=tool_name,
-                tool_label=tool_label,
-                chunk_count=len(bucket["documents"]),
-                titles=unique_titles[:8],
-                preview=preview,
-                content=combined_content,
-            )
-        )
-
-    entries.sort(key=lambda item: (item.tool_label.casefold(), item.display_name.casefold()))
-    return entries, total_chunks
 
 
 def _group_vector_entries(entries: list[VectorKnowledgeEntry], limit_per_tool: int = 8) -> list[dict]:
@@ -410,68 +322,10 @@ def _group_vector_entries(entries: list[VectorKnowledgeEntry], limit_per_tool: i
         rag_tool_profiles=RAG_TOOL_PROFILES,
         limit_per_tool=limit_per_tool,
     )
-    grouped: dict[str, list[VectorKnowledgeEntry]] = defaultdict(list)
-    for entry in entries:
-        grouped[entry.tool_name].append(entry)
-
-    payload: list[dict] = []
-    for tool_name in RAG_TOOL_ORDER:
-        items = grouped.get(tool_name, [])
-        profile = RAG_TOOL_PROFILES.get(tool_name, {})
-        payload.append(
-            {
-                "name": tool_name,
-                "label": str(profile.get("label", tool_name)),
-                "description": str(profile.get("description", "")),
-                "total_files": len(items),
-                "total_chunks": sum(item.chunk_count for item in items),
-                "files": [
-                    {
-                        "source": item.source,
-                        "display_name": item.display_name,
-                        "preview": item.preview,
-                        "chunk_count": item.chunk_count,
-                        "titles": item.titles,
-                    }
-                    for item in items[:limit_per_tool]
-                ],
-            }
-        )
-
-    return payload
 
 
 def _group_chat_entries(entries: list[ChatKnowledgeEntry], limit_per_session: int = 6) -> list[dict]:
     return group_chat_entries_from_pipeline(entries, limit_per_session=limit_per_session)
-    grouped: dict[str, list[ChatKnowledgeEntry]] = defaultdict(list)
-    for entry in entries:
-        grouped[entry.session_id].append(entry)
-
-    session_groups: list[dict] = []
-    for session_id, items in sorted(grouped.items(), key=lambda pair: pair[0].casefold()):
-        sorted_items = sorted(items, key=lambda item: (item.timestamp, item.entry_id), reverse=True)
-        session_groups.append(
-            {
-                "session_id": session_id,
-                "pair_count": len(sorted_items),
-                "latest_time": sorted_items[0].time_label if sorted_items else "",
-                "latest_timestamp": sorted_items[0].timestamp if sorted_items else "",
-                "entries": [
-                    {
-                        "entry_id": item.entry_id,
-                        "question": item.question,
-                        "answer": item.answer,
-                        "preview": item.preview,
-                        "time_label": item.time_label,
-                        "is_approved": item.is_approved,
-                    }
-                    for item in sorted_items[:limit_per_session]
-                ],
-            }
-        )
-
-    session_groups.sort(key=lambda item: item["latest_timestamp"], reverse=True)
-    return session_groups
 
 
 def _search_vector_entries(entries: list[VectorKnowledgeEntry], query: str, limit: int) -> list[dict]:
@@ -483,31 +337,6 @@ def _search_vector_entries(entries: list[VectorKnowledgeEntry], query: str, limi
         build_match_snippet_fn=_build_match_snippet,
         max_vector_snippet_chars=MAX_VECTOR_SNIPPET_CHARS,
     )
-    results: list[dict] = []
-    for entry in entries:
-        score = _score_text_match(
-            query,
-            title=entry.display_name,
-            body=f"{' '.join(entry.titles)}\n{entry.content}",
-            source=entry.source,
-        )
-        if score <= 0:
-            continue
-
-        results.append(
-            {
-                "kind": "vector",
-                "score": score,
-                "title": entry.display_name,
-                "subtitle": entry.tool_label,
-                "source": entry.source,
-                "meta": f"{entry.chunk_count} chunks",
-                "snippet": _build_match_snippet(entry.content, query, MAX_VECTOR_SNIPPET_CHARS),
-            }
-        )
-
-    results.sort(key=lambda item: item["score"], reverse=True)
-    return results[:limit]
 
 
 def _search_chat_entries(entries: list[ChatKnowledgeEntry], query: str, limit: int) -> list[dict]:
@@ -519,31 +348,6 @@ def _search_chat_entries(entries: list[ChatKnowledgeEntry], query: str, limit: i
         build_match_snippet_fn=_build_match_snippet,
         max_chat_snippet_chars=MAX_CHAT_SNIPPET_CHARS,
     )
-    results: list[dict] = []
-    for entry in entries:
-        score = _score_text_match(
-            query,
-            title=entry.question,
-            body=entry.content,
-            source=entry.session_id,
-        )
-        if score <= 0:
-            continue
-
-        results.append(
-            {
-                "kind": "chatbot",
-                "score": score,
-                "title": entry.question,
-                "subtitle": f"Session {entry.session_id}",
-                "source": entry.entry_id,
-                "meta": entry.time_label,
-                "snippet": _build_match_snippet(entry.answer, query, MAX_CHAT_SNIPPET_CHARS),
-            }
-        )
-
-    results.sort(key=lambda item: item["score"], reverse=True)
-    return results[:limit]
 
 
 def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
@@ -555,20 +359,20 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         vector_entries, total_chunks = _load_vector_entries()
     except Exception as exc:
         vector_entries, total_chunks = [], 0
-        vector_warning = f"Vector store tạm thời chưa đọc được: {exc}"
+        vector_warning = f"Vector store is temporarily unavailable: {exc}"
 
     try:
         chat_entries = _load_chat_entries()
     except Exception as exc:
         chat_entries = []
-        chat_warning = f"Chat history tạm thời chưa đọc được: {exc}"
+        chat_warning = f"Chat history is temporarily unavailable: {exc}"
 
     try:
         approved_chat_entries = get_approved_chat_qas()
     except Exception as exc:
         approved_chat_entries = []
         if not chat_warning:
-            chat_warning = f"Không đọc được danh sách Q&A đã duyệt: {exc}"
+            chat_warning = f"Approved Q&A list is temporarily unavailable: {exc}"
     cleaned_query = query.strip()
 
     vector_results: list[dict] = []
@@ -591,9 +395,14 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
             "preview": item.preview,
             "time_label": item.time_label,
             "is_approved": item.is_approved,
+            "review_status": item.review_status,
+            "review_reason": item.review_reason,
+            "is_reviewable": item.is_reviewable,
         }
         for item in chat_entries[:10]
     ]
+    pending_chat_qas = sum(1 for item in chat_entries if item.review_status == "pending")
+    rejected_chat_qas = sum(1 for item in chat_entries if item.review_status == "rejected")
 
     return {
         "query": cleaned_query,
@@ -603,6 +412,8 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
             "vector_chunks": total_chunks,
             "chat_pairs": len(chat_entries),
             "approved_chat_qas": len(approved_chat_entries),
+            "pending_chat_qas": pending_chat_qas,
+            "rejected_chat_qas": rejected_chat_qas,
             "total_knowledge_items": len(vector_entries) + len(chat_entries),
             "matched_results": len(merged_results),
         },
@@ -615,5 +426,3 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         "chat_results": chat_results,
         "search_results": merged_results,
     }
-
-

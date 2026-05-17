@@ -232,6 +232,9 @@ def group_chat_entries(entries: list[Any], *, limit_per_session: int = 6) -> lis
                         "preview": item.preview,
                         "time_label": item.time_label,
                         "is_approved": item.is_approved,
+                        "review_status": getattr(item, "review_status", "unreviewed"),
+                        "review_reason": getattr(item, "review_reason", ""),
+                        "is_reviewable": getattr(item, "is_reviewable", False),
                     }
                     for item in sorted_items[:limit_per_session]
                 ],

@@ -15,7 +15,10 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def get_conn() -> sqlite3.Connection:
-    return sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+    conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, timeout=30)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    return conn
 
 
 def _table_columns(cursor: sqlite3.Cursor, table_name: str) -> list[str]:
@@ -35,9 +38,33 @@ def _ensure_chat_history_schema(cursor: sqlite3.Cursor) -> None:
     )
 
 
+def _ensure_chat_qa_review_schema(cursor: sqlite3.Cursor) -> None:
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_qa_review (
+            entry_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL DEFAULT 'pending',
+            tool_name TEXT,
+            reason TEXT NOT NULL DEFAULT '',
+            reviewer TEXT NOT NULL DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_chat_qa_review_status_updated
+        ON chat_qa_review(status, updated_at)
+        """
+    )
+
+
 def init_db() -> None:
     conn = get_conn()
     cursor = conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)")
     cursor.execute(
         """
@@ -84,6 +111,7 @@ def init_db() -> None:
         )
         """
     )
+    _ensure_chat_qa_review_schema(cursor)
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS web_search_knowledge (
@@ -342,6 +370,63 @@ def get_approved_chat_entry_ids() -> set[str]:
     rows = {str(entry_id) for (entry_id,) in cursor.fetchall()}
     conn.close()
     return rows
+
+
+def upsert_chat_qa_review_state(
+    *,
+    entry_id: str,
+    status: str,
+    tool_name: str = "",
+    reason: str = "",
+    reviewer: str = "",
+) -> None:
+    normalized_status = status if status in {"pending", "approved", "rejected"} else "pending"
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO chat_qa_review (entry_id, status, tool_name, reason, reviewer, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
+        ON CONFLICT(entry_id) DO UPDATE SET
+            status = excluded.status,
+            tool_name = CASE
+                WHEN excluded.tool_name != '' THEN excluded.tool_name
+                ELSE chat_qa_review.tool_name
+            END,
+            reason = excluded.reason,
+            reviewer = excluded.reviewer,
+            updated_at = datetime('now', 'localtime')
+        """,
+        (entry_id, normalized_status, tool_name, reason, reviewer),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_chat_qa_review_states() -> List[Dict[str, str]]:
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT entry_id, status, COALESCE(tool_name, ''), reason, reviewer, created_at, updated_at
+        FROM chat_qa_review
+        ORDER BY updated_at DESC, entry_id DESC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {
+            "entry_id": str(entry_id),
+            "status": str(status),
+            "tool_name": str(tool_name or ""),
+            "reason": str(reason or ""),
+            "reviewer": str(reviewer or ""),
+            "created_at": str(created_at or ""),
+            "updated_at": str(updated_at or ""),
+        }
+        for entry_id, status, tool_name, reason, reviewer, created_at, updated_at in rows
+    ]
 
 
 def get_chat_history(session_id: str = "default") -> List[Dict[str, str]]:

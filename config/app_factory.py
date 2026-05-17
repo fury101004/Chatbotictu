@@ -8,10 +8,12 @@ from config.middleware import configure_logging, create_template_engine, registe
 from config.settings import settings
 from controllers.api_controller import register_api_routes
 from controllers.web_controller import register_web_routes
+from services.runtime_config_manager import apply_runtime_config
 
 
 def create_app() -> FastAPI:
     configure_logging()
+    apply_runtime_config()
 
     app = FastAPI(title=settings.APP_NAME)
     app.state.limiter = limiter
