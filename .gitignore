@@ -63,6 +63,7 @@ vectorstore/
 
 # Local models and generated artifacts
 all-MiniLM-L6-v2.onnx
+*.docx
 
 # Build outputs
 build/
