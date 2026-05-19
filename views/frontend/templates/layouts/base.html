@@ -22,34 +22,52 @@
         }
     })();
     </script>
-    <link rel="stylesheet" href="/static/css/global.css">
+    <link rel="stylesheet" href="/static/css/global.css?v=contrast-fix-1">
     {% block page_head %}{% endblock %}
 </head>
 <body>
     {% set current_path = request.url.path %}
-    <nav class="navbar">
-        <a href="/" class="nav-btn{% if current_path == '/' %} active{% endif %}"{% if current_path == '/' %} aria-current="page"{% endif %}>Trang chủ</a>
-        <a href="/chat" class="nav-btn{% if current_path == '/chat' %} active{% endif %}"{% if current_path == '/chat' %} aria-current="page"{% endif %}>Trò chuyện</a>
-        <a href="/data-loader" class="nav-btn{% if current_path == '/data-loader' %} active{% endif %}"{% if current_path == '/data-loader' %} aria-current="page"{% endif %}>Upload kiến thức</a>
-        <a href="/vector-manager" class="nav-btn{% if current_path == '/vector-manager' %} active{% endif %}"{% if current_path == '/vector-manager' %} aria-current="page"{% endif %}>Kho vector</a>
-        <a href="/knowledge-base" class="nav-btn{% if current_path == '/knowledge-base' %} active{% endif %}"{% if current_path == '/knowledge-base' %} aria-current="page"{% endif %}>Kho tri thức</a>
-        <a href="/config" class="nav-btn{% if current_path == '/config' %} active{% endif %}"{% if current_path == '/config' %} aria-current="page"{% endif %}>Cấu hình</a>
-        <a href="/history" class="nav-btn{% if current_path == '/history' %} active{% endif %}"{% if current_path == '/history' %} aria-current="page"{% endif %}>Lịch sử chat</a>
-        <button class="nav-btn nav-theme-toggle" id="themeToggle" type="button" data-theme-toggle aria-pressed="false" title="Chuyển sang giao diện sáng">
-            <span id="themeToggleLabel" data-theme-toggle-label>Sáng</span>
-        </button>
-        {% if admin_authenticated %}
-        <a href="/admin/logout" class="nav-btn">Đăng xuất admin</a>
-        {% else %}
-        <a href="/admin/login" class="nav-btn{% if current_path == '/admin/login' %} active{% endif %}"{% if current_path == '/admin/login' %} aria-current="page"{% endif %}>Admin</a>
-        {% endif %}
-    </nav>
+    <div class="app-shell">
+        <header class="navbar" aria-label="Điều hướng chính">
+            <a class="nav-brand" href="{% if admin_authenticated %}/{% elif is_authenticated %}/chat{% else %}/login{% endif %}" aria-label="ICTU AI Dashboard">
+                <span class="nav-brand-mark" aria-hidden="true">AI</span>
+                <span class="nav-brand-text">ICTU AI Dashboard</span>
+            </a>
 
-    <main>
-        {% block content %}{% endblock %}
-    </main>
+            <div class="nav-menu" role="list">
+                {% for item in nav_menu_items %}
+                {% set is_active = current_path in item.active_paths %}
+                <a href="{{ item.path }}" class="nav-btn nav-item{% if is_active %} active{% endif %}" role="listitem"{% if is_active %} aria-current="page"{% endif %}>
+                    <span class="nav-item-icon" aria-hidden="true">{{ item.icon_svg|safe }}</span>
+                    <span class="nav-item-label">{{ item.label }}</span>
+                </a>
+                {% endfor %}
+            </div>
 
-    <link rel="stylesheet" href="/static/css/theme.css">
+            <div class="nav-actions">
+                <button class="nav-btn nav-theme-toggle" id="themeToggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Chuyển sang giao diện sáng" title="Chuyển sang giao diện sáng">
+                    <span class="theme-toggle-icon theme-toggle-icon-sun" aria-hidden="true">
+                        {{ nav_icons.sun|safe }}
+                    </span>
+                    <span class="theme-toggle-icon theme-toggle-icon-moon" aria-hidden="true">
+                        {{ nav_icons.moon|safe }}
+                    </span>
+                </button>
+                {% if is_authenticated %}
+                <a href="{{ logout_path }}" class="nav-btn logout-button" data-logout-link>
+                    <span class="nav-item-icon" aria-hidden="true">{{ nav_icons["log-out"]|safe }}</span>
+                    <span class="nav-item-label">{{ logout_label }}</span>
+                </a>
+                {% endif %}
+            </div>
+        </header>
+
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <link rel="stylesheet" href="/static/css/theme.css?v=contrast-fix-1">
     {% block page_scripts %}{% endblock %}
     <script>
     document.addEventListener("click", event => {
@@ -61,6 +79,18 @@
     (() => {
         const THEME_KEY = "ictu-dashboard-theme";
         const LEGACY_THEME_KEY = "ictu-chat-theme";
+        const AUTH_STORAGE_KEYS = [
+            "token",
+            "access_token",
+            "authToken",
+            "ictu-auth-token",
+            "role",
+            "userRole",
+            "ictu-auth-role",
+            "user",
+            "userInfo",
+            "ictu-user",
+        ];
         const normalizeTheme = theme => theme === "light" ? "light" : "dark";
         const getStoredTheme = () => {
             try {
@@ -86,11 +116,10 @@
             });
 
             document.querySelectorAll("[data-theme-toggle]").forEach(button => {
+                const actionLabel = nextTheme === "light" ? "Chuyển sang giao diện tối" : "Chuyển sang giao diện sáng";
                 button.setAttribute("aria-pressed", String(nextTheme === "light"));
-                button.setAttribute(
-                    "title",
-                    nextTheme === "light" ? "Chuyển sang giao diện tối" : "Chuyển sang giao diện sáng",
-                );
+                button.setAttribute("aria-label", actionLabel);
+                button.setAttribute("title", actionLabel);
             });
 
             if (!persist) return;
@@ -110,6 +139,19 @@
             if (!toggle) return;
             const current = document.documentElement.dataset.chatTheme || "dark";
             applyTheme(current === "dark" ? "light" : "dark");
+        });
+
+        document.addEventListener("click", event => {
+            const logoutLink = event.target.closest("[data-logout-link]");
+            if (!logoutLink) return;
+            try {
+                AUTH_STORAGE_KEYS.forEach(key => {
+                    localStorage.removeItem(key);
+                    sessionStorage.removeItem(key);
+                });
+            } catch {
+                // Server-side logout still clears the session.
+            }
         });
 
         window.addEventListener("storage", event => {

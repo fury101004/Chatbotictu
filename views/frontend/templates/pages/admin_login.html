@@ -1,12 +1,12 @@
 {% extends "layouts/base.html" %}
-{% block title %}Admin Login{% endblock %}
+{% block title %}Đăng nhập{% endblock %}
 
 {% block content %}
 <section class="admin-login-page">
-    <form method="post" action="/admin/login" class="admin-login-card">
-        <span class="login-kicker">Admin Console</span>
-        <h1>Đăng nhập quản trị</h1>
-        <p>Đăng nhập để quản lý corpus, vector store, cấu hình và workflow duyệt Knowledge Base.</p>
+    <form method="post" action="/login" class="admin-login-card">
+        <span class="login-kicker">ICTU AI Dashboard</span>
+        <h1>Đăng nhập</h1>
+        <p>Admin có quyền quản trị toàn bộ hệ thống; tài khoản user/student chỉ dùng chức năng trò chuyện.</p>
 
         {% if error %}
         <div class="login-error">{{ error }}</div>

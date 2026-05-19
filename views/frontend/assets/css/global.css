@@ -128,31 +128,103 @@ body .char-count {
     font-family: var(--font-mono) !important;
 }
 
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
 .navbar {
     background: var(--nav-bg);
-    padding: 1rem 1.25rem;
+    width: 100%;
+    min-height: 72px;
+    padding: 0.75rem 1rem;
     display: flex;
-    justify-content: center;
-    gap: 0.85rem;
-    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: nowrap;
     position: sticky;
     top: 0;
     z-index: 30;
+    overflow: visible;
     backdrop-filter: blur(18px);
     border-bottom: 1px solid var(--nav-border);
     box-shadow: var(--nav-shadow);
     transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.nav-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex: 0 0 auto;
+    min-width: max-content;
+    color: var(--nav-btn-hover-text);
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.nav-brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    border: 1px solid var(--surface-border);
+    color: var(--accent-teal);
+    font-size: 0.82rem;
+}
+
+.nav-brand-text {
+    font-size: 0.98rem;
+    line-height: 1;
+}
+
+.nav-menu,
+.nav-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+}
+
+.nav-menu {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+}
+
+.nav-actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+}
+
 .nav-btn {
-    padding: 0.78rem 1.15rem;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 1rem;
     background: var(--nav-btn-bg);
     border: 1px solid transparent;
-    border-radius: 999px;
+    border-radius: 10px;
     text-decoration: none;
     color: var(--nav-btn-text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
     font-weight: 700;
     font-size: 0.95rem;
+    line-height: 1;
+    white-space: nowrap;
     transition: background 0.25s ease, color 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
 }
 
@@ -166,6 +238,71 @@ body .char-count {
 .history {
     background: var(--nav-history-bg);
     color: var(--nav-history-text) !important;
+}
+
+.nav-item-icon,
+.nav-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.nav-theme-toggle {
+    appearance: none;
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+}
+
+.theme-toggle-icon {
+    display: none;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-toggle-icon-sun {
+    color: var(--accent-amber);
+}
+
+.theme-toggle-icon-moon {
+    color: #8fa2ff;
+}
+
+.nav-theme-toggle[aria-pressed="true"] .theme-toggle-icon-sun,
+.nav-theme-toggle[aria-pressed="false"] .theme-toggle-icon-moon,
+html[data-theme="light"] .nav-theme-toggle .theme-toggle-icon-sun,
+html[data-chat-theme="light"] .nav-theme-toggle .theme-toggle-icon-sun,
+html[data-theme="dark"] .nav-theme-toggle .theme-toggle-icon-moon,
+html[data-chat-theme="dark"] .nav-theme-toggle .theme-toggle-icon-moon {
+    display: inline-flex;
+}
+
+html[data-theme="dark"] .nav-theme-toggle .theme-toggle-icon-sun,
+html[data-chat-theme="dark"] .nav-theme-toggle .theme-toggle-icon-sun,
+html[data-theme="light"] .nav-theme-toggle .theme-toggle-icon-moon,
+html[data-chat-theme="light"] .nav-theme-toggle .theme-toggle-icon-moon {
+    display: none;
+}
+
+.main-content {
+    flex: 1 1 auto;
+    width: min(100%, 1280px);
+    padding: 2rem 1.5rem 3rem;
+    margin: 0 auto;
 }
 
 main { padding: 2rem 1.5rem 3rem; max-width: 1280px; margin: 0 auto; }
@@ -456,18 +593,38 @@ main { padding: 2rem 1.5rem 3rem; max-width: 1280px; margin: 0 auto; }
 .btn-restart { background: #fd79a8; padding: 1rem 2rem; border: none; border-radius: 12px; color: white; margin-top: 2rem; }
 
 @media (max-width: 720px) {
-    main {
+    main,
+    .main-content {
         padding: 1.5rem 1rem 2.5rem;
     }
 
     .navbar {
+        align-items: stretch;
         justify-content: flex-start;
+        flex-wrap: wrap;
         gap: 0.65rem;
     }
 
-    .nav-btn,
+    .nav-brand {
+        flex: 1 1 auto;
+    }
+
+    .nav-menu {
+        order: 3;
+        flex: 1 1 100%;
+    }
+
+    .nav-actions {
+        margin-left: auto;
+    }
+
     .btn-nav {
         width: 100%;
+        text-align: center;
+    }
+
+    .navbar .nav-btn {
+        width: auto;
         text-align: center;
     }
 

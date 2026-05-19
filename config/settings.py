@@ -35,12 +35,28 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("SESSION_SECRET", "SESSION_MIDDLEWARE_SECRET"),
     )
     ADMIN_USERNAME: str = Field(
-        default="admin",
+        default="admin@gmail.com",
         validation_alias=AliasChoices("ADMIN_USERNAME"),
     )
     ADMIN_PASSWORD: str = Field(
-        default="admin",
+        default="123456",
         validation_alias=AliasChoices("ADMIN_PASSWORD"),
+    )
+    ADMIN_ROLE: str = Field(
+        default="admin",
+        validation_alias=AliasChoices("ADMIN_ROLE"),
+    )
+    USER_USERNAME: str = Field(
+        default="student",
+        validation_alias=AliasChoices("USER_USERNAME", "STUDENT_USERNAME"),
+    )
+    USER_PASSWORD: str = Field(
+        default="123456",
+        validation_alias=AliasChoices("USER_PASSWORD", "STUDENT_PASSWORD"),
+    )
+    USER_ROLE: str = Field(
+        default="user",
+        validation_alias=AliasChoices("USER_ROLE", "STUDENT_ROLE"),
     )
     CORS_ALLOW_ORIGINS: str = Field(
         default="http://127.0.0.1:8000,http://localhost:8000",
@@ -137,11 +153,19 @@ def _validate_production_security_config(settings_obj: Settings) -> None:
     insecure_partner_key = settings_obj.PARTNER_API_KEY.strip() in {"", "dev-partner-key"}
     insecure_jwt_secret = settings_obj.JWT_SECRET.strip() in {"", "dev-jwt-secret"}
     insecure_session_secret = settings_obj.SESSION_SECRET.strip() in {"", "dev-jwt-secret"}
-    insecure_admin_password = settings_obj.ADMIN_PASSWORD.strip() in {"", "admin"}
+    insecure_admin_password = settings_obj.ADMIN_PASSWORD.strip() in {"", "admin", "123456"}
+    insecure_user_password = settings_obj.USER_PASSWORD.strip() in {"", "user", "student", "123456"}
 
-    if insecure_partner_key or insecure_jwt_secret or insecure_session_secret or insecure_admin_password:
+    if (
+        insecure_partner_key
+        or insecure_jwt_secret
+        or insecure_session_secret
+        or insecure_admin_password
+        or insecure_user_password
+    ):
         raise RuntimeError(
-            "Production security config invalid: PARTNER_API_KEY/JWT_SECRET/SESSION_SECRET/ADMIN_PASSWORD "
+            "Production security config invalid: PARTNER_API_KEY/JWT_SECRET/SESSION_SECRET/"
+            "ADMIN_PASSWORD/USER_PASSWORD "
             "must be set to non-default values."
         )
 

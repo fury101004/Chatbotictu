@@ -13,10 +13,13 @@ from shared.web_session import ensure_csrf_token, resolve_chat_session_id, rotat
 from services.chat.chat_service import process_chat_message
 from services.admin_auth_service import (
     admin_login_redirect,
-    authenticate_admin,
+    authenticate_web_user,
+    default_route_for_role,
+    get_current_role,
     is_admin_authenticated,
-    login_admin,
-    logout_admin,
+    is_web_authenticated,
+    login_with_role,
+    logout_web_user,
 )
 from services.config_service import get_config_page_payload, update_runtime_config
 from services.content.document_service import (
@@ -45,16 +48,27 @@ HISTORY_TEMPLATE = "pages/history.html"
 ADMIN_LOGIN_TEMPLATE = "pages/admin_login.html"
 
 
-def _admin_required(request: Request):
-    if is_admin_authenticated(request):
+def _login_required(request: Request):
+    if is_web_authenticated(request):
         return None
     return admin_login_redirect(request)
 
 
-def _admin_required_json(request: Request):
+def _admin_required(request: Request):
+    login_response = _login_required(request)
+    if login_response is not None:
+        return login_response
     if is_admin_authenticated(request):
         return None
-    return JSONResponse({"status": "error", "msg": "Admin authentication required"}, status_code=401)
+    return RedirectResponse("/chat", status_code=303)
+
+
+def _admin_required_json(request: Request):
+    if not is_web_authenticated(request):
+        return JSONResponse({"status": "error", "msg": "Login required"}, status_code=401)
+    if not is_admin_authenticated(request):
+        return JSONResponse({"status": "error", "msg": "Admin role required"}, status_code=403)
+    return None
 
 
 def _safe_next_path(next_path: str) -> str:
@@ -62,26 +76,89 @@ def _safe_next_path(next_path: str) -> str:
     if not candidate.startswith("/") or candidate.startswith("//"):
         return "/"
     if candidate.startswith("/admin/login"):
-        return "/"
+        return "/login"
+    if candidate.startswith("/login"):
+        return "/login"
     return candidate
+
+
+def _login_page_context(request: Request, next_path: str, error: str = "") -> dict:
+    return {
+        "csrf_token": ensure_csrf_token(request),
+        "next_path": _safe_next_path(next_path),
+        "error": error,
+    }
+
+
+async def _submit_login(
+    request: Request,
+    username: str,
+    password: str,
+    next_path: str,
+    csrf_token: str,
+):
+    next_target = _safe_next_path(next_path)
+    if not validate_csrf_token(request, csrf_token):
+        return render_page(
+            request,
+            ADMIN_LOGIN_TEMPLATE,
+            context=_login_page_context(request, next_target, "CSRF không hợp lệ."),
+        )
+
+    role = authenticate_web_user(username, password)
+    if role is None:
+        rotate_csrf_token(request)
+        return render_page(
+            request,
+            ADMIN_LOGIN_TEMPLATE,
+            context=_login_page_context(request, next_target, "Sai tài khoản hoặc mật khẩu."),
+        )
+
+    login_with_role(request, username, role)
+    rotate_csrf_token(request)
+    return RedirectResponse(default_route_for_role(role), status_code=303)
 
 
 @router.get("/")
 async def home(request: Request):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
     return render_page(request, HOME_TEMPLATE)
+
+
+@router.get("/login")
+async def login_page(request: Request, next: str = "/"):
+    if is_web_authenticated(request):
+        return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
+    return render_page(
+        request,
+        ADMIN_LOGIN_TEMPLATE,
+        context=_login_page_context(request, next),
+    )
 
 
 @router.get("/admin/login")
 async def admin_login_page(request: Request, next: str = "/"):
+    if is_web_authenticated(request):
+        return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
     return render_page(
         request,
         ADMIN_LOGIN_TEMPLATE,
-        context={
-            "csrf_token": ensure_csrf_token(request),
-            "next_path": _safe_next_path(next),
-            "error": "",
-        },
+        context=_login_page_context(request, next),
     )
+
+
+@router.post("/login")
+@limiter.limit(settings.API_RATE_ADMIN)
+async def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next_path: str = Form("/"),
+    csrf_token: str = Form(...),
+):
+    return await _submit_login(request, username, password, next_path, csrf_token)
 
 
 @router.post("/admin/login")
@@ -93,44 +170,26 @@ async def admin_login_submit(
     next_path: str = Form("/"),
     csrf_token: str = Form(...),
 ):
-    next_target = _safe_next_path(next_path)
-    if not validate_csrf_token(request, csrf_token):
-        return render_page(
-            request,
-            ADMIN_LOGIN_TEMPLATE,
-            context={
-                "csrf_token": ensure_csrf_token(request),
-                "next_path": next_target,
-                "error": "CSRF không hợp lệ.",
-            },
-        )
+    return await _submit_login(request, username, password, next_path, csrf_token)
 
-    if not authenticate_admin(username, password):
-        rotate_csrf_token(request)
-        return render_page(
-            request,
-            ADMIN_LOGIN_TEMPLATE,
-            context={
-                "csrf_token": ensure_csrf_token(request),
-                "next_path": next_target,
-                "error": "Sai tài khoản hoặc mật khẩu.",
-            },
-        )
 
-    login_admin(request, username)
+@router.get("/logout")
+async def logout(request: Request):
+    logout_web_user(request)
     rotate_csrf_token(request)
-    return RedirectResponse(next_target, status_code=303)
+    return RedirectResponse("/login", status_code=303)
 
 
 @router.get("/admin/logout")
 async def admin_logout(request: Request):
-    logout_admin(request)
-    rotate_csrf_token(request)
-    return RedirectResponse("/chat", status_code=303)
+    return await logout(request)
 
 
 @router.get("/chat")
 async def chat_page(request: Request):
+    login_response = _login_required(request)
+    if login_response is not None:
+        return login_response
     resolve_chat_session_id(request, "default")
     return render_page(
         request,
@@ -147,11 +206,22 @@ async def chat_web(
     session_id: str = Form("default"),
     llm_model: str = Form("auto"),
 ):
+    login_response = _login_required(request)
+    if login_response is not None:
+        return login_response
     current_session_id = resolve_chat_session_id(request, session_id)
 
     result = await process_chat_message(message, current_session_id, llm_model=llm_model)
     result["session_id"] = current_session_id
     return result
+
+
+@router.get("/admin")
+async def admin_index(request: Request):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    return RedirectResponse("/", status_code=303)
 
 
 @router.post("/delete-file")
@@ -191,6 +261,14 @@ async def data_loader_page(request: Request):
             "csrf_token": ensure_csrf_token(request),
         },
     )
+
+
+@router.get("/upload")
+async def upload_page_alias(request: Request):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    return RedirectResponse("/data-loader", status_code=303)
 
 
 @router.post("/upload")
@@ -270,6 +348,14 @@ async def vector_manager(request: Request, limit_per_file: int = 50):
     )
 
 
+@router.get("/vector-store")
+async def vector_store_alias(request: Request):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    return RedirectResponse("/vector-manager", status_code=303)
+
+
 @router.get("/knowledge-base")
 async def knowledge_base_page(
     request: Request,
@@ -286,6 +372,14 @@ async def knowledge_base_page(
     payload["flash_status"] = status
     payload["flash_message"] = message
     return render_page(request, KNOWLEDGE_BASE_TEMPLATE, context=payload)
+
+
+@router.get("/knowledge")
+async def knowledge_alias(request: Request):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    return RedirectResponse("/knowledge-base", status_code=303)
 
 
 @router.post("/knowledge-base/approve-chat")
@@ -367,6 +461,14 @@ async def config_page(request: Request):
             "csrf_token": ensure_csrf_token(request),
         },
     )
+
+
+@router.get("/settings")
+async def settings_alias(request: Request):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    return RedirectResponse("/config", status_code=303)
 
 
 @router.post("/update-config")

@@ -121,7 +121,7 @@
 </div>
 
 <script>
-const CHAT_STORAGE_SCOPE = "{{ 'admin' if admin_authenticated else 'guest' }}";
+const CHAT_STORAGE_SCOPE = "{{ current_role if is_authenticated else 'guest' }}";
 const CHAT_STATE_KEY = `ictu-dashboard-chat-state:${CHAT_STORAGE_SCOPE}`;
 const CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:${CHAT_STORAGE_SCOPE}`;
 let activeChatSessionId = "";

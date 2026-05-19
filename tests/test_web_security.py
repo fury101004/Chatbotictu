@@ -13,6 +13,52 @@ from config.settings import settings
 from config.rag_tools import get_tool_upload_dir, resolve_upload_source_path
 
 
+def _csrf_from_login_page(client: TestClient, path: str = "/login") -> str:
+    login_page = client.get(path)
+    csrf_match = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text)
+    assert csrf_match is not None
+    return csrf_match.group(1)
+
+
+def _login_as_admin(client: TestClient) -> None:
+    csrf_token = _csrf_from_login_page(client)
+    response = client.post(
+        "/login",
+        data={
+            "username": settings.ADMIN_USERNAME,
+            "password": settings.ADMIN_PASSWORD,
+            "next_path": "/",
+            "csrf_token": csrf_token,
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+
+
+def _login_as_user(client: TestClient) -> None:
+    csrf_token = _csrf_from_login_page(client)
+    response = client.post(
+        "/login",
+        data={
+            "username": settings.USER_USERNAME,
+            "password": settings.USER_PASSWORD,
+            "next_path": "/",
+            "csrf_token": csrf_token,
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/chat"
+
+
+def _nav_html(page_text: str) -> str:
+    start = page_text.find('<header class="navbar"')
+    end = page_text.find("</header>")
+    assert start >= 0 and end >= start
+    return page_text[start : end + len("</header>")]
+
+
 class UploadPathSecurityTests(unittest.TestCase):
     def test_resolve_upload_source_path_blocks_parent_traversal(self) -> None:
         tool_dir = get_tool_upload_dir("student_faq_rag").resolve()
@@ -28,19 +74,18 @@ class WebCsrfSecurityTests(unittest.TestCase):
         response = client.get("/data-loader", follow_redirects=False)
 
         self.assertEqual(response.status_code, 303)
-        self.assertIn("/admin/login", response.headers["location"])
+        self.assertIn("/login", response.headers["location"])
 
-    def test_public_chat_page_does_not_require_admin_login(self) -> None:
+    def test_chat_page_redirects_to_login_when_not_authenticated(self) -> None:
         client = TestClient(main.app)
-        response = client.get("/chat")
+        response = client.get("/chat", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("/login", response.headers["location"])
 
     def test_admin_login_allows_access_to_admin_page(self) -> None:
         client = TestClient(main.app)
-        login_page = client.get("/admin/login?next=/data-loader")
-        csrf_match = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text)
-        self.assertIsNotNone(csrf_match)
+        csrf_token = _csrf_from_login_page(client, "/admin/login?next=/data-loader")
 
         login_response = client.post(
             "/admin/login",
@@ -48,15 +93,81 @@ class WebCsrfSecurityTests(unittest.TestCase):
                 "username": settings.ADMIN_USERNAME,
                 "password": settings.ADMIN_PASSWORD,
                 "next_path": "/data-loader",
-                "csrf_token": csrf_match.group(1),
+                "csrf_token": csrf_token,
             },
             follow_redirects=False,
         )
         self.assertEqual(login_response.status_code, 303)
-        self.assertEqual(login_response.headers["location"], "/data-loader")
+        self.assertEqual(login_response.headers["location"], "/")
 
         admin_page = client.get("/data-loader")
         self.assertEqual(admin_page.status_code, 200)
+
+    def test_user_login_shows_only_chat_menu_and_blocks_admin_pages(self) -> None:
+        client = TestClient(main.app)
+        _login_as_user(client)
+
+        chat_page = client.get("/chat")
+        nav_html = _nav_html(chat_page.text)
+        self.assertEqual(chat_page.status_code, 200)
+        self.assertIn("Trò chuyện", nav_html)
+        self.assertIn("Đăng xuất", nav_html)
+        self.assertNotIn("Trang chủ", nav_html)
+        self.assertNotIn("Upload kiến thức", nav_html)
+        self.assertNotIn("Kho vector", nav_html)
+        self.assertNotIn("Kho tri thức", nav_html)
+        self.assertNotIn("Cấu hình", nav_html)
+        self.assertNotIn("Lịch sử chat", nav_html)
+        self.assertNotIn("Đăng xuất admin", nav_html)
+
+        for admin_path in (
+            "/",
+            "/data-loader",
+            "/upload",
+            "/vector-manager",
+            "/vector-store",
+            "/knowledge-base",
+            "/knowledge",
+            "/config",
+            "/settings",
+            "/history",
+            "/admin",
+            "/admin/login",
+        ):
+            response = client.get(admin_path, follow_redirects=False)
+            self.assertEqual(response.status_code, 303)
+            self.assertEqual(response.headers["location"], "/chat")
+
+    def test_admin_menu_contains_all_admin_items(self) -> None:
+        client = TestClient(main.app)
+        _login_as_admin(client)
+
+        response = client.get("/")
+        nav_html = _nav_html(response.text)
+        self.assertEqual(response.status_code, 200)
+        for label in (
+            "Trang chủ",
+            "Trò chuyện",
+            "Upload kiến thức",
+            "Kho vector",
+            "Kho tri thức",
+            "Cấu hình",
+            "Lịch sử chat",
+            "Đăng xuất admin",
+        ):
+            self.assertIn(label, nav_html)
+
+    def test_logout_clears_session_and_redirects_to_login(self) -> None:
+        client = TestClient(main.app)
+        _login_as_user(client)
+
+        logout_response = client.get("/logout", follow_redirects=False)
+        self.assertEqual(logout_response.status_code, 303)
+        self.assertEqual(logout_response.headers["location"], "/login")
+
+        chat_response = client.get("/chat", follow_redirects=False)
+        self.assertEqual(chat_response.status_code, 303)
+        self.assertIn("/login", chat_response.headers["location"])
 
     def test_upload_rejects_invalid_csrf(self) -> None:
         client = TestClient(main.app)
@@ -108,6 +219,8 @@ class ChatSessionIsolationTests(unittest.TestCase):
         with patch("controllers.web_controller.process_chat_message", mock_chat):
             client_a = TestClient(main.app)
             client_b = TestClient(main.app)
+            _login_as_user(client_a)
+            _login_as_user(client_b)
 
             client_a.get("/chat")
             client_b.get("/chat")

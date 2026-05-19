@@ -134,7 +134,7 @@ Các nhóm biến quan trọng:
 | Nhóm | Biến |
 |---|---|
 | App/security | `APP_NAME`, `ENVIRONMENT`, `PARTNER_API_KEY`, `JWT_SECRET`, `SESSION_SECRET` |
-| Admin web | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_ROLE` |
+| Web auth | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_ROLE`, `USER_USERNAME`, `USER_PASSWORD`, `USER_ROLE` |
 | Runtime chunking | `CHUNK_SIZE`, `CHUNK_OVERLAP` |
 | Rate limit | `API_RATE_CHAT`, `API_RATE_UPLOAD`, `API_RATE_ADMIN` |
 | Path | `DATA_DIR`, `LOG_DIR`, `DB_PATH`, `QA_CORPUS_ROOT`, `RAG_UPLOAD_ROOT`, `VECTORSTORE_DIR`, `SYSTEM_PROMPT_PATH`, `BOT_RULE_PATH` |
@@ -147,9 +147,12 @@ Tài khoản admin mặc định trong môi trường development theo `.env.exa
 ADMIN_USERNAME=admin@gmail.com
 ADMIN_PASSWORD=123456
 ADMIN_ROLE=admin
+USER_USERNAME=student
+USER_PASSWORD=123456
+USER_ROLE=user
 ```
 
-Khi `ENVIRONMENT=production`, code sẽ từ chối chạy nếu vẫn dùng secret mặc định hoặc mật khẩu admin mặc định. Cần đổi `PARTNER_API_KEY`, `JWT_SECRET`, `SESSION_SECRET` và `ADMIN_PASSWORD` trước khi deploy.
+Khi `ENVIRONMENT=production`, code sẽ từ chối chạy nếu vẫn dùng secret mặc định hoặc mật khẩu admin/user mặc định. Cần đổi `PARTNER_API_KEY`, `JWT_SECRET`, `SESSION_SECRET`, `ADMIN_PASSWORD` và `USER_PASSWORD` trước khi deploy.
 
 ## 7. Cài đặt và chạy dự án
 
@@ -184,7 +187,8 @@ Các URL chính:
 
 - Web home: `http://127.0.0.1:8000/`
 - Chat: `http://127.0.0.1:8000/chat`
-- Admin login: `http://127.0.0.1:8000/admin/login`
+- Login: `http://127.0.0.1:8000/login`
+- Admin login alias: `http://127.0.0.1:8000/admin/login`
 - Data loader: `http://127.0.0.1:8000/data-loader`
 - Vector manager: `http://127.0.0.1:8000/vector-manager`
 - Knowledge Base: `http://127.0.0.1:8000/knowledge-base`
@@ -265,14 +269,15 @@ Các trang admin web dùng session cookie, CSRF token và `services/admin_auth_s
 
 | Trang | Vai trò |
 |---|---|
-| `/admin/login` | Đăng nhập admin |
+| `/login` | Đăng nhập admin hoặc user/student |
+| `/admin/login` | Alias đăng nhập admin |
 | `/data-loader` | Upload tài liệu, chọn RAG tool, import seed corpus |
 | `/vector-manager` | Xem thống kê vector chunks, xóa source/chunk, reset vector store |
 | `/knowledge-base` | Tìm kiếm vector/chat knowledge, approve/reject Q&A |
 | `/config` | Chỉnh chunk size, overlap, system prompt/bot rules và re-ingest |
 | `/history` | Xem lịch sử hội thoại |
 
-Các trang admin sẽ redirect về `/admin/login` nếu chưa đăng nhập.
+Các trang admin sẽ redirect về `/login` nếu chưa đăng nhập. Tài khoản role `user`/`student` chỉ được vào `/chat`; nếu nhập trực tiếp URL quản trị sẽ được chuyển về `/chat`.
 
 ## 11. Kiểm thử
 

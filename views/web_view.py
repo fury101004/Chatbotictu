@@ -5,7 +5,8 @@ from typing import Any, Mapping
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
-from services.admin_auth_service import is_admin_authenticated
+from services.admin_auth_service import get_current_role, is_admin_authenticated, is_web_authenticated
+from services.navigation_service import NAV_ICONS, get_logout_label, get_menu_items
 
 
 def render_page(
@@ -16,7 +17,15 @@ def render_page(
 ):
     templates = request.app.state.templates
     page_context = dict(context or {})
+    current_role = get_current_role(request)
+    authenticated = is_web_authenticated(request)
+    page_context.setdefault("current_role", current_role)
+    page_context.setdefault("is_authenticated", authenticated)
     page_context.setdefault("admin_authenticated", is_admin_authenticated(request))
+    page_context.setdefault("nav_menu_items", get_menu_items(current_role) if authenticated else [])
+    page_context.setdefault("nav_icons", NAV_ICONS)
+    page_context.setdefault("logout_path", "/logout")
+    page_context.setdefault("logout_label", get_logout_label(current_role))
     return templates.TemplateResponse(request, template_name, page_context)
 
 

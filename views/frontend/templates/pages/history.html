@@ -882,8 +882,8 @@
 </style>
 
 <script>
-const CHAT_STORAGE_SCOPE = "{{ 'admin' if admin_authenticated else 'guest' }}";
-const CHAT_STORAGE_SCOPES = Array.from(new Set([CHAT_STORAGE_SCOPE, "admin", "guest"]));
+const CHAT_STORAGE_SCOPE = "{{ current_role if is_authenticated else 'guest' }}";
+const CHAT_STORAGE_SCOPES = Array.from(new Set([CHAT_STORAGE_SCOPE, "admin", "user", "student", "guest"]));
 
 function chatStateKey(scope = CHAT_STORAGE_SCOPE) {
     return `ictu-dashboard-chat-state:${scope}`;
