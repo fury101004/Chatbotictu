@@ -24,8 +24,8 @@
                     </div>
                 </div>
                 <div class="header-actions">
-                    <button class="action-btn theme-toggle" id="themeToggle" type="button" title="Đổi giao diện">
-                        <span id="themeToggleLabel">Sáng</span>
+                    <button type="button" class="action-btn chat-new-button" id="chatNewButton" title="Tạo đoạn chat mới">
+                        Chat mới
                     </button>
                     <button class="action-btn" title="Cài đặt">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -121,7 +121,165 @@
 </div>
 
 <script>
+const CHAT_STORAGE_SCOPE = "{{ 'admin' if admin_authenticated else 'guest' }}";
+const CHAT_STATE_KEY = `ictu-dashboard-chat-state:${CHAT_STORAGE_SCOPE}`;
+const CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:${CHAT_STORAGE_SCOPE}`;
 let activeChatSessionId = "";
+
+function createChatSessionId() {
+    const randomPart = Math.random().toString(36).slice(2, 10);
+    return `chat-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function loadChatStore() {
+    try {
+        const raw = localStorage.getItem(CHAT_STATE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === "object" && parsed.sessions) return parsed;
+    } catch (err) {
+        console.warn("Cannot load saved chat state", err);
+    }
+    return { version: 1, activeSessionId: "", sessions: {} };
+}
+
+function saveChatStore(store) {
+    try {
+        localStorage.setItem(CHAT_STATE_KEY, JSON.stringify(store));
+        if (store.activeSessionId) {
+            localStorage.setItem(CHAT_ACTIVE_KEY, store.activeSessionId);
+        }
+    } catch (err) {
+        console.warn("Cannot save chat state", err);
+    }
+}
+
+function ensureActiveChatSession() {
+    const store = loadChatStore();
+    let sessionId = store.activeSessionId;
+
+    try {
+        const savedActive = localStorage.getItem(CHAT_ACTIVE_KEY);
+        if (savedActive && store.sessions?.[savedActive]) {
+            sessionId = savedActive;
+        }
+    } catch {
+        // Ignore storage access errors.
+    }
+
+    if (!sessionId || !store.sessions?.[sessionId]) {
+        sessionId = createChatSessionId();
+        const now = new Date().toISOString();
+        store.sessions[sessionId] = {
+            id: sessionId,
+            title: "Cuộc trò chuyện mới",
+            createdAt: now,
+            updatedAt: now,
+            messages: [],
+        };
+    }
+
+    store.activeSessionId = sessionId;
+    activeChatSessionId = sessionId;
+    saveChatStore(store);
+    return sessionId;
+}
+
+function getActiveSession(store = loadChatStore()) {
+    if (!activeChatSessionId) ensureActiveChatSession();
+    if (!store.sessions[activeChatSessionId]) {
+        const now = new Date().toISOString();
+        store.sessions[activeChatSessionId] = {
+            id: activeChatSessionId,
+            title: "Cuộc trò chuyện mới",
+            createdAt: now,
+            updatedAt: now,
+            messages: [],
+        };
+    }
+    return store.sessions[activeChatSessionId];
+}
+
+function updateSessionTitle(session, messageText) {
+    if (!session || (session.title && session.title !== "Cuộc trò chuyện mới")) return;
+    const cleaned = String(messageText || "").replace(/\s+/g, " ").trim();
+    if (cleaned) {
+        session.title = cleaned.length > 80 ? `${cleaned.slice(0, 77)}...` : cleaned;
+    }
+}
+
+function saveMessageToActiveSession(message) {
+    const store = loadChatStore();
+    const session = getActiveSession(store);
+    const messages = Array.isArray(session.messages) ? session.messages : [];
+    const existingIndex = messages.findIndex(item => item.id === message.id);
+    if (existingIndex >= 0) {
+        messages[existingIndex] = message;
+    } else {
+        messages.push(message);
+    }
+    session.messages = messages.slice(-200);
+    if (message.sender === "user") updateSessionTitle(session, message.text);
+    session.updatedAt = message.timestamp || new Date().toISOString();
+    store.activeSessionId = activeChatSessionId;
+    saveChatStore(store);
+}
+
+function removeMessageFromActiveSession(messageId) {
+    const store = loadChatStore();
+    const session = getActiveSession(store);
+    session.messages = (session.messages || []).filter(item => item.id !== messageId);
+    session.updatedAt = new Date().toISOString();
+    store.activeSessionId = activeChatSessionId;
+    saveChatStore(store);
+}
+
+function switchActiveSessionId(nextSessionId) {
+    const normalized = String(nextSessionId || "").trim();
+    if (!normalized || normalized === activeChatSessionId) return;
+
+    const store = loadChatStore();
+    const current = store.sessions[activeChatSessionId];
+    if (current && !store.sessions[normalized]) {
+        delete store.sessions[activeChatSessionId];
+        current.id = normalized;
+        store.sessions[normalized] = current;
+    }
+    store.activeSessionId = normalized;
+    activeChatSessionId = normalized;
+    saveChatStore(store);
+}
+
+function setWelcomeVisibility() {
+    const welcome = document.querySelector(".welcome-section");
+    const store = loadChatStore();
+    const session = store.sessions?.[activeChatSessionId];
+    const hasMessages = Array.isArray(session?.messages) && session.messages.length > 0;
+    if (welcome) welcome.classList.toggle("is-hidden", hasMessages);
+}
+
+function clearRenderedMessages() {
+    document.querySelectorAll("#messages > .message").forEach(node => node.remove());
+    setWelcomeVisibility();
+}
+
+function createNewChatSession() {
+    const store = loadChatStore();
+    const sessionId = createChatSessionId();
+    const now = new Date().toISOString();
+    store.sessions[sessionId] = {
+        id: sessionId,
+        title: "Cuộc trò chuyện mới",
+        createdAt: now,
+        updatedAt: now,
+        messages: [],
+    };
+    store.activeSessionId = sessionId;
+    activeChatSessionId = sessionId;
+    saveChatStore(store);
+    clearRenderedMessages();
+    const input = document.getElementById("userInput");
+    if (input) input.focus();
+}
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -149,40 +307,6 @@ const modelState = {
     value: "auto",
     label: "Auto"
 };
-
-const CHAT_THEME_KEY = "ictu-chat-theme";
-
-function applyChatTheme(theme) {
-    const nextTheme = theme === "light" ? "light" : "dark";
-    const wrapper = document.querySelector(".chat-wrapper");
-    const label = document.getElementById("themeToggleLabel");
-
-    if (wrapper) wrapper.dataset.theme = nextTheme;
-    document.documentElement.dataset.chatTheme = nextTheme;
-    document.body.dataset.chatTheme = nextTheme;
-    if (label) label.textContent = nextTheme === "light" ? "Tối" : "Sáng";
-
-    try {
-        localStorage.setItem(CHAT_THEME_KEY, nextTheme);
-    } catch {
-        // Local storage can be disabled; the theme still applies for this page load.
-    }
-}
-
-function initThemeToggle() {
-    let savedTheme = "dark";
-    try {
-        savedTheme = localStorage.getItem(CHAT_THEME_KEY) || "dark";
-    } catch {
-        savedTheme = "dark";
-    }
-
-    applyChatTheme(savedTheme);
-    document.getElementById("themeToggle")?.addEventListener("click", () => {
-        const current = document.querySelector(".chat-wrapper")?.dataset.theme || "dark";
-        applyChatTheme(current === "dark" ? "light" : "dark");
-    });
-}
 
 function setModelMenuOpen(open) {
     const picker = document.getElementById("modelPicker");
@@ -235,15 +359,18 @@ function initModelPicker() {
     });
 }
 
-function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null) {
+function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null, options = {}) {
     const container = document.getElementById("messages");
     const msgElement = document.createElement("div");
     msgElement.className = `message ${sender}`;
-    
-    const timestamp = new Date().toLocaleTimeString('vi-VN', { 
+    const messageId = options.id || `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const timestampDate = options.timestamp ? new Date(options.timestamp) : new Date();
+    const timestamp = options.timeLabel || timestampDate.toLocaleTimeString('vi-VN', {
         hour: '2-digit', 
         minute: '2-digit'
     });
+    const timestampIso = Number.isNaN(timestampDate.getTime()) ? new Date().toISOString() : timestampDate.toISOString();
+    msgElement.dataset.messageId = messageId;
     
     const safeText = escapeHtml(String(text || ""));
     const html = safeText
@@ -299,6 +426,88 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null)
     
     container.appendChild(msgElement);
     container.scrollTop = container.scrollHeight;
+    setWelcomeVisibility();
+
+    if (options.persist !== false) {
+        saveMessageToActiveSession({
+            id: messageId,
+            sender,
+            text: String(text || ""),
+            name,
+            bgColor,
+            meta: meta || null,
+            timestamp: timestampIso,
+            timeLabel: timestamp,
+        });
+    }
+
+    return msgElement;
+}
+
+function addThinkingMessage(options = {}) {
+    const container = document.getElementById("messages");
+    const thinking = document.createElement("div");
+    const messageId = options.id || `pending-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const timestamp = options.timestamp || new Date().toISOString();
+    thinking.className = "message bot thinking";
+    thinking.dataset.messageId = messageId;
+    thinking.innerHTML = `
+        <div class="thinking-indicator">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+        <span class="thinking-text">Mình đang nghĩ...</span>
+    `;
+    container.appendChild(thinking);
+    container.scrollTop = container.scrollHeight;
+    setWelcomeVisibility();
+
+    if (options.persist !== false) {
+        saveMessageToActiveSession({
+            id: messageId,
+            sender: "bot",
+            text: "Mình đang nghĩ...",
+            name: "ICTU AI",
+            bgColor: null,
+            meta: null,
+            pending: true,
+            timestamp,
+            timeLabel: "",
+        });
+    }
+
+    return thinking;
+}
+
+function restoreSavedConversation() {
+    const store = loadChatStore();
+    const session = getActiveSession(store);
+    clearRenderedMessages();
+    (session.messages || []).forEach(message => {
+        if (message.pending) {
+            addThinkingMessage({
+                id: message.id,
+                timestamp: message.timestamp,
+                persist: false,
+            });
+            return;
+        }
+        addMessage(
+            message.sender || "bot",
+            message.text || "",
+            message.name || "ICTU AI",
+            message.bgColor || null,
+            message.meta || null,
+            {
+                id: message.id,
+                timestamp: message.timestamp,
+                timeLabel: message.timeLabel,
+                persist: false,
+            },
+        );
+    });
+    setWelcomeVisibility();
 }
 
 // Xử lý form submit
@@ -313,17 +522,7 @@ document.getElementById("chatForm").onsubmit = async (e) => {
     updateCharCount(0);
     input.disabled = true;
 
-    const thinking = document.createElement("div");
-    thinking.className = "message bot thinking";
-    thinking.innerHTML = `
-        <div class="thinking-indicator">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
-        </div>
-        <span class="thinking-text">Mình đang nghĩ...</span>
-    `;
-    document.getElementById("messages").appendChild(thinking);
+    const thinking = addThinkingMessage();
 
     try {
         const res = await fetch("/chat", {
@@ -337,7 +536,8 @@ document.getElementById("chatForm").onsubmit = async (e) => {
         });
         const data = await res.json();
         thinking.remove();
-        if (data.session_id) activeChatSessionId = data.session_id;
+        removeMessageFromActiveSession(thinking.dataset.messageId);
+        if (data.session_id) switchActiveSessionId(data.session_id);
 
         if (data.response) {
             addMessage("bot", data.response, "ICTU AI", null, {
@@ -348,6 +548,7 @@ document.getElementById("chatForm").onsubmit = async (e) => {
         }
     } catch (err) {
         thinking.remove();
+        removeMessageFromActiveSession(thinking.dataset.messageId);
         addMessage("system", "Mạng lag rồi đại ca ơi, thử lại đi!", "Hệ thống");
     } finally {
         input.disabled = false;
@@ -361,9 +562,9 @@ function updateCharCount(length) {
     charCount.textContent = `${length}/1000`;
     
     if (length > 900) {
-        charCount.style.color = '#ff4757';
+        charCount.style.color = 'var(--danger-color)';
     } else if (length > 700) {
-        charCount.style.color = '#feca57';
+        charCount.style.color = 'var(--warning-color)';
     } else {
         charCount.style.color = '';
     }
@@ -403,10 +604,19 @@ userInput.addEventListener('keydown', function(e) {
 });
 
 // Khởi tạo
-initThemeToggle();
+ensureActiveChatSession();
+restoreSavedConversation();
 initModelPicker();
 updateCharCount(0);
 sendBtn.disabled = true;
+
+document.getElementById("chatNewButton")?.addEventListener("click", () => {
+    if (!confirm("Tạo đoạn chat mới? Phiên hiện tại vẫn được giữ trong Lịch sử chat của trình duyệt.")) return;
+    createNewChatSession();
+    sendBtn.classList.remove("active");
+    sendBtn.disabled = true;
+    updateCharCount(0);
+});
 
 // Focus input on load
 setTimeout(() => {
@@ -651,6 +861,12 @@ body {
     font-size: 0.75rem;
     color: #aaa;
     font-weight: 500;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
 }
 
 .header-actions .action-btn {
@@ -1237,12 +1453,6 @@ body[data-chat-theme="light"] {
     background: rgba(37, 99, 235, 0.08);
     border-color: var(--accent);
     color: var(--accent);
-}
-
-.theme-toggle {
-    font-size: 0.8rem;
-    min-width: 58px;
-    padding: 0 0.7rem;
 }
 
 .chat-wrapper .message.bot,

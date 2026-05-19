@@ -41,14 +41,14 @@
             </div>
 
             <!-- CHECKBOX QUAN TRỌNG -->
-            <div class="form-group" style="background:#2f3542; padding:18px; border-radius:10px; margin:25px 0; border-left:4px solid #ff6b6b;">
-                <label style="color:#ff6b6b; font-weight:bold; font-size:1.05em;">
-                    <input type="checkbox" name="reingest" checked style="transform:scale(1.4); margin-right:12px; accent-color:#ff6b6b;">
+            <div class="form-group reingest-option">
+                <label class="reingest-label">
+                    <input type="checkbox" name="reingest" checked>
                     Tái tạo lại toàn bộ vectorstore với Chunk mới
                 </label>
-                <p style="margin:10px 0 0; font-size:0.95em; color:#ccc;">
+                <p>
                     ✅ <strong>Bắt buộc tick</strong> nếu bạn vừa thay đổi Chunk Size hoặc Overlap<br>
-                    <span style="color:#f1c40f;">Không tick → chỉ áp dụng cho file upload sau này</span>
+                    <span class="reingest-note">Không tick → chỉ áp dụng cho file upload sau này</span>
                 </p>
             </div>
 
@@ -56,7 +56,7 @@
             <div class="form-group">
                 <label class="label-with-btn">
                     <span>Bot Rules (System Prompt)</span>
-                    <span style="color:#00d2d3; font-size:0.9em;">→ Lưu tự động vào <code>{{ prompt_source }}</code></span>
+                    <span class="autosave-note">→ Lưu tự động vào <code>{{ prompt_source }}</code></span>
                     <button type="button" id="copyPrompt" class="btn-small" title="Copy toàn bộ prompt">
                         Copy
                     </button>
@@ -67,7 +67,7 @@
                     <div class="line-numbers" id="lineNumbers"></div>
                 </div>
 
-                <small style="color:#888; display:block; margin-top:10px;">
+                <small class="editor-tip">
                     Tip: Dùng markdown thoải mái (#, **, -, >, `code`) – bot sẽ lầy lội đúng như bạn viết ở đây!
                 </small>
             </div>
@@ -111,6 +111,35 @@
     transition: all 0.2s;
 }
 .btn-small:hover { background: #636f93; }
+
+.reingest-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 800;
+    font-size: 1.05em;
+}
+
+.reingest-label input {
+    transform: scale(1.25);
+}
+
+.reingest-option p {
+    margin: 10px 0 0;
+    font-size: 0.95em;
+}
+
+.reingest-note,
+.autosave-note {
+    color: var(--warning-color);
+    font-size: 0.9em;
+}
+
+.editor-tip {
+    color: var(--text-muted);
+    display: block;
+    margin-top: 10px;
+}
 
 .model-rotation-list {
     display: flex;

@@ -10,8 +10,11 @@
     <script>
     (() => {
         try {
-            const savedTheme = localStorage.getItem("ictu-chat-theme");
+            const dashboardTheme = localStorage.getItem("ictu-dashboard-theme");
+            const legacyTheme = localStorage.getItem("ictu-chat-theme");
+            const savedTheme = dashboardTheme || legacyTheme;
             if (savedTheme === "light" || savedTheme === "dark") {
+                document.documentElement.dataset.theme = savedTheme;
                 document.documentElement.dataset.chatTheme = savedTheme;
             }
         } catch {
@@ -23,18 +26,22 @@
     {% block page_head %}{% endblock %}
 </head>
 <body>
+    {% set current_path = request.url.path %}
     <nav class="navbar">
-        <a href="/" class="nav-btn">Trang chủ</a>
-        <a href="/chat" class="nav-btn">Trò chuyện</a>
-        <a href="/data-loader" class="nav-btn">Upload kiến thức</a>
-        <a href="/vector-manager" class="nav-btn">Kho vector</a>
-        <a href="/knowledge-base" class="nav-btn">Kho tri thức</a>
-        <a href="/config" class="nav-btn">Cấu hình</a>
-        <a href="/history" class="nav-btn history">Lịch sử chat</a>
+        <a href="/" class="nav-btn{% if current_path == '/' %} active{% endif %}"{% if current_path == '/' %} aria-current="page"{% endif %}>Trang chủ</a>
+        <a href="/chat" class="nav-btn{% if current_path == '/chat' %} active{% endif %}"{% if current_path == '/chat' %} aria-current="page"{% endif %}>Trò chuyện</a>
+        <a href="/data-loader" class="nav-btn{% if current_path == '/data-loader' %} active{% endif %}"{% if current_path == '/data-loader' %} aria-current="page"{% endif %}>Upload kiến thức</a>
+        <a href="/vector-manager" class="nav-btn{% if current_path == '/vector-manager' %} active{% endif %}"{% if current_path == '/vector-manager' %} aria-current="page"{% endif %}>Kho vector</a>
+        <a href="/knowledge-base" class="nav-btn{% if current_path == '/knowledge-base' %} active{% endif %}"{% if current_path == '/knowledge-base' %} aria-current="page"{% endif %}>Kho tri thức</a>
+        <a href="/config" class="nav-btn{% if current_path == '/config' %} active{% endif %}"{% if current_path == '/config' %} aria-current="page"{% endif %}>Cấu hình</a>
+        <a href="/history" class="nav-btn{% if current_path == '/history' %} active{% endif %}"{% if current_path == '/history' %} aria-current="page"{% endif %}>Lịch sử chat</a>
+        <button class="nav-btn nav-theme-toggle" id="themeToggle" type="button" data-theme-toggle aria-pressed="false" title="Chuyển sang giao diện sáng">
+            <span id="themeToggleLabel" data-theme-toggle-label>Sáng</span>
+        </button>
         {% if admin_authenticated %}
         <a href="/admin/logout" class="nav-btn">Đăng xuất admin</a>
         {% else %}
-        <a href="/admin/login" class="nav-btn">Admin</a>
+        <a href="/admin/login" class="nav-btn{% if current_path == '/admin/login' %} active{% endif %}"{% if current_path == '/admin/login' %} aria-current="page"{% endif %}>Admin</a>
         {% endif %}
     </nav>
 
@@ -42,6 +49,7 @@
         {% block content %}{% endblock %}
     </main>
 
+    <link rel="stylesheet" href="/static/css/theme.css">
     {% block page_scripts %}{% endblock %}
     <script>
     document.addEventListener("click", event => {
@@ -51,21 +59,61 @@
     });
 
     (() => {
-        const syncStoredTheme = () => {
+        const THEME_KEY = "ictu-dashboard-theme";
+        const LEGACY_THEME_KEY = "ictu-chat-theme";
+        const normalizeTheme = theme => theme === "light" ? "light" : "dark";
+        const getStoredTheme = () => {
             try {
-                const savedTheme = localStorage.getItem("ictu-chat-theme");
-                if (savedTheme === "light" || savedTheme === "dark") {
-                    document.documentElement.dataset.chatTheme = savedTheme;
-                    document.body.dataset.chatTheme = savedTheme;
-                }
+                const savedTheme = localStorage.getItem(THEME_KEY) || localStorage.getItem(LEGACY_THEME_KEY);
+                return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
             } catch {
-                // Local storage may be disabled.
+                return "dark";
+            }
+        };
+        const applyTheme = (theme, persist = true) => {
+            const nextTheme = normalizeTheme(theme);
+            document.documentElement.dataset.theme = nextTheme;
+            document.documentElement.dataset.chatTheme = nextTheme;
+            document.body.dataset.theme = nextTheme;
+            document.body.dataset.chatTheme = nextTheme;
+
+            document.querySelectorAll(".chat-wrapper").forEach(wrapper => {
+                wrapper.dataset.theme = nextTheme;
+            });
+
+            document.querySelectorAll("[data-theme-toggle-label]").forEach(label => {
+                label.textContent = nextTheme === "light" ? "Tối" : "Sáng";
+            });
+
+            document.querySelectorAll("[data-theme-toggle]").forEach(button => {
+                button.setAttribute("aria-pressed", String(nextTheme === "light"));
+                button.setAttribute(
+                    "title",
+                    nextTheme === "light" ? "Chuyển sang giao diện tối" : "Chuyển sang giao diện sáng",
+                );
+            });
+
+            if (!persist) return;
+            try {
+                localStorage.setItem(THEME_KEY, nextTheme);
+                localStorage.setItem(LEGACY_THEME_KEY, nextTheme);
+            } catch {
+                // Theme still applies for this page load.
             }
         };
 
-        syncStoredTheme();
+        window.applyChatTheme = applyTheme;
+        applyTheme(getStoredTheme(), false);
+
+        document.addEventListener("click", event => {
+            const toggle = event.target.closest("[data-theme-toggle]");
+            if (!toggle) return;
+            const current = document.documentElement.dataset.chatTheme || "dark";
+            applyTheme(current === "dark" ? "light" : "dark");
+        });
+
         window.addEventListener("storage", event => {
-            if (event.key === "ictu-chat-theme") syncStoredTheme();
+            if (event.key === THEME_KEY || event.key === LEGACY_THEME_KEY) applyTheme(getStoredTheme(), false);
         });
     })();
     </script>

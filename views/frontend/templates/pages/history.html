@@ -10,6 +10,16 @@
         <p class="hero-subtitle">T&#7845;t c&#7843; cu&#7897;c tr&#242; chuy&#7879;n gi&#7919;a b&#7841;n v&#224; ICTU AI</p>
     </div>
 
+    <section class="panel browser-history-panel" id="browserHistoryPanel">
+        <div class="panel-header">
+            <div class="header-content">
+                <h2>Phiên chat đã lưu trên trình duyệt</h2>
+                <p class="panel-subtitle">Chọn một phiên để khôi phục nguyên đoạn hội thoại vào trang Trò chuyện.</p>
+            </div>
+        </div>
+        <div class="browser-session-list" id="browserSessionList"></div>
+    </section>
+
     <div class="history-grid">
 
         <!-- Cột trái: Lịch sử chat -->
@@ -872,6 +882,143 @@
 </style>
 
 <script>
+const CHAT_STORAGE_SCOPE = "{{ 'admin' if admin_authenticated else 'guest' }}";
+const CHAT_STORAGE_SCOPES = Array.from(new Set([CHAT_STORAGE_SCOPE, "admin", "guest"]));
+
+function chatStateKey(scope = CHAT_STORAGE_SCOPE) {
+    return `ictu-dashboard-chat-state:${scope}`;
+}
+
+function chatActiveKey(scope = CHAT_STORAGE_SCOPE) {
+    return `ictu-dashboard-active-chat:${scope}`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    })[char]);
+}
+
+function readBrowserChatStore(scope = CHAT_STORAGE_SCOPE) {
+    try {
+        const raw = localStorage.getItem(chatStateKey(scope));
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === "object" && parsed.sessions) return parsed;
+    } catch (err) {
+        console.warn("Cannot read browser chat sessions", err);
+    }
+    return { version: 1, activeSessionId: "", sessions: {} };
+}
+
+function writeBrowserChatStore(store, scope = CHAT_STORAGE_SCOPE) {
+    try {
+        localStorage.setItem(chatStateKey(scope), JSON.stringify(store));
+        if (store.activeSessionId) {
+            localStorage.setItem(chatActiveKey(scope), store.activeSessionId);
+        }
+    } catch (err) {
+        console.warn("Cannot write browser chat sessions", err);
+    }
+}
+
+function formatSessionTime(value) {
+    if (!value) return "Chưa có thời gian";
+    try {
+        return new Date(value).toLocaleString("vi-VN", {
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    } catch {
+        return "Vừa xong";
+    }
+}
+
+function renderBrowserSessions() {
+    const list = document.getElementById("browserSessionList");
+    if (!list) return;
+
+    const stores = CHAT_STORAGE_SCOPES.map(scope => ({ scope, store: readBrowserChatStore(scope) }));
+    const activeSessionKey = `${CHAT_STORAGE_SCOPE}:${readBrowserChatStore(CHAT_STORAGE_SCOPE).activeSessionId || ""}`;
+    const sessions = stores.flatMap(({ scope, store }) => (
+        Object.values(store.sessions || {}).map(session => ({ ...session, scope }))
+    ))
+        .filter(session => Array.isArray(session.messages) && session.messages.length > 0)
+        .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+
+    if (sessions.length === 0) {
+        list.innerHTML = `
+            <div class="empty-inline">
+                Chưa có phiên chat nào được lưu trên trình duyệt này.
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = sessions.map(session => {
+        const messageCount = session.messages.length;
+        const title = escapeHtml(session.title || "Cuộc trò chuyện chưa đặt tên");
+        const time = escapeHtml(formatSessionTime(session.updatedAt));
+        const scopeLabel = session.scope === CHAT_STORAGE_SCOPE ? "Scope hiện tại" : `Scope ${session.scope}`;
+        const activeClass = `${session.scope}:${session.id}` === activeSessionKey ? " active-session" : "";
+        return `
+            <article class="browser-session-card${activeClass}">
+                <div>
+                    <h3>${title}</h3>
+                    <p>${messageCount} tin nhắn • ${escapeHtml(scopeLabel)} • Cập nhật ${time}</p>
+                </div>
+                <div class="browser-session-actions">
+                    <button type="button" class="btn-nav purple" data-restore-session="${escapeHtml(session.id)}" data-session-scope="${escapeHtml(session.scope)}">
+                        Xem lại
+                    </button>
+                    <button type="button" class="btn-delete-small" data-delete-session="${escapeHtml(session.id)}" data-session-scope="${escapeHtml(session.scope)}">
+                        Xóa phiên
+                    </button>
+                </div>
+            </article>
+        `;
+    }).join("");
+}
+
+document.addEventListener("click", event => {
+    const restoreButton = event.target.closest("[data-restore-session]");
+    if (restoreButton) {
+        const sourceScope = restoreButton.dataset.sessionScope || CHAT_STORAGE_SCOPE;
+        const sourceStore = readBrowserChatStore(sourceScope);
+        const sessionId = restoreButton.dataset.restoreSession;
+        const session = sourceStore.sessions?.[sessionId];
+        if (session) {
+            const targetStore = readBrowserChatStore(CHAT_STORAGE_SCOPE);
+            targetStore.sessions[sessionId] = { ...session, id: sessionId };
+            targetStore.activeSessionId = sessionId;
+            writeBrowserChatStore(targetStore, CHAT_STORAGE_SCOPE);
+            window.location.href = "/chat";
+        }
+        return;
+    }
+
+    const deleteButton = event.target.closest("[data-delete-session]");
+    if (deleteButton) {
+        const sessionId = deleteButton.dataset.deleteSession;
+        const sourceScope = deleteButton.dataset.sessionScope || CHAT_STORAGE_SCOPE;
+        if (!confirm("Xóa phiên chat đã lưu trên trình duyệt này?")) return;
+        const store = readBrowserChatStore(sourceScope);
+        delete store.sessions[sessionId];
+        if (store.activeSessionId === sessionId) {
+            store.activeSessionId = Object.keys(store.sessions)[0] || "";
+        }
+        writeBrowserChatStore(store, sourceScope);
+        renderBrowserSessions();
+    }
+});
+
+document.addEventListener("DOMContentLoaded", renderBrowserSessions);
+
 // Auto refresh phn file mi 8 giy
 setInterval(() => {
     fetch(location.href)

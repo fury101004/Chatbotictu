@@ -3,18 +3,18 @@
 
 {% block content %}
 <div class="manager-page">
-    <h1 class="page-title">VECTOR STORE MANAGER</h1>
-    <p class="page-desc">Quan ly kho tri thuc cua bot va chia vector theo 3 nhom RAG giong data loader.</p>
+    <h1 class="page-title">Vector Store Manager</h1>
+    <p class="page-desc">Quản lý kho tri thức của bot và chia vector theo các nhóm RAG giống Data Loader.</p>
 
     <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
 
     <div class="stats-grid">
         <div class="stat-card">
-            <h3>Tong Files</h3>
+            <h3>Tổng Files</h3>
             <div class="big-number">{{ total_files }}</div>
         </div>
         <div class="stat-card">
-            <h3>Tong Chunks</h3>
+            <h3>Tổng Chunks</h3>
             <div class="big-number">{{ total_chunks }}</div>
         </div>
         <div class="stat-card">
@@ -26,12 +26,12 @@
     <div class="seed-zone">
         <h2>Seed Corpus</h2>
         <p>
-            Import toan bo du lieu tu <code>data/qa_generated_fixed</code> vao vector store de tao embedding.
-            Neu muon lam sach vector store truoc khi nap lai, dung nut <code>RESET + IMPORT QA</code>.
+            Import toàn bộ dữ liệu từ <code>data/qa_generated_fixed</code> vào vector store để tạo embedding.
+            Nếu muốn làm sạch vector store trước khi nạp lại, dùng nút <code>Reset + Import QA</code>.
         </p>
         <div class="seed-actions">
-            <button type="button" id="importQaBtn" class="btn-nav green">IMPORT QA CORPUS</button>
-            <button type="button" id="rebuildQaBtn" class="btn-nav orange">RESET + IMPORT QA</button>
+            <button type="button" id="importQaBtn" class="btn-nav green">Import QA Corpus</button>
+            <button type="button" id="rebuildQaBtn" class="btn-nav orange">Reset + Import QA</button>
         </div>
         <div id="seedStatus" class="seed-status" hidden></div>
     </div>
@@ -62,11 +62,12 @@
                     </div>
                     <div class="header-right">
                         <span class="source-path" title="{{ file.source_label }}">{{ file.source_label }}</span>
+                        {% set delete_label = 'Xóa file' if file.is_upload_source else 'Xóa vector' %}
                         <form method="post" action="/delete-file" style="display:inline;"
-                              onsubmit="return confirm('Xoa {{ 'file' if file.is_upload_source else 'vector theo source' }} {{ file.display_name }}?')">
+                              onsubmit="return confirm('{{ delete_label }} {{ file.display_name }}?')">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="filename" value="{{ file.source }}">
-                            <button type="submit" class="btn-delete-small">{{ 'Xoa file' if file.is_upload_source else 'Xoa vector' }}</button>
+                            <button type="submit" class="btn-delete-small">{{ delete_label }}</button>
                         </form>
                     </div>
                 </div>
@@ -77,7 +78,7 @@
                         <div class="chunk-card-mini level-{{ chunk.level }}">
                             <div class="chunk-header-mini">
                                 <span class="level-badge">L{{ chunk.level }}</span>
-                                <span class="word-count">{{ chunk.word_count }} tu</span>
+                                <span class="word-count">{{ chunk.word_count }} từ</span>
                                 <button class="btn-delete-chunk"
                                         onclick="event.stopPropagation(); deleteChunk('{{ chunk.id }}', '{{ file.display_name }}')">
                                     X
@@ -89,7 +90,7 @@
                             </div>
 
                             <button class="btn-copy-mini" data-content="{{ chunk.content|e }}">
-                                Copy noi dung day du
+                                Copy nội dung đầy đủ
                             </button>
                         </div>
                         {% endfor %}
@@ -105,18 +106,18 @@
 
     <div class="danger-zone">
         <h2>Danger Zone</h2>
-        <p>Xoa sach toan bo vector store va file upload.</p>
+        <p>Xóa sạch toàn bộ vector store và file upload.</p>
         <form method="post" action="/reset-vectorstore" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" id="resetAllBtn" class="btn-danger" onclick="return doubleConfirm()">
-                XOA HET VECTOR STORE
+                Xóa hết vector store
             </button>
         </form>
     </div>
 
     <div class="nav-buttons">
-        <a href="/data-loader" class="btn-nav">Upload File Moi</a>
-        <a href="/chat" class="btn-nav purple">Chat Voi Bot</a>
+        <a href="/data-loader" class="btn-nav">Upload file mới</a>
+        <a href="/chat" class="btn-nav purple">Chat với bot</a>
         <a href="/knowledge-base" class="btn-nav green">Knowledge Base</a>
     </div>
 </div>
@@ -130,7 +131,7 @@ function toggleCollapse(header) {
 }
 
 function doubleConfirm() {
-    return confirm('Ban chac chan muon xoa het vector store?')
+    return confirm('Bạn chắc chắn muốn xóa hết vector store?')
         && confirm('Xác nhận lần 2: thao tác này không thể hoàn tác.');
 }
 
@@ -147,13 +148,13 @@ function setSeedStatus(kind, message) {
 
 async function importQaCorpus(resetFirst = false) {
     if (resetFirst) {
-        if (!confirm('Reset vector store roi import lai qa_generated_fixed?')) return;
+        if (!confirm('Reset vector store rồi import lại qa_generated_fixed?')) return;
         if (!confirm('Xác nhận lần 2: sẽ xóa vector hiện tại trước khi import.')) return;
     }
 
     importQaBtn.disabled = true;
     rebuildQaBtn.disabled = true;
-    setSeedStatus('loading', resetFirst ? 'Dang reset + import qa_generated_fixed...' : 'Dang import qa_generated_fixed...');
+    setSeedStatus('loading', resetFirst ? 'Đang reset + import qa_generated_fixed...' : 'Đang import qa_generated_fixed...');
 
     const formData = new FormData();
     formData.append('csrf_token', csrfInput.value);
@@ -171,13 +172,13 @@ async function importQaCorpus(resetFirst = false) {
             csrfInput.value = data.csrf_token;
         }
         if (!resp.ok || data.status === 'error') {
-            throw new Error(data.msg || 'Import that bai');
+            throw new Error(data.msg || 'Import thất bại');
         }
 
         setSeedStatus('success', data.msg);
         setTimeout(() => location.reload(), 1400);
     } catch (err) {
-        setSeedStatus('error', err.message || 'Import that bai');
+        setSeedStatus('error', err.message || 'Import thất bại');
     } finally {
         importQaBtn.disabled = false;
         rebuildQaBtn.disabled = false;
@@ -194,20 +195,20 @@ document.querySelectorAll('.btn-copy-mini').forEach(btn => {
         try {
             await navigator.clipboard.writeText(text);
             const old = this.textContent;
-            this.textContent = 'Da copy!';
-            this.style.background = '#26de81';
+            this.textContent = 'Đã copy!';
+            this.style.background = 'var(--success-color)';
             setTimeout(() => {
                 this.textContent = old;
                 this.style.background = '';
             }, 1500);
         } catch (err) {
-            alert('Copy that bai!');
+            alert('Copy thất bại!');
         }
     });
 });
 
 async function deleteChunk(chunkId, filename) {
-    if (!confirm(`Xoa chunk nay khoi "${filename}"?`)) return;
+    if (!confirm(`Xóa chunk này khỏi "${filename}"?`)) return;
 
     const formData = new FormData();
     formData.append('chunk_id', chunkId);
@@ -223,7 +224,7 @@ async function deleteChunk(chunkId, filename) {
             location.reload();
         } else {
             const data = await resp.json();
-            alert(data.error || 'Xoa that bai!');
+            alert(data.error || 'Xóa thất bại!');
         }
     } catch (err) {
         alert('Lỗi mạng!');
