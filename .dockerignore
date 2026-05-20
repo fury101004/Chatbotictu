@@ -10,6 +10,16 @@ logs
 .DS_Store
 *.tar
 new-test-api*
-*.md
+.env
+.env.*
+!.env.example
+vectorstore
+data/bot_config.db
+data/uploads
+data/rag_uploads
+clean_data
+datapdf
+.pytest_cache
+all-MiniLM-L6-v2.onnx
 test.py
 text.txt

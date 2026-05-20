@@ -66,6 +66,8 @@ class MiddlewareConfigTests(unittest.TestCase):
         app.add_middleware.assert_any_call(
             middleware.SessionMiddleware,
             secret_key="stable-session-secret",
+            same_site="lax",
+            https_only=False,
         )
 
     def test_register_middleware_uses_configured_cors_origins(self) -> None:

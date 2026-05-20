@@ -42,7 +42,7 @@
         <div class="drop-zone" id="dropZone">
             <div class="drop-zone-copy">
                 <strong>Kéo thả tệp vào đây</strong>
-                <p>Hoặc bấm để chọn tệp. Hỗ trợ `.md`, `.markdown`, `.txt` với giới hạn tối đa 200 MB.</p>
+                <p>Hoặc bấm để chọn tệp. Hỗ trợ `.md`, `.markdown`, `.txt` với giới hạn tối đa 10 MB/tệp.</p>
             </div>
             <button type="button" class="btn-browse">Chọn tệp</button>
             <input type="file" id="fileInput" name="files" multiple accept=".md,.markdown,.txt" hidden>
@@ -119,6 +119,39 @@ function renderResult(result) {
     `;
 }
 
+function renderJobStatus(job) {
+    const progress = Number(job.progress || 0);
+    const tone = job.status === "failed" ? "error" : job.status === "completed" ? "success" : "loading";
+    status.innerHTML = `
+        <div class="info-box ${tone}">
+            <div class="status-title">Job ${escapeHtml(job.job_id)}: ${escapeHtml(job.status)}</div>
+            <div class="meta-line">Tiến độ: ${progress}% | Số tệp: ${escapeHtml(job.file_count || 0)}</div>
+            ${job.error ? `<div class="detail-block"><strong>Lỗi</strong><ul><li>${escapeHtml(job.error)}</li></ul></div>` : ""}
+        </div>
+    `;
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function pollUploadJob(jobId) {
+    while (true) {
+        const response = await fetch(`/upload/status/${encodeURIComponent(jobId)}`);
+        const job = await response.json();
+        renderJobStatus(job);
+
+        if (job.status === "completed") {
+            renderResult(job.result || {});
+            return job;
+        }
+        if (job.status === "failed" || job.status === "not_found") {
+            return job;
+        }
+        await delay(700);
+    }
+}
+
 function handleFiles(incomingList) {
     if (!incomingList || incomingList.length === 0) {
         selectedFiles = [];
@@ -186,11 +219,22 @@ uploadBtn.addEventListener("click", async () => {
             body: formData,
         });
         const result = await response.json();
-        renderResult(result);
 
         if (!response.ok || result.status === "error") {
+            renderResult(result);
             uploadBtn.disabled = false;
             return;
+        }
+
+        if (result.job_id && result.status === "queued") {
+            renderJobStatus(result);
+            const finalJob = await pollUploadJob(result.job_id);
+            if (finalJob.status !== "completed") {
+                uploadBtn.disabled = false;
+                return;
+            }
+        } else {
+            renderResult(result);
         }
 
         selectedFiles = [];

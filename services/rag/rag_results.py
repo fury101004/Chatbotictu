@@ -14,6 +14,7 @@ from services.rag.rag_corpus import _extract_relevant_snippet, _tokenize
 from services.rag.rag_types import CorpusDocument
 from services.content.web_knowledge_service import search_trusted_web_knowledge
 from services.content.web_search import search_web_ictu
+from services.reranker import rerank_langchain_documents
 
 
 _EMPTY_CONTEXT_SENTINELS = (DEFAULT_CONTEXT_TEXT, "")
@@ -36,9 +37,12 @@ def _build_result_from_documents(
     tool_name: Optional[str],
     route_name: str,
     mode: str,
+    query: Optional[str] = None,
     target_file: Optional[str] = None,
     context_max_chunks: Optional[int] = None,
 ) -> RAGResult:
+    if query:
+        documents = rerank_langchain_documents(query, documents)
     chunks = _documents_to_chunks(documents)
     limited_chunks = chunks[:context_max_chunks] if context_max_chunks is not None else chunks
 
@@ -130,6 +134,7 @@ def _build_web_search_result(message: str, route_name: str, tool_name: Optional[
         tool_name=tool_name,
         route_name=route_name,
         mode="web_search",
+        query=message,
     )
 
 
@@ -174,6 +179,7 @@ def _build_web_knowledge_result(message: str, route_name: str, tool_name: Option
         tool_name=tool_name,
         route_name=route_name,
         mode="web_knowledge_base",
+        query=message,
     )
 
 

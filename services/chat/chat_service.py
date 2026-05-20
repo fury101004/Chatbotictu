@@ -19,7 +19,9 @@ from services.chat.moderation_service import contains_swear, get_swear_response
 from services.chat.multilingual_service import chat_multilingual, get_current_language
 from services.chat.quick_reply_service import get_quick_response
 from services.content.web_knowledge_service import save_web_search_answer
+from services.eval_tracker import get_eval_tracker
 from services.llm.graph_service import RAGChatGraph
+from services.memory_store import get_default_memory_store, stable_session_id
 
 
 logger = logging.getLogger("chat_agent")
@@ -373,6 +375,7 @@ def _generate_answer(state: ChatGraphState) -> ChatGraphState:
         session_id=state["session_id"],
         rag_tool=state.get("rag_tool"),
         selected_model=state.get("selected_llm_model"),
+        memory_messages=state.get("persistent_memory", []),
     )
     response = _append_source_citations(response, state)
     state["response"] = response
@@ -515,12 +518,46 @@ def _build_chat_graph() -> RAGChatGraph:
 
 async def process_chat_message(message: str, session_id: str = "default", llm_model: str = "auto") -> dict:
     started_at = time.perf_counter()
+    memory_store = get_default_memory_store()
+    memory_key = stable_session_id(anonymous_id=session_id)
+    try:
+        persistent_memory = await memory_store.load(memory_key)
+    except Exception as exc:
+        logger.warning("[chat_agent] persistent_memory_load_failed session=%s error=%s", session_id, exc)
+        persistent_memory = []
+
     state: ChatGraphState = {
         "message": message,
         "session_id": session_id,
         "selected_llm_model": llm_model,
+        "persistent_memory": persistent_memory,
     }
     state = _build_chat_graph().invoke(state)
     response_time_ms = int((time.perf_counter() - started_at) * 1000)
     state["response_time_ms"] = response_time_ms
+    try:
+        response = str(state.get("response") or "")
+        if message and response:
+            updated_memory = [
+                *persistent_memory,
+                {"role": "user", "content": str(message)},
+                {"role": "model", "content": response},
+            ][-40:]
+            await memory_store.save(memory_key, updated_memory)
+    except Exception as exc:
+        logger.warning("[chat_agent] persistent_memory_save_failed session=%s error=%s", session_id, exc)
+
+    try:
+        sources = state.get("sources", [])
+        await get_eval_tracker().log_response(
+            query=message,
+            answer_length=len(str(state.get("response") or "")),
+            sources_returned=len(sources),
+            latency_ms=response_time_ms,
+            has_sources=bool(sources),
+            user_thumbs_up=None,
+        )
+    except Exception as exc:
+        logger.warning("[chat_agent] eval_log_failed session=%s error=%s", session_id, exc)
+
     return build_chat_response_payload(state, response_time_ms=response_time_ms)

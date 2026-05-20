@@ -58,10 +58,12 @@
         <div class="input-section">
             <div class="input-container">
                 <form id="chatForm" class="message-form">
+                    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
                     <div class="input-wrapper">
                         <textarea 
                             id="userInput" 
                             rows="1"
+                            maxlength="{{ max_chat_message_chars }}"
                             placeholder="Hỏi mình đi..." 
                             autocomplete="off" 
                             autofocus
@@ -111,7 +113,7 @@
                     </div>
                     <div class="input-footer">
                         <span class="hint-text">Enter để gửi, Shift+Enter để xuống dòng</span>
-                        <span id="charCount" class="char-count">0/1000</span>
+                        <span id="charCount" class="char-count">0/{{ max_chat_message_chars }}</span>
                     </div>
                 </form>
             </div>
@@ -124,6 +126,7 @@
 const CHAT_STORAGE_SCOPE = "{{ current_role if is_authenticated else 'guest' }}";
 const CHAT_STATE_KEY = `ictu-dashboard-chat-state:${CHAT_STORAGE_SCOPE}`;
 const CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:${CHAT_STORAGE_SCOPE}`;
+const MAX_CHAT_MESSAGE_CHARS = Number("{{ max_chat_message_chars|default(2000) }}");
 let activeChatSessionId = "";
 
 function createChatSessionId() {
@@ -532,6 +535,7 @@ document.getElementById("chatForm").onsubmit = async (e) => {
                 message: msg,
                 llm_model: modelState.value,
                 session_id: activeChatSessionId || "default",
+                csrf_token: document.getElementById("csrfToken")?.value || "",
             })
         });
         const data = await res.json();
@@ -559,11 +563,11 @@ document.getElementById("chatForm").onsubmit = async (e) => {
 // Character counter
 function updateCharCount(length) {
     const charCount = document.getElementById('charCount');
-    charCount.textContent = `${length}/1000`;
+    charCount.textContent = `${length}/${MAX_CHAT_MESSAGE_CHARS}`;
     
-    if (length > 900) {
+    if (length > MAX_CHAT_MESSAGE_CHARS * 0.9) {
         charCount.style.color = 'var(--danger-color)';
-    } else if (length > 700) {
+    } else if (length > MAX_CHAT_MESSAGE_CHARS * 0.7) {
         charCount.style.color = 'var(--warning-color)';
     } else {
         charCount.style.color = '';

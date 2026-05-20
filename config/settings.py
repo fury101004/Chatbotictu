@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     API_RATE_CHAT: str = "100/minute"
     API_RATE_UPLOAD: str = "10/hour"
     API_RATE_ADMIN: str = "10/minute"
+    API_RATE_TOKEN: str = "20/minute"
+
+    MAX_CHAT_MESSAGE_CHARS: int = 2000
+    MAX_CHAT_SESSION_ID_CHARS: int = 128
+    MAX_UPLOAD_FILES: int = 20
+    MAX_UPLOAD_FILE_SIZE_BYTES: int = 10 * 1024 * 1024
+    MAX_UPLOAD_BATCH_SIZE_BYTES: int = 50 * 1024 * 1024
 
     PROJECT_ROOT: Path = PROJECT_ROOT
     DATA_DIR: Path = Path("data")

@@ -3,13 +3,34 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+
+from config.settings import settings
+
+
+MAX_CHAT_MESSAGE_CHARS = settings.MAX_CHAT_MESSAGE_CHARS
+MAX_CHAT_SESSION_ID_CHARS = settings.MAX_CHAT_SESSION_ID_CHARS
+MAX_CHAT_MODEL_CHARS = 120
 
 
 class ChatRequest(BaseModel):
-    message: str
-    session_id: str = "default"
-    llm_model: Optional[str] = None
+    message: str = Field(..., min_length=1, max_length=MAX_CHAT_MESSAGE_CHARS)
+    session_id: str = Field(default="default", max_length=MAX_CHAT_SESSION_ID_CHARS)
+    llm_model: Optional[str] = Field(default=None, max_length=MAX_CHAT_MODEL_CHARS)
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            raise ValueError("message must not be blank")
+        return cleaned
+
+    @field_validator("session_id")
+    @classmethod
+    def normalize_session_id(cls, value: str) -> str:
+        cleaned = str(value or "").strip()
+        return cleaned or "default"
 
 
 class ChatResponse(BaseModel):
@@ -69,6 +90,7 @@ class ChatGraphState(TypedDict, total=False):
     rag_route: str
     llm_model: str
     selected_llm_model: str
+    persistent_memory: list[dict[str, str]]
     web_kb_status: dict[str, Any]
     qa_review_status: str
     qa_review_entry_id: str

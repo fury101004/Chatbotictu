@@ -458,6 +458,7 @@ def _build_general_fallback_result(
             tool_name=tool_name or runtime.fallback_rag_node,
             route_name=route_name,
             mode="lexical_fallback",
+            query=message,
         )
 
         if flow_plan.source == RETRIEVAL_WEB_SEARCH:
@@ -546,6 +547,7 @@ def retrieve_tool_context(
         tool_name=tool_name,
         route_name=planned_route_name,
         mode=tool_name,
+        query=message,
     )
 
     if flow_plan.source == RETRIEVAL_WEB_SEARCH:
@@ -622,6 +624,7 @@ def retrieve_fallback_context(
         tool_name=runtime.fallback_rag_node,
         route_name=planned_route_name,
         mode="multi_tool_fallback_rag",
+        query=message,
     )
 
     if flow_plan.source == RETRIEVAL_WEB_SEARCH:
@@ -709,6 +712,7 @@ def retrieve_general_context(
         tool_name=tool_name,
         route_name=planned_route_name,
         mode=mode,
+        query=query_for_retrieval,
         target_file=target_file,
         context_max_chunks=25,
     )

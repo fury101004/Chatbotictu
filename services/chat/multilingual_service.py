@@ -155,6 +155,23 @@ def _session_history_to_lc_messages(history: list[dict[str, str]]):
     return messages
 
 
+def _merge_memory_history(
+    persistent_memory: Optional[list[dict[str, str]]],
+    session_history: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    merged: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in [*(persistent_memory or []), *session_history]:
+        role = str(item.get("role") or "").strip()
+        content = str(item.get("content") or "").strip()
+        key = (role, content)
+        if not role or not content or key in seen:
+            continue
+        seen.add(key)
+        merged.append({"role": role, "content": content})
+    return merged[-20:]
+
+
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
 _THINK_TAG_RE = re.compile(r"</?think>", flags=re.IGNORECASE)
 
@@ -267,6 +284,7 @@ def chat_multilingual(
     session_id: str,
     rag_tool: Optional[str] = None,
     selected_model: Optional[str] = None,
+    memory_messages: Optional[list[dict[str, str]]] = None,
 ) -> tuple[str, Optional[str]]:
     _get_session(session_id)
 
@@ -312,7 +330,9 @@ def chat_multilingual(
         user_question,
         rag_tool=rag_tool,
     )
-    history_messages = _session_history_to_lc_messages(get_session_history(session_id))
+    history_messages = _session_history_to_lc_messages(
+        _merge_memory_history(memory_messages, get_session_history(session_id))
+    )
 
     if get_model() is None:
         reply = (
@@ -366,4 +386,3 @@ def chat_multilingual(
         else "I'm checking the documents again. Please try asking again in a moment."
     )
     return fallback_reply, "llm:error"
-

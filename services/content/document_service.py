@@ -76,6 +76,24 @@ async def upload_markdown_files(
 ) -> dict:
     selected_tool = _normalize_tool_name(tool_name)
     upload_dir = get_tool_upload_dir(selected_tool)
+    file_list = list(files or [])
+
+    if len(file_list) > settings.MAX_UPLOAD_FILES:
+        return UploadBatchResult(
+            status="error",
+            failed=len(file_list),
+            msg=(
+                f"Too many files. Maximum is {settings.MAX_UPLOAD_FILES} files per upload batch."
+            ),
+            tool_name=selected_tool,
+            detail={
+                "added": [],
+                "updated": [],
+                "failed": [f"batch -> too many files ({len(file_list)}/{settings.MAX_UPLOAD_FILES})"],
+                "indexed": [],
+                "warnings": [],
+            },
+        ).to_dict()
 
     t0 = time.time()
     total_upload_size = 0
@@ -97,7 +115,7 @@ async def upload_markdown_files(
 
     existing_sources = _existing_uploaded_sources()
 
-    for file in files:
+    for file in file_list:
         filename = _sanitize_filename(getattr(file, "filename", ""))
         if not filename:
             failed_files.append("file_khong_hop_le -> thieu ten file")
@@ -114,6 +132,16 @@ async def upload_markdown_files(
         try:
             t_read = time.time()
             content = await file.read()
+            if len(content) > settings.MAX_UPLOAD_FILE_SIZE_BYTES:
+                failed_files.append(
+                    f"{filename} -> file too large; maximum is {settings.MAX_UPLOAD_FILE_SIZE_BYTES // (1024 * 1024)}MB"
+                )
+                continue
+            if total_upload_size + len(content) > settings.MAX_UPLOAD_BATCH_SIZE_BYTES:
+                failed_files.append(
+                    f"{filename} -> upload batch too large; maximum is {settings.MAX_UPLOAD_BATCH_SIZE_BYTES // (1024 * 1024)}MB"
+                )
+                continue
             total_upload_size += len(content)
             text = content.decode("utf-8", errors="ignore")
             read_speed = len(content) / max(time.time() - t_read, 1e-6) / 1024 / 1024

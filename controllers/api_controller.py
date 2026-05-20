@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -29,8 +30,10 @@ router_root = APIRouter(tags=["system"])
 
 @router_v1.post("/auth/token")
 @router_api.post("/auth/token")
-async def get_token(partner_key: str = Form(...)):
-    if partner_key != settings.PARTNER_API_KEY:
+@limiter.limit(settings.API_RATE_TOKEN)
+async def get_token(request: Request, partner_key: str = Form(...)):
+    del request
+    if not hmac.compare_digest(str(partner_key), settings.PARTNER_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid partner key")
     return build_token_response(create_partner_token())
 

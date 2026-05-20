@@ -52,6 +52,18 @@ def _login_as_user(client: TestClient) -> None:
     assert response.headers["location"] == "/chat"
 
 
+def _csrf_from_chat_page_text(page_text: str) -> str:
+    csrf_match = re.search(r'id="csrfToken" value="([^"]+)"', page_text)
+    assert csrf_match is not None
+    return csrf_match.group(1)
+
+
+def _csrf_from_chat_page(client: TestClient) -> str:
+    chat_page = client.get("/chat")
+    assert chat_page.status_code == 200
+    return _csrf_from_chat_page_text(chat_page.text)
+
+
 def _nav_html(page_text: str) -> str:
     start = page_text.find('<header class="navbar"')
     end = page_text.find("</header>")
@@ -185,6 +197,18 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json().get("msg"), "CSRF Invalid!")
 
+    def test_chat_rejects_invalid_csrf(self) -> None:
+        client = TestClient(main.app)
+        _login_as_user(client)
+
+        response = client.post(
+            "/chat",
+            data={"message": "Xin chao", "session_id": "default", "csrf_token": "invalid"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json().get("detail"), "CSRF Invalid!")
+
     def test_update_config_rejects_invalid_csrf(self) -> None:
         client = TestClient(main.app)
         response = client.post(
@@ -222,10 +246,10 @@ class ChatSessionIsolationTests(unittest.TestCase):
             _login_as_user(client_a)
             _login_as_user(client_b)
 
-            client_a.get("/chat")
-            client_b.get("/chat")
-            client_a.post("/chat", data={"message": "A", "session_id": "default"})
-            client_b.post("/chat", data={"message": "B", "session_id": "default"})
+            csrf_a = _csrf_from_chat_page(client_a)
+            csrf_b = _csrf_from_chat_page(client_b)
+            client_a.post("/chat", data={"message": "A", "session_id": "default", "csrf_token": csrf_a})
+            client_b.post("/chat", data={"message": "B", "session_id": "default", "csrf_token": csrf_b})
 
         session_a = mock_chat.await_args_list[0].args[1]
         session_b = mock_chat.await_args_list[1].args[1]

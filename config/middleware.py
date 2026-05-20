@@ -215,7 +215,12 @@ def register_middleware(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_exception_handler(Exception, _unhandled_exception_handler)
     app.add_middleware(SlowAPIMiddleware)
-    app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.SESSION_SECRET,
+        same_site="lax",
+        https_only=settings.is_production,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
@@ -224,4 +229,3 @@ def register_middleware(app: FastAPI) -> None:
         allow_headers=["*"],
     )
     app.add_middleware(LoggingMiddleware)
-

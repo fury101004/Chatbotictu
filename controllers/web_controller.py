@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from urllib.parse import quote_plus
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from config.limiter import limiter
 from config.rag_tools import DEFAULT_RAG_TOOL, get_upload_tool_options
 from config.settings import settings
 from config.system_prompt import get_system_prompt
+from models.chat import MAX_CHAT_MESSAGE_CHARS, MAX_CHAT_MODEL_CHARS, MAX_CHAT_SESSION_ID_CHARS
 from shared.web_session import ensure_csrf_token, resolve_chat_session_id, rotate_csrf_token, validate_csrf_token
 from services.chat.chat_service import process_chat_message
 from services.admin_auth_service import (
@@ -32,9 +33,10 @@ from services.content.document_service import (
     upload_markdown_files,
 )
 from services.content.knowledge_base_service import approve_chat_entry, get_knowledge_base_payload, reject_chat_entry
+from services.ingestion_queue import get_ingestion_queue
 from services.llm.llm_service import get_chat_model_options
 from services.vector.vector_admin_service import delete_chunk_by_id
-from views.web_view import current_prompt_response, json_upload_result, render_page, redirect_vector_manager, unauthorized_response
+from views.web_view import current_prompt_response, render_page, redirect_vector_manager, unauthorized_response
 
 router = APIRouter()
 
@@ -88,6 +90,36 @@ def _login_page_context(request: Request, next_path: str, error: str = "") -> di
         "next_path": _safe_next_path(next_path),
         "error": error,
     }
+
+
+def _chat_payload_error(message: str, session_id: str, llm_model: str):
+    if not str(message or "").strip():
+        return JSONResponse({"status": "error", "detail": "Message is required."}, status_code=422)
+    if len(message) > MAX_CHAT_MESSAGE_CHARS:
+        return JSONResponse(
+            {
+                "status": "error",
+                "detail": f"Message is too long. Maximum is {MAX_CHAT_MESSAGE_CHARS} characters.",
+            },
+            status_code=400,
+        )
+    if len(str(session_id or "")) > MAX_CHAT_SESSION_ID_CHARS:
+        return JSONResponse(
+            {
+                "status": "error",
+                "detail": f"Session id is too long. Maximum is {MAX_CHAT_SESSION_ID_CHARS} characters.",
+            },
+            status_code=422,
+        )
+    if len(str(llm_model or "")) > MAX_CHAT_MODEL_CHARS:
+        return JSONResponse(
+            {
+                "status": "error",
+                "detail": f"LLM model value is too long. Maximum is {MAX_CHAT_MODEL_CHARS} characters.",
+            },
+            status_code=422,
+        )
+    return None
 
 
 async def _submit_login(
@@ -194,7 +226,11 @@ async def chat_page(request: Request):
     return render_page(
         request,
         CHAT_TEMPLATE,
-        context={"chat_model_options": get_chat_model_options()},
+        context={
+            "chat_model_options": get_chat_model_options(),
+            "csrf_token": ensure_csrf_token(request),
+            "max_chat_message_chars": MAX_CHAT_MESSAGE_CHARS,
+        },
     )
 
 
@@ -205,10 +241,16 @@ async def chat_web(
     message: str = Form(...),
     session_id: str = Form("default"),
     llm_model: str = Form("auto"),
+    csrf_token: str = Form(""),
 ):
     login_response = _login_required(request)
     if login_response is not None:
         return login_response
+    if not validate_csrf_token(request, csrf_token):
+        return JSONResponse({"status": "error", "detail": "CSRF Invalid!"}, status_code=403)
+    payload_error = _chat_payload_error(message, session_id, llm_model)
+    if payload_error is not None:
+        return payload_error
     current_session_id = resolve_chat_session_id(request, session_id)
 
     result = await process_chat_message(message, current_session_id, llm_model=llm_model)
@@ -275,6 +317,7 @@ async def upload_page_alias(request: Request):
 @limiter.limit(settings.API_RATE_UPLOAD)
 async def upload_files(
     request: Request,
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     tool_name: str = Form(DEFAULT_RAG_TOOL),
     client_start_time: float = Form(None),
@@ -287,13 +330,34 @@ async def upload_files(
     if admin_response is not None:
         return admin_response
 
-    result = await upload_markdown_files(
+    result = await get_ingestion_queue().enqueue_upload(
         files=files,
         tool_name=tool_name,
+        processor=upload_markdown_files,
+        background_tasks=background_tasks,
         client_start_time=client_start_time,
         client_total_size=client_total_size,
     )
-    return json_upload_result(result)
+    return JSONResponse(result)
+
+
+@router.get("/upload/status/{job_id}")
+async def upload_job_status(request: Request, job_id: str):
+    admin_response = _admin_required_json(request)
+    if admin_response is not None:
+        return admin_response
+    return JSONResponse(get_ingestion_queue().get_status(job_id))
+
+
+@router.get("/upload/progress/{job_id}")
+async def upload_job_progress(request: Request, job_id: str):
+    admin_response = _admin_required_json(request)
+    if admin_response is not None:
+        return admin_response
+    return StreamingResponse(
+        get_ingestion_queue().sse_events(job_id),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/import-qa-corpus")
