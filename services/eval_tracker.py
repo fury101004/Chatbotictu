@@ -96,6 +96,41 @@ class EvalTracker:
             "failing_queries": [str(item["query"]) for item in failing_rows],
         }
 
+    async def logs(self, *, limit: int = 500) -> list[dict[str, Any]]:
+        await self._ensure_schema()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            rows = await (
+                await db.execute(
+                    """
+                    SELECT id, timestamp, query, answer_length, sources_returned,
+                           latency_ms, has_sources, user_thumbs_up
+                    FROM eval_log
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                    """,
+                    (int(limit),),
+                )
+            ).fetchall()
+
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            has_sources = bool(row["has_sources"])
+            sources_returned = int(row["sources_returned"] or 0)
+            result.append(
+                {
+                    "id": int(row["id"]),
+                    "timestamp": str(row["timestamp"]),
+                    "question": str(row["query"] or ""),
+                    "answer": "",
+                    "retrievedChunks": [f"{sources_returned} nguồn truy xuất"] if has_sources else [],
+                    "latencyMs": int(row["latency_ms"] or 0),
+                    "relevanceScore": 0.75 if has_sources else 0,
+                    "sourceDocument": "RAG vector store" if has_sources else "",
+                }
+            )
+        return result
+
     async def export_csv(self) -> str:
         await self._ensure_schema()
         output = io.StringIO()
@@ -151,4 +186,3 @@ class EvalTracker:
 @lru_cache(maxsize=1)
 def get_eval_tracker() -> EvalTracker:
     return EvalTracker()
-

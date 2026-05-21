@@ -7,8 +7,21 @@ from config.db import get_chat_history as _get_chat_history
 from config.db import get_conn, save_message as _save_message
 
 
-def save_conversation_message(role: str, content: str, *, session_id: str = "default") -> int:
-    return _save_message(role, content, session_id=session_id)
+def save_conversation_message(
+    role: str,
+    content: str,
+    *,
+    session_id: str = "default",
+    owner_username: str = "",
+    owner_role: str = "",
+) -> int:
+    return _save_message(
+        role,
+        content,
+        session_id=session_id,
+        owner_username=owner_username,
+        owner_role=owner_role,
+    )
 
 
 def load_chat_history(session_id: str = "default") -> list[dict[str, str]]:
@@ -20,11 +33,50 @@ def _chat_history_has_session_id(cursor) -> bool:
     return "session_id" in [column[1] for column in cursor.fetchall()]
 
 
-def list_chat_history_rows() -> list[dict[str, Any]]:
+def _chat_history_columns(cursor) -> list[str]:
+    cursor.execute("PRAGMA table_info(chat_history)")
+    return [column[1] for column in cursor.fetchall()]
+
+
+def list_chat_history_rows(*, owner_username: str | None = None) -> list[dict[str, Any]]:
     conn = get_conn()
     cursor = conn.cursor()
+    columns = set(_chat_history_columns(cursor))
+    has_session_id = "session_id" in columns
+    has_owner = "owner_username" in columns
+    has_owner_role = "owner_role" in columns
+    owner_filter = str(owner_username or "").strip() if owner_username is not None else None
+    where_clause = ""
+    params: tuple[str, ...] = ()
+    if owner_filter is not None and has_owner:
+        where_clause = "WHERE owner_username = ?"
+        params = (owner_filter,)
 
-    if _chat_history_has_session_id(cursor):
+    if has_session_id and has_owner:
+        owner_role_expr = "COALESCE(owner_role, '')" if has_owner_role else "''"
+        cursor.execute(
+            f"""
+            SELECT id, role, content, timestamp, session_id,
+                   COALESCE(owner_username, ''), {owner_role_expr}
+            FROM chat_history
+            {where_clause}
+            ORDER BY id ASC
+            """,
+            params,
+        )
+        rows = [
+            {
+                "id": row_id,
+                "role": role,
+                "content": content or "",
+                "timestamp": timestamp or "",
+                "session_id": session_id or "default",
+                "owner_username": owner_username or "",
+                "owner_role": owner_role or "",
+            }
+            for row_id, role, content, timestamp, session_id, owner_username, owner_role in cursor.fetchall()
+        ]
+    elif has_session_id:
         cursor.execute(
             """
             SELECT id, role, content, timestamp, session_id
@@ -39,6 +91,8 @@ def list_chat_history_rows() -> list[dict[str, Any]]:
                 "content": content or "",
                 "timestamp": timestamp or "",
                 "session_id": session_id or "default",
+                "owner_username": "",
+                "owner_role": "",
             }
             for row_id, role, content, timestamp, session_id in cursor.fetchall()
         ]
@@ -57,6 +111,8 @@ def list_chat_history_rows() -> list[dict[str, Any]]:
                 "content": content or "",
                 "timestamp": timestamp or "",
                 "session_id": "default",
+                "owner_username": "",
+                "owner_role": "",
             }
             for row_id, role, content, timestamp in cursor.fetchall()
         ]
@@ -65,22 +121,70 @@ def list_chat_history_rows() -> list[dict[str, Any]]:
     return rows
 
 
-def get_chat_history_page(*, page: int, per_page: int = 50) -> dict[str, Any]:
+def get_chat_history_page(
+    *,
+    page: int,
+    per_page: int = 50,
+    owner_username: str | None = None,
+) -> dict[str, Any]:
     offset = max(page - 1, 0) * per_page
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM chat_history")
+    columns = set(_chat_history_columns(cursor))
+    has_session_id = "session_id" in columns
+    has_owner = "owner_username" in columns
+    has_owner_role = "owner_role" in columns
+    owner_filter = str(owner_username or "").strip() if owner_username is not None else None
+    where_clause = ""
+    params: tuple[Any, ...] = ()
+    if owner_filter is not None and has_owner:
+        where_clause = "WHERE owner_username = ?"
+        params = (owner_filter,)
+
+    cursor.execute(f"SELECT COUNT(*) FROM chat_history {where_clause}", params)
     total = int(cursor.fetchone()[0] or 0)
     total_pages = max(1, (total + per_page - 1) // per_page)
-    cursor.execute(
-        "SELECT role, content, timestamp FROM chat_history ORDER BY id DESC LIMIT ? OFFSET ?",
-        (per_page, offset),
-    )
+    if has_session_id and has_owner:
+        owner_role_expr = "COALESCE(owner_role, '')" if has_owner_role else "''"
+        cursor.execute(
+            f"""
+            SELECT role, content, timestamp, session_id,
+                   COALESCE(owner_username, ''), {owner_role_expr}
+            FROM chat_history
+            {where_clause}
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (*params, per_page, offset),
+        )
+    elif has_session_id:
+        cursor.execute(
+            """
+            SELECT role, content, timestamp, session_id
+            FROM chat_history
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (per_page, offset),
+        )
+    else:
+        cursor.execute(
+            "SELECT role, content, timestamp FROM chat_history ORDER BY id DESC LIMIT ? OFFSET ?",
+            (per_page, offset),
+        )
     rows = cursor.fetchall()
     conn.close()
 
     history_rows: list[dict[str, str]] = []
-    for role, content, timestamp in rows:
+    for row in rows:
+        if has_session_id and has_owner:
+            role, content, timestamp, session_id, row_owner_username, row_owner_role = row
+        elif has_session_id:
+            role, content, timestamp, session_id = row
+            row_owner_username, row_owner_role = "", ""
+        else:
+            role, content, timestamp = row
+            session_id, row_owner_username, row_owner_role = "default", "", ""
         try:
             time_str = datetime.strptime(str(timestamp or "").split(".")[0], "%Y-%m-%d %H:%M:%S").strftime("%d/%m %H:%M")
         except Exception:
@@ -90,6 +194,9 @@ def get_chat_history_page(*, page: int, per_page: int = 50) -> dict[str, Any]:
                 "role": str(role or ""),
                 "content": str(content or ""),
                 "time": time_str,
+                "session_id": str(session_id or "default"),
+                "owner_username": str(row_owner_username or ""),
+                "owner_role": str(row_owner_role or ""),
             }
         )
 

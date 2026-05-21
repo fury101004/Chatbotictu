@@ -72,6 +72,8 @@ class ChatKnowledgeEntry:
     time_label: str
     preview: str
     content: str
+    owner_username: str = ""
+    owner_role: str = ""
     is_approved: bool = False
     review_status: str = "unreviewed"
     review_reason: str = ""
@@ -394,6 +396,8 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
             "answer": item.answer,
             "preview": item.preview,
             "time_label": item.time_label,
+            "owner_username": item.owner_username,
+            "owner_role": item.owner_role,
             "is_approved": item.is_approved,
             "review_status": item.review_status,
             "review_reason": item.review_reason,

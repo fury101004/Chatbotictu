@@ -50,6 +50,9 @@ NAV_ICONS: dict[str, str] = {
         '<path d="M3 3v6h6"></path>'
         '<path d="M12 7v5l3 2"></path>'
     ),
+    "activity": _icon_svg(
+        '<path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>'
+    ),
     "log-out": _icon_svg(
         '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>'
         '<path d="M16 17l5-5-5-5"></path>'
@@ -87,11 +90,13 @@ ADMIN_MENU_CONFIG = (
         "active_paths": ("/knowledge-base", "/knowledge"),
     },
     {"label": "Cấu hình", "path": "/config", "icon": "settings", "active_paths": ("/config", "/settings")},
+    {"label": "Đánh giá", "path": "/evaluation-dashboard", "icon": "activity", "active_paths": ("/evaluation-dashboard",)},
     {"label": "Lịch sử chat", "path": "/history", "icon": "history", "active_paths": ("/history",)},
 )
 
 USER_MENU_CONFIG = (
     {"label": "Trò chuyện", "path": "/chat", "icon": "message-circle", "active_paths": ("/chat",)},
+    {"label": "Lịch sử chat", "path": "/history", "icon": "history", "active_paths": ("/history",)},
 )
 
 

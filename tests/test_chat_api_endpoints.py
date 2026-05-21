@@ -85,7 +85,16 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("services.chat.chat_service.route_rag_tool", return_value=("student_handbook_rag", "router_handbook")),
             patch("services.chat.chat_service.retrieve_tool_context", return_value=rag_result),
-            patch("services.chat.chat_service.chat_multilingual", return_value=("Dieu kien tot nghiep can du tin chi.", "local:test")),
+            patch(
+                "services.chat.chat_service.chat_multilingual",
+                return_value=(
+                    "Dieu kien tot nghiep can du tin chi.\n\n"
+                    "---\n"
+                    "📚 Nguồn tham khảo:\n"
+                    "- student_handbooks/2025.md",
+                    "local:test",
+                ),
+            ),
             patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
             patch("services.content.knowledge_base_service.mark_chat_entry_pending") as pending_mock,
             patch("services.chat.chat_service.append_retrieval_memory"),
@@ -94,6 +103,8 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["qa_review_status"], "pending")
         self.assertEqual(result["qa_review_entry_id"], "chat::review-1::2")
+        self.assertEqual(result["response"], "Dieu kien tot nghiep can du tin chi.")
+        self.assertEqual(result["sources"], ["student_handbooks/2025.md"])
         pending_mock.assert_called_once()
 
 

@@ -69,6 +69,8 @@ def pair_chat_rows(
                 time_label=display_timestamp(timestamp),
                 preview=preview,
                 content=f"Q: {question}\nA: {answer}",
+                owner_username=str(row.get("owner_username") or pending.get("owner_username") or ""),
+                owner_role=str(row.get("owner_role") or pending.get("owner_role") or ""),
             )
         )
 
@@ -221,6 +223,8 @@ def group_chat_entries(entries: list[Any], *, limit_per_session: int = 6) -> lis
         session_groups.append(
             {
                 "session_id": session_id,
+                "owner_username": getattr(sorted_items[0], "owner_username", "") if sorted_items else "",
+                "owner_role": getattr(sorted_items[0], "owner_role", "") if sorted_items else "",
                 "pair_count": len(sorted_items),
                 "latest_time": sorted_items[0].time_label if sorted_items else "",
                 "latest_timestamp": sorted_items[0].timestamp if sorted_items else "",
@@ -231,6 +235,8 @@ def group_chat_entries(entries: list[Any], *, limit_per_session: int = 6) -> lis
                         "answer": item.answer,
                         "preview": item.preview,
                         "time_label": item.time_label,
+                        "owner_username": getattr(item, "owner_username", ""),
+                        "owner_role": getattr(item, "owner_role", ""),
                         "is_approved": item.is_approved,
                         "review_status": getattr(item, "review_status", "unreviewed"),
                         "review_reason": getattr(item, "review_reason", ""),

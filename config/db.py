@@ -32,9 +32,23 @@ def _ensure_chat_history_schema(cursor: sqlite3.Cursor) -> None:
         cursor.execute(
             "ALTER TABLE chat_history ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default'"
         )
+        columns.append("session_id")
+    if "owner_username" not in columns:
+        cursor.execute(
+            "ALTER TABLE chat_history ADD COLUMN owner_username TEXT NOT NULL DEFAULT ''"
+        )
+        columns.append("owner_username")
+    if "owner_role" not in columns:
+        cursor.execute(
+            "ALTER TABLE chat_history ADD COLUMN owner_role TEXT NOT NULL DEFAULT ''"
+        )
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_chat_history_session_id_id "
         "ON chat_history(session_id, id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chat_history_owner_id "
+        "ON chat_history(owner_username, id)"
     )
 
 
@@ -56,6 +70,27 @@ def _ensure_chat_qa_review_schema(cursor: sqlite3.Cursor) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_chat_qa_review_status_updated
         ON chat_qa_review(status, updated_at)
+        """
+    )
+
+
+def _ensure_web_users_schema(cursor: sqlite3.Cursor) -> None:
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS web_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user',
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_web_users_username
+        ON web_users(username COLLATE NOCASE)
         """
     )
 
@@ -112,6 +147,7 @@ def init_db() -> None:
         """
     )
     _ensure_chat_qa_review_schema(cursor)
+    _ensure_web_users_schema(cursor)
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS web_search_knowledge (
@@ -180,17 +216,91 @@ def set_config(key: str, value: str) -> None:
     conn.close()
 
 
-def _chat_history_has_session_id(cursor: sqlite3.Cursor) -> bool:
-    cursor.execute("PRAGMA table_info(chat_history)")
-    columns = [column[1] for column in cursor.fetchall()]
-    return "session_id" in columns
-
-
-def save_message(role: str, content: str, session_id: str = "default") -> int:
+def get_web_user_by_username(username: str) -> Dict[str, str] | None:
     conn = get_conn()
     cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, full_name, username, password_hash, role, created_at
+        FROM web_users
+        WHERE username = ? COLLATE NOCASE
+        LIMIT 1
+        """,
+        (str(username or "").strip(),),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    user_id, full_name, stored_username, password_hash, role, created_at = row
+    return {
+        "id": str(user_id),
+        "full_name": str(full_name or ""),
+        "username": str(stored_username or ""),
+        "password_hash": str(password_hash or ""),
+        "role": str(role or "user"),
+        "created_at": str(created_at or ""),
+    }
 
-    if _chat_history_has_session_id(cursor):
+
+def add_web_user(full_name: str, username: str, password_hash: str, role: str = "user") -> int:
+    conn = get_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO web_users (full_name, username, password_hash, role)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                str(full_name or "").strip(),
+                str(username or "").strip(),
+                str(password_hash or ""),
+                str(role or "user").strip().lower() or "user",
+            ),
+        )
+        row_id = cursor.lastrowid or 0
+        conn.commit()
+        return int(row_id)
+    finally:
+        conn.close()
+
+
+def _chat_history_columns(cursor: sqlite3.Cursor) -> list[str]:
+    cursor.execute("PRAGMA table_info(chat_history)")
+    return [column[1] for column in cursor.fetchall()]
+
+
+def _chat_history_has_session_id(cursor: sqlite3.Cursor) -> bool:
+    return "session_id" in _chat_history_columns(cursor)
+
+
+def save_message(
+    role: str,
+    content: str,
+    session_id: str = "default",
+    owner_username: str = "",
+    owner_role: str = "",
+) -> int:
+    conn = get_conn()
+    cursor = conn.cursor()
+    columns = set(_chat_history_columns(cursor))
+
+    if {"session_id", "owner_username", "owner_role"}.issubset(columns):
+        cursor.execute(
+            """
+            INSERT INTO chat_history (role, content, session_id, owner_username, owner_role)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                role,
+                content,
+                session_id,
+                str(owner_username or "").strip(),
+                str(owner_role or "").strip().lower(),
+            ),
+        )
+    elif "session_id" in columns:
         cursor.execute(
             "INSERT INTO chat_history (role, content, session_id) VALUES (?, ?, ?)",
             (role, content, session_id),

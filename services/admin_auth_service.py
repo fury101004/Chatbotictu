@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hmac
+import sqlite3
 from urllib.parse import quote_plus
 
+import bcrypt
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
+from config.db import add_web_user, get_web_user_by_username
 from config.settings import settings
 
 
@@ -18,6 +22,15 @@ AUTH_ROLE_KEY = "web_role"
 
 ADMIN_ROLE = "admin"
 USER_ROLES = {"user", "student"}
+DEFAULT_REGISTERED_ROLE = "user"
+MIN_REGISTER_PASSWORD_LENGTH = 6
+
+
+@dataclass(frozen=True)
+class RegistrationResult:
+    ok: bool
+    message: str
+    code: str = "ok"
 
 
 def normalize_role(role: str | None) -> str:
@@ -36,6 +49,14 @@ def get_current_role(request: Request) -> str:
     if request.session.get(ADMIN_SESSION_KEY) and not request.session.get(AUTH_ROLE_KEY):
         return ADMIN_ROLE
     return normalize_role(request.session.get(AUTH_ROLE_KEY) or request.session.get(ADMIN_ROLE_KEY))
+
+
+def get_current_username(request: Request) -> str:
+    if request.session.get(AUTH_SESSION_KEY):
+        return str(request.session.get(AUTH_USER_KEY) or "").strip()
+    if request.session.get(ADMIN_SESSION_KEY):
+        return str(request.session.get(ADMIN_USER_KEY) or "").strip()
+    return ""
 
 
 def is_web_authenticated(request: Request) -> bool:
@@ -60,12 +81,73 @@ def authenticate_user(username: str, password: str) -> bool:
     )
 
 
+def _normalize_username(username: str | None) -> str:
+    return str(username or "").strip()
+
+
+def _configured_account_exists(username: str) -> bool:
+    normalized = _normalize_username(username).lower()
+    return normalized in {
+        settings.ADMIN_USERNAME.strip().lower(),
+        settings.USER_USERNAME.strip().lower(),
+    }
+
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except (TypeError, ValueError):
+        return False
+
+
 def authenticate_web_user(username: str, password: str) -> str | None:
     if authenticate_admin(username, password):
         return ADMIN_ROLE
     if authenticate_user(username, password):
         return normalize_role(settings.USER_ROLE)
+    stored_user = get_web_user_by_username(username)
+    if stored_user and _verify_password(password, stored_user["password_hash"]):
+        role = normalize_role(stored_user.get("role"))
+        return role if role in USER_ROLES else DEFAULT_REGISTERED_ROLE
     return None
+
+
+def register_web_user(full_name: str, username: str, password: str, confirm_password: str) -> RegistrationResult:
+    cleaned_full_name = str(full_name or "").strip()
+    cleaned_username = _normalize_username(username)
+    raw_password = str(password or "")
+    raw_confirm = str(confirm_password or "")
+
+    if not cleaned_full_name or not cleaned_username or not raw_password or not raw_confirm:
+        return RegistrationResult(False, "Vui lòng nhập đầy đủ thông tin bắt buộc.", "missing_fields")
+    if raw_password != raw_confirm:
+        return RegistrationResult(False, "Mật khẩu không khớp.", "password_mismatch")
+    if len(raw_password) < MIN_REGISTER_PASSWORD_LENGTH:
+        return RegistrationResult(
+            False,
+            f"Mật khẩu phải có ít nhất {MIN_REGISTER_PASSWORD_LENGTH} ký tự.",
+            "weak_password",
+        )
+    if _configured_account_exists(cleaned_username) or get_web_user_by_username(cleaned_username):
+        return RegistrationResult(False, "Tài khoản đã tồn tại.", "duplicate")
+
+    try:
+        add_web_user(
+            full_name=cleaned_full_name,
+            username=cleaned_username,
+            password_hash=_hash_password(raw_password),
+            role=DEFAULT_REGISTERED_ROLE,
+        )
+    except sqlite3.IntegrityError:
+        return RegistrationResult(False, "Tài khoản đã tồn tại.", "duplicate")
+    except ValueError:
+        return RegistrationResult(False, "Mật khẩu không hợp lệ.", "invalid_password")
+
+    return RegistrationResult(True, "Đăng ký thành công. Vui lòng đăng nhập.")
 
 
 def login_with_role(request: Request, username: str, role: str) -> None:

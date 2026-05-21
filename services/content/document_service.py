@@ -383,7 +383,12 @@ def reingest_uploaded_documents() -> tuple[int, int]:
     )
 
 
-def get_history_page_data(page: int, per_page: int = 50) -> dict:
-    payload = get_chat_history_page(page=page, per_page=per_page)
-    payload["uploaded_files"] = get_uploaded_files()
+def get_history_page_data(
+    page: int,
+    per_page: int = 50,
+    owner_username: str | None = None,
+    include_uploaded_files: bool = True,
+) -> dict:
+    payload = get_chat_history_page(page=page, per_page=per_page, owner_username=owner_username)
+    payload["uploaded_files"] = get_uploaded_files() if include_uploaded_files else []
     return payload

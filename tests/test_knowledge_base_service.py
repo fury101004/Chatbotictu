@@ -19,8 +19,8 @@ from services.content.knowledge_base_service import (
 class ChatKnowledgePairingTests(unittest.TestCase):
     def test_pair_chat_rows_matches_user_and_bot_within_same_session(self) -> None:
         rows = [
-            {"id": 1, "role": "user", "content": "Hoc phi nam 2024 la gi?", "timestamp": "2026-04-09 10:00:00", "session_id": "alpha"},
-            {"id": 2, "role": "bot", "content": "Thong tin hoc phi dang duoc cap nhat.", "timestamp": "2026-04-09 10:00:05", "session_id": "alpha"},
+            {"id": 1, "role": "user", "content": "Hoc phi nam 2024 la gi?", "timestamp": "2026-04-09 10:00:00", "session_id": "alpha", "owner_username": "user-a"},
+            {"id": 2, "role": "bot", "content": "Thong tin hoc phi dang duoc cap nhat.", "timestamp": "2026-04-09 10:00:05", "session_id": "alpha", "owner_username": "user-a"},
             {"id": 3, "role": "user", "content": "Email sinh vien o dau?", "timestamp": "2026-04-09 10:01:00", "session_id": "beta"},
             {"id": 4, "role": "user", "content": "So tay 2021-2022 co gi?", "timestamp": "2026-04-09 10:01:30", "session_id": "alpha"},
             {"id": 5, "role": "assistant", "content": "So tay 2021-2022 co thong tin tong quan ve nha truong.", "timestamp": "2026-04-09 10:01:40", "session_id": "alpha"},
@@ -36,6 +36,7 @@ class ChatKnowledgePairingTests(unittest.TestCase):
         self.assertEqual(pairs[1].session_id, "alpha")
         self.assertEqual(pairs[1].question, "So tay 2021-2022 co gi?")
         self.assertEqual(pairs[2].question, "Hoc phi nam 2024 la gi?")
+        self.assertEqual(pairs[2].owner_username, "user-a")
 
     def test_pair_chat_rows_keeps_fifo_order_when_user_sends_multiple_messages(self) -> None:
         rows = [

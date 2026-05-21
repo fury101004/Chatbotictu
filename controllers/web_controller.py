@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import html
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 from config.limiter import limiter
 from config.rag_tools import DEFAULT_RAG_TOOL, get_upload_tool_options
@@ -17,10 +18,12 @@ from services.admin_auth_service import (
     authenticate_web_user,
     default_route_for_role,
     get_current_role,
+    get_current_username,
     is_admin_authenticated,
     is_web_authenticated,
     login_with_role,
     logout_web_user,
+    register_web_user,
 )
 from services.config_service import get_config_page_payload, update_runtime_config
 from services.content.document_service import (
@@ -36,6 +39,7 @@ from services.content.knowledge_base_service import approve_chat_entry, get_know
 from services.ingestion_queue import get_ingestion_queue
 from services.llm.llm_service import get_chat_model_options
 from services.vector.vector_admin_service import delete_chunk_by_id
+from repositories.vector_repository import fetch_documents_by_source
 from views.web_view import current_prompt_response, render_page, redirect_vector_manager, unauthorized_response
 
 router = APIRouter()
@@ -48,6 +52,8 @@ KNOWLEDGE_BASE_TEMPLATE = "pages/knowledge_base.html"
 CONFIG_TEMPLATE = "pages/config.html"
 HISTORY_TEMPLATE = "pages/history.html"
 ADMIN_LOGIN_TEMPLATE = "pages/admin_login.html"
+REGISTER_TEMPLATE = "pages/register.html"
+EVALUATION_DASHBOARD_HTML = settings.PROJECT_ROOT / "views" / "frontend" / "evaluation_dashboard.html"
 
 
 def _login_required(request: Request):
@@ -81,14 +87,33 @@ def _safe_next_path(next_path: str) -> str:
         return "/login"
     if candidate.startswith("/login"):
         return "/login"
+    if candidate.startswith("/register"):
+        return "/login"
     return candidate
 
 
-def _login_page_context(request: Request, next_path: str, error: str = "") -> dict:
+def _login_page_context(request: Request, next_path: str, error: str = "", success: str = "") -> dict:
     return {
         "csrf_token": ensure_csrf_token(request),
         "next_path": _safe_next_path(next_path),
         "error": error,
+        "success": success,
+    }
+
+
+def _register_page_context(
+    request: Request,
+    error: str = "",
+    form_values: dict[str, str] | None = None,
+) -> dict:
+    values = dict(form_values or {})
+    return {
+        "csrf_token": ensure_csrf_token(request),
+        "error": error,
+        "form_values": {
+            "full_name": values.get("full_name", ""),
+            "username": values.get("username", ""),
+        },
     }
 
 
@@ -160,13 +185,14 @@ async def home(request: Request):
 
 
 @router.get("/login")
-async def login_page(request: Request, next: str = "/"):
+async def login_page(request: Request, next: str = "/", registered: str = ""):
     if is_web_authenticated(request):
         return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
+    success = "Đăng ký thành công. Vui lòng đăng nhập." if registered == "1" else ""
     return render_page(
         request,
         ADMIN_LOGIN_TEMPLATE,
-        context=_login_page_context(request, next),
+        context=_login_page_context(request, next, success=success),
     )
 
 
@@ -181,6 +207,17 @@ async def admin_login_page(request: Request, next: str = "/"):
     )
 
 
+@router.get("/register")
+async def register_page(request: Request):
+    if is_web_authenticated(request):
+        return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
+    return render_page(
+        request,
+        REGISTER_TEMPLATE,
+        context=_register_page_context(request),
+    )
+
+
 @router.post("/login")
 @limiter.limit(settings.API_RATE_ADMIN)
 async def login_submit(
@@ -191,6 +228,40 @@ async def login_submit(
     csrf_token: str = Form(...),
 ):
     return await _submit_login(request, username, password, next_path, csrf_token)
+
+
+@router.post("/register")
+@limiter.limit(settings.API_RATE_ADMIN)
+async def register_submit(
+    request: Request,
+    full_name: str = Form(""),
+    username: str = Form(""),
+    password: str = Form(""),
+    confirm_password: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    if is_web_authenticated(request):
+        return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
+
+    form_values = {"full_name": full_name, "username": username}
+    if not validate_csrf_token(request, csrf_token):
+        return render_page(
+            request,
+            REGISTER_TEMPLATE,
+            context=_register_page_context(request, "CSRF không hợp lệ.", form_values),
+        )
+
+    result = register_web_user(full_name, username, password, confirm_password)
+    if not result.ok:
+        rotate_csrf_token(request)
+        return render_page(
+            request,
+            REGISTER_TEMPLATE,
+            context=_register_page_context(request, result.message, form_values),
+        )
+
+    rotate_csrf_token(request)
+    return RedirectResponse("/login?registered=1", status_code=303)
 
 
 @router.post("/admin/login")
@@ -253,9 +324,151 @@ async def chat_web(
         return payload_error
     current_session_id = resolve_chat_session_id(request, session_id)
 
-    result = await process_chat_message(message, current_session_id, llm_model=llm_model)
+    current_role = get_current_role(request)
+    current_username = get_current_username(request)
+    result = await process_chat_message(
+        message,
+        current_session_id,
+        llm_model=llm_model,
+        owner_username=current_username,
+        owner_role=current_role,
+    )
     result["session_id"] = current_session_id
     return result
+
+
+@router.get("/source-preview")
+async def source_preview_page(request: Request, source: str = ""):
+    login_response = _login_required(request)
+    if login_response is not None:
+        return login_response
+
+    normalized_source = str(source or "").strip()
+    if not normalized_source:
+        return HTMLResponse("Missing source.", status_code=400)
+
+    documents, _metadatas = fetch_documents_by_source(normalized_source)
+    chunks = [str(document or "").strip() for document in documents if str(document or "").strip()]
+    if not chunks:
+        return HTMLResponse("Source not found in vector database.", status_code=404)
+
+    shown_chunks = chunks[:20]
+    source_title = html.escape(normalized_source)
+    chunk_count = len(chunks)
+    chunks_html = "\n".join(
+        (
+            '<section class="chunk">'
+            f'<div class="chunk-title">Đoạn {index}</div>'
+            f"<pre>{html.escape(chunk)}</pre>"
+            "</section>"
+        )
+        for index, chunk in enumerate(shown_chunks, start=1)
+    )
+    if chunk_count > len(shown_chunks):
+        chunks_html += (
+            f'<p class="notice">Đang hiển thị {len(shown_chunks)}/{chunk_count} đoạn đầu tiên '
+            "từ vector database.</p>"
+        )
+
+    return HTMLResponse(
+        f"""<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nguồn tham khảo - ICTU AI</title>
+    <style>
+        :root {{
+            color-scheme: light dark;
+            --bg: #f5f7fb;
+            --panel: #ffffff;
+            --text: #0f172a;
+            --muted: #64748b;
+            --border: #d8e0ee;
+            --primary: #1565c0;
+        }}
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --bg: #0b1220;
+                --panel: #111827;
+                --text: #e5edf8;
+                --muted: #9aa8bc;
+                --border: #263449;
+                --primary: #60a5fa;
+            }}
+        }}
+        * {{ box-sizing: border-box; }}
+        body {{
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }}
+        main {{
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 18px 48px;
+        }}
+        .topbar {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }}
+        a {{ color: var(--primary); font-weight: 700; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+        h1 {{
+            margin: 0 0 6px;
+            font-size: clamp(1.35rem, 2.8vw, 2rem);
+            line-height: 1.2;
+            overflow-wrap: anywhere;
+        }}
+        .meta {{
+            color: var(--muted);
+            font-size: 0.95rem;
+        }}
+        .chunk {{
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 14px;
+        }}
+        .chunk-title {{
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }}
+        pre {{
+            margin: 0;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            font-family: inherit;
+            font-size: 0.98rem;
+        }}
+        .notice {{
+            color: var(--muted);
+            margin-top: 16px;
+        }}
+    </style>
+</head>
+<body>
+    <main>
+        <div class="topbar">
+            <a href="/chat">&larr; Quay lại chat</a>
+        </div>
+        <h1>{source_title}</h1>
+        <div class="meta">Nguồn tham khảo nội bộ trong vector database. Tổng số đoạn: {chunk_count}.</div>
+        {chunks_html}
+    </main>
+</body>
+</html>"""
+    )
 
 
 @router.get("/admin")
@@ -579,12 +792,30 @@ async def delete_chunk(request: Request, chunk_id: str = Form(...), csrf_token: 
 
 @router.get("/history")
 async def history_page(request: Request, page: int = 1):
+    login_response = _login_required(request)
+    if login_response is not None:
+        return login_response
+    current_role = get_current_role(request)
+    current_username = get_current_username(request)
+    is_admin = current_role == "admin"
+    payload = get_history_page_data(
+        page=page,
+        per_page=50,
+        owner_username=None if is_admin else current_username,
+        include_uploaded_files=is_admin,
+    )
+    payload["csrf_token"] = ensure_csrf_token(request)
+    payload["history_scope_label"] = "Tất cả người dùng" if is_admin else "Lịch sử của bạn"
+    payload["show_admin_history_tools"] = is_admin
+    return render_page(request, HISTORY_TEMPLATE, context=payload)
+
+
+@router.get("/evaluation-dashboard")
+async def evaluation_dashboard_page(request: Request):
     admin_response = _admin_required(request)
     if admin_response is not None:
         return admin_response
-    payload = get_history_page_data(page=page, per_page=50)
-    payload["csrf_token"] = ensure_csrf_token(request)
-    return render_page(request, HISTORY_TEMPLATE, context=payload)
+    return FileResponse(EVALUATION_DASHBOARD_HTML)
 
 
 def register_web_routes(app) -> None:

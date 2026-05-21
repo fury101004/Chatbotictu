@@ -9,10 +9,14 @@ from config.dependencies import create_partner_token, verify_token
 from config.limiter import limiter
 from config.rag_tools import DEFAULT_RAG_TOOL
 from config.settings import settings
+from models.auth import RegisterRequest, RegisterResponse
 from models.chat import ChatRequest, ChatResponse
+from services.admin_auth_service import is_admin_authenticated, is_web_authenticated, register_web_user
 from services.chat.chat_service import process_chat_message
 from services.content.document_service import upload_markdown_files
 from services.content.knowledge_base_service import get_knowledge_base_payload
+from services.evaluation_question_service import get_evaluation_test_questions
+from services.eval_tracker import get_eval_tracker
 from services.llm.rate_limit_monitor import reset_429_stats, snapshot_429_stats
 from views.api_view import (
     build_chat_response,
@@ -36,6 +40,47 @@ async def get_token(request: Request, partner_key: str = Form(...)):
     if not hmac.compare_digest(str(partner_key), settings.PARTNER_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid partner key")
     return build_token_response(create_partner_token())
+
+
+@router_api.post("/register", response_model=RegisterResponse)
+@limiter.limit(settings.API_RATE_ADMIN)
+async def api_register(request: Request, body: RegisterRequest):
+    del request
+    result = register_web_user(
+        full_name=body.full_name,
+        username=body.username,
+        password=body.password,
+        confirm_password=body.confirm_password,
+    )
+    if not result.ok:
+        status_code = 409 if result.code == "duplicate" else 422
+        raise HTTPException(status_code=status_code, detail=result.message)
+    return RegisterResponse(status="ok", message=result.message)
+
+
+def _require_admin_session(request: Request) -> None:
+    if not is_web_authenticated(request):
+        raise HTTPException(status_code=401, detail="Login required")
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+
+@router_api.get("/logs")
+async def api_eval_logs(request: Request, limit: int = 500):
+    _require_admin_session(request)
+    return await get_eval_tracker().logs(limit=limit)
+
+
+@router_api.get("/metrics")
+async def api_eval_metrics(request: Request, hours: int = 24):
+    _require_admin_session(request)
+    return await get_eval_tracker().metrics(hours=hours)
+
+
+@router_api.get("/test-questions")
+async def api_eval_test_questions(request: Request):
+    _require_admin_session(request)
+    return get_evaluation_test_questions()
 
 
 @router_v1.post("/chat", response_model=ChatResponse)

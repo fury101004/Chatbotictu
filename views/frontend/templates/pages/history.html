@@ -6,8 +6,14 @@
 
     <!-- Header -->
     <div class="page-header">
-        <h1 class="hero-title">L&#7883;ch s&#7917; tr&#242; chuy&#7879;n</h1>
-        <p class="hero-subtitle">T&#7845;t c&#7843; cu&#7897;c tr&#242; chuy&#7879;n gi&#7919;a b&#7841;n v&#224; ICTU AI</p>
+        <h1 class="hero-title">Lịch sử trò chuyện</h1>
+        <p class="hero-subtitle">
+            {% if show_admin_history_tools %}
+            Admin đang xem toàn bộ lịch sử chat để kiểm tra và duyệt Q&A vào Knowledge Base.
+            {% else %}
+            {{ history_scope_label }} giữa bạn và ICTU AI.
+            {% endif %}
+        </p>
     </div>
 
     <section class="panel browser-history-panel" id="browserHistoryPanel">
@@ -20,13 +26,13 @@
         <div class="browser-session-list" id="browserSessionList"></div>
     </section>
 
-    <div class="history-grid">
+    <div class="history-grid{% if not show_admin_history_tools %} user-only{% endif %}">
 
         <!-- Cột trái: Lịch sử chat -->
         <div class="panel chat-panel">
             <div class="panel-header">
                 <div class="header-content">
-                    <h2><i class="fas fa-comments yellow"></i> L&#7883;ch s&#7917; chat</h2>
+                    <h2><i class="fas fa-comments yellow"></i> {{ history_scope_label or 'Lịch sử chat' }}</h2>
                     <div class="conversation-info">
                         <div class="user-badge">
                             <span class="user-avatar"></span>
@@ -85,6 +91,12 @@
                                 {% endif %}
                             </div>
                             <div class="message-time">
+                                {% if show_admin_history_tools and msg.owner_username %}
+                                <span class="owner-chip">{{ msg.owner_username }}</span>
+                                {% endif %}
+                                {% if show_admin_history_tools and msg.session_id %}
+                                <span class="owner-chip muted">Session {{ msg.session_id }}</span>
+                                {% endif %}
                                 <i class="far fa-clock"></i>
                                 <span>{{ msg.time }}</span>
                             </div>
@@ -145,6 +157,7 @@
             {% endif %}
         </div>
 
+        {% if show_admin_history_tools %}
         <!-- Cột phải: File đã nạp -->
         <div class="panel files-panel">
             <div class="panel-header">
@@ -219,6 +232,7 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
     </div>
 
     <!-- Nút điều hướng -->
@@ -229,6 +243,7 @@
         <a href="/chat" class="nav-btn teal">
             <i class="fas fa-comment-dots"></i> Chat ti&#7871;p
         </a>
+        {% if show_admin_history_tools %}
         <a href="/vector-manager" class="nav-btn purple">
             <i class="fas fa-brain"></i> Vector Store
         </a>
@@ -238,6 +253,7 @@
         <a href="/data-loader" class="nav-btn yellow">
             <i class="fas fa-file-upload"></i> N&#7841;p file
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -308,6 +324,10 @@
     grid-template-columns: 1fr 400px;
     gap: 2rem;
     margin-bottom: 3rem;
+}
+
+.history-grid.user-only {
+    grid-template-columns: 1fr;
 }
 
 @media (max-width: 1200px) {
@@ -527,6 +547,28 @@
     gap: 0.5rem;
     color: var(--text-muted);
     font-size: 0.9rem;
+}
+
+.owner-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 220px;
+    padding: 0.25rem 0.5rem;
+    border-radius: 8px;
+    background: rgba(116, 185, 255, 0.12);
+    border: 1px solid rgba(116, 185, 255, 0.24);
+    color: #d8eaff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owner-chip.muted {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
 }
 
 .message-body {
@@ -882,8 +924,8 @@
 </style>
 
 <script>
-const CHAT_STORAGE_SCOPE = "{{ current_role if is_authenticated else 'guest' }}";
-const CHAT_STORAGE_SCOPES = Array.from(new Set([CHAT_STORAGE_SCOPE, "admin", "user", "student", "guest"]));
+const CHAT_STORAGE_SCOPE = {{ chat_storage_scope|tojson }};
+const CHAT_STORAGE_SCOPES = [CHAT_STORAGE_SCOPE];
 
 function chatStateKey(scope = CHAT_STORAGE_SCOPE) {
     return `ictu-dashboard-chat-state:${scope}`;
@@ -1028,8 +1070,9 @@ setInterval(() => {
             const doc = parser.parseFromString(html, 'text/html');
             const newFiles = doc.getElementById('files-container');
             const currentFiles = document.getElementById('files-container');
+            if (!newFiles || !currentFiles) return;
             
-            if (newFiles && newFiles.innerHTML !== currentFiles.innerHTML) {
+            if (newFiles.innerHTML !== currentFiles.innerHTML) {
                 // Thm hiu ng fade
                 currentFiles.style.opacity = '0.5';
                 currentFiles.style.transition = 'opacity 0.3s';

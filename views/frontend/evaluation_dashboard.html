@@ -1,0 +1,1893 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICTU Chatbot — Evaluation Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <style>
+        :root {
+            --primary: #1565C0;
+            --accent: #E53935;
+            --success: #2E7D32;
+            --warning: #F9A825;
+            --danger: #C62828;
+            --bg: #F5F7FA;
+            --surface: #FFFFFF;
+            --surface-alt: #EEF2F7;
+            --border: #D8DEE8;
+            --text: #172033;
+            --muted: #667085;
+            --table-head: #F1F4F8;
+            --button-text: #FFFFFF;
+            --focus: rgba(21, 101, 192, 0.22);
+        }
+
+        [data-theme="dark"] {
+            --bg: #111827;
+            --surface: #1F2937;
+            --surface-alt: #273244;
+            --border: #374151;
+            --text: #F3F4F6;
+            --muted: #AAB2C0;
+            --table-head: #273244;
+            --focus: rgba(96, 165, 250, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", "Be Vietnam Pro", Arial, sans-serif;
+            letter-spacing: 0;
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .dashboard {
+            width: min(1480px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 24px 0 36px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 260px;
+        }
+
+        .home-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 38px;
+            padding: 0 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface-alt);
+            color: var(--primary);
+            font-weight: 800;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .home-link:hover {
+            border-color: var(--primary);
+            background: var(--surface);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(1.25rem, 2vw, 1.8rem);
+            line-height: 1.25;
+            color: var(--text);
+        }
+
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--primary);
+            background: var(--surface-alt);
+            font-size: 0.82rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .live-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: blink 1.2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.25; }
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .segmented {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 4px;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .segmented button,
+        .theme-toggle,
+        .export-btn,
+        .page-btn {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            color: var(--text);
+            min-height: 38px;
+            padding: 0 12px;
+            font-weight: 700;
+        }
+
+        .segmented button.active,
+        .theme-toggle.active,
+        .export-btn.primary,
+        .page-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: var(--button-text);
+        }
+
+        .theme-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 18px;
+        }
+
+        .metric-card,
+        .chart-card,
+        .table-card,
+        .test-bank-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .metric-card {
+            padding: 18px;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .metric-value {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .metric-unit {
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .metric-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            color: var(--muted);
+            font-size: 0.86rem;
+            line-height: 1.4;
+        }
+
+        .delta {
+            font-weight: 800;
+            color: var(--success);
+        }
+
+        .delta.bad {
+            color: var(--danger);
+        }
+
+        .threshold {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 800;
+        }
+
+        .threshold::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+
+        .threshold.bad::before {
+            background: var(--danger);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 18px;
+        }
+
+        .chart-card {
+            padding: 18px;
+            min-height: 360px;
+        }
+
+        .chart-title {
+            margin: 0 0 12px;
+            font-size: 1.05rem;
+            color: var(--text);
+        }
+
+        .chart-wrap {
+            position: relative;
+            height: 292px;
+        }
+
+        .table-card {
+            margin-top: 18px;
+            overflow: hidden;
+        }
+
+        .table-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .search-input {
+            width: min(480px, 100%);
+            min-height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0 12px;
+            background: var(--surface-alt);
+            color: var(--text);
+            outline: none;
+        }
+
+        .search-input:focus,
+        button:focus-visible {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--focus);
+        }
+
+        .export-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .export-btn {
+            min-width: 148px;
+        }
+
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            min-width: 980px;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 13px 14px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: middle;
+            font-size: 0.93rem;
+        }
+
+        th {
+            background: var(--table-head);
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .question-cell {
+            width: 34%;
+            min-width: 300px;
+            line-height: 1.45;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .hit-pill,
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 64px;
+            min-height: 26px;
+            border-radius: 999px;
+            padding: 3px 9px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            border: 1px solid transparent;
+        }
+
+        .hit-pill.hit,
+        .status-badge.good {
+            color: var(--success);
+            background: rgba(46, 125, 50, 0.1);
+            border-color: rgba(46, 125, 50, 0.3);
+        }
+
+        .hit-pill.miss,
+        .status-badge.miss {
+            color: var(--danger);
+            background: rgba(198, 40, 40, 0.1);
+            border-color: rgba(198, 40, 40, 0.28);
+        }
+
+        .status-badge.slow {
+            color: var(--warning);
+            background: rgba(249, 168, 37, 0.12);
+            border-color: rgba(249, 168, 37, 0.34);
+        }
+
+        .relevance-cell {
+            min-width: 150px;
+        }
+
+        .relevance-label {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .progress {
+            height: 8px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 999px;
+        }
+
+        .progress-bar.green {
+            background: var(--success);
+        }
+
+        .progress-bar.yellow {
+            background: var(--warning);
+        }
+
+        .progress-bar.red {
+            background: var(--danger);
+        }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 14px 16px;
+            background: var(--surface);
+        }
+
+        .page-controls {
+            display: inline-flex;
+            gap: 6px;
+        }
+
+        .empty-state {
+            padding: 30px 16px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .test-bank-card {
+            margin-top: 18px;
+            padding: 18px;
+        }
+
+        .test-bank-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        .test-bank-title {
+            margin: 0 0 6px;
+            font-size: 1.1rem;
+        }
+
+        .test-bank-copy {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .test-bank-stats {
+            display: inline-flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .test-stat {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface-alt);
+            color: var(--text);
+            font-size: 0.78rem;
+            font-weight: 800;
+            padding: 6px 10px;
+            white-space: nowrap;
+        }
+
+        .test-bank-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .test-bank-filters {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .test-filter-btn,
+        .copy-question-btn {
+            min-height: 36px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            color: var(--text);
+            font-weight: 800;
+            padding: 0 10px;
+        }
+
+        .test-filter-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #ffffff;
+        }
+
+        .test-question-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 10px;
+            max-height: 520px;
+            overflow-y: auto;
+            padding-right: 3px;
+        }
+
+        .test-question-card {
+            display: grid;
+            gap: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-alt);
+            padding: 12px;
+        }
+
+        .test-question-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .test-id,
+        .test-group {
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 900;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+
+        .test-id {
+            background: rgba(21, 101, 192, 0.1);
+            color: var(--primary);
+        }
+
+        .test-group.local {
+            background: rgba(46, 125, 50, 0.1);
+            color: var(--success);
+        }
+
+        .test-group.web {
+            background: rgba(229, 57, 53, 0.1);
+            color: var(--accent);
+        }
+
+        .test-question-text {
+            margin: 0;
+            color: var(--text);
+            font-weight: 750;
+            line-height: 1.45;
+        }
+
+        .test-question-source {
+            color: var(--muted);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        .test-card-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 20;
+            transform: translateY(12px);
+            opacity: 0;
+            pointer-events: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: var(--success);
+            color: #FFFFFF;
+            font-weight: 800;
+            transition: opacity 160ms ease, transform 160ms ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 1100px) {
+            .metrics-grid,
+            .charts-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 760px) {
+            .dashboard {
+                width: min(100% - 20px, 1480px);
+                padding-top: 12px;
+            }
+
+            .header,
+            .table-toolbar,
+            .test-bank-head,
+            .test-bank-toolbar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .title-group,
+            .header-actions,
+            .export-actions,
+            .test-bank-stats,
+            .test-bank-filters {
+                justify-content: flex-start;
+                width: 100%;
+            }
+
+            .metrics-grid,
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <div class="title-group">
+                <a class="home-link" href="/" aria-label="Quay về trang chủ">← Trang chủ</a>
+                <h1>ICTU Chatbot — Evaluation Dashboard</h1>
+                <span class="live-badge"><span class="live-dot"></span>Live</span>
+            </div>
+            <div class="header-actions">
+                <div class="segmented" aria-label="Bộ lọc thời gian">
+                    <button type="button" class="range-btn active" data-range="today">Today</button>
+                    <button type="button" class="range-btn" data-range="7d">7 days</button>
+                    <button type="button" class="range-btn" data-range="30d">30 days</button>
+                    <button type="button" class="range-btn" data-range="all">All</button>
+                </div>
+                <button type="button" class="theme-toggle" id="themeToggle" aria-label="Chuyển giao diện">
+                    <span id="themeIcon">☾</span>
+                    <span id="themeText">Dark</span>
+                </button>
+            </div>
+        </header>
+
+        <section class="metrics-grid" aria-label="Chỉ số tổng quan">
+            <article class="metric-card">
+                <div class="metric-label">Avg Latency</div>
+                <div class="metric-value"><span id="avgLatency">0</span><span class="metric-unit">ms</span></div>
+                <div class="metric-meta">
+                    <span>P95: <strong id="p95Latency">0 ms</strong></span>
+                    <span id="latencyDelta" class="delta">0%</span>
+                </div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">Source Hit Rate</div>
+                <div class="metric-value"><span id="hitRate">0</span><span class="metric-unit">%</span></div>
+                <div class="metric-meta">
+                    <span>Truy vấn có chunk phù hợp</span>
+                    <span id="hitRatio">0/0</span>
+                </div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">Avg Relevance Score</div>
+                <div class="metric-value"><span id="avgRelevance">0.00</span><span class="metric-unit">/ 1</span></div>
+                <div class="metric-meta">
+                    <span>Ngưỡng mục tiêu: 0.75</span>
+                    <span id="thresholdState" class="threshold">Đạt</span>
+                </div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">Total Queries</div>
+                <div class="metric-value"><span id="totalQueries">0</span></div>
+                <div class="metric-meta">
+                    <span>Failed / unanswered</span>
+                    <span id="failedCount">0</span>
+                </div>
+            </article>
+        </section>
+
+        <section class="charts-grid" aria-label="Biểu đồ đánh giá">
+            <article class="chart-card">
+                <h2 class="chart-title">Latency over time</h2>
+                <div class="chart-wrap">
+                    <canvas id="latencyChart"></canvas>
+                </div>
+            </article>
+            <article class="chart-card">
+                <h2 class="chart-title">Hit vs Miss per day</h2>
+                <div class="chart-wrap">
+                    <canvas id="hitMissChart"></canvas>
+                </div>
+            </article>
+        </section>
+
+        <section class="table-card" aria-label="Query log table">
+            <div class="table-toolbar">
+                <input
+                    type="search"
+                    id="searchInput"
+                    class="search-input"
+                    placeholder="Tìm theo nội dung câu hỏi..."
+                    aria-label="Tìm kiếm câu hỏi"
+                >
+                <div class="export-actions">
+                    <button type="button" class="export-btn primary" id="exportAllBtn">Export all CSV</button>
+                    <button type="button" class="export-btn" id="exportFilteredBtn">Export filtered CSV</button>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Question</th>
+                            <th>Source Document</th>
+                            <th>Latency</th>
+                            <th>Hit</th>
+                            <th>Relevance</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTableBody"></tbody>
+                </table>
+            </div>
+            <div id="emptyState" class="empty-state" hidden>Không có log phù hợp với bộ lọc hiện tại.</div>
+            <div class="pagination">
+                <span id="pageInfo" class="muted">0-0 / 0</span>
+                <div class="page-controls">
+                    <button type="button" class="page-btn" id="prevPageBtn">Trước</button>
+                    <button type="button" class="page-btn active" id="currentPageBtn">1</button>
+                    <button type="button" class="page-btn" id="nextPageBtn">Sau</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="test-bank-card" aria-label="ICTU test question bank">
+            <div class="test-bank-head">
+                <div>
+                    <h2 class="test-bank-title">Bộ 30 câu hỏi kiểm thử ICTU</h2>
+                    <p class="test-bank-copy">Dùng để đối chiếu chất lượng RAG: 15 câu dữ liệu nội bộ và 15 câu realtime cần web search.</p>
+                </div>
+                <div class="test-bank-stats">
+                    <span class="test-stat" id="testTotalCount">0 câu</span>
+                    <span class="test-stat" id="testLocalCount">0 local</span>
+                    <span class="test-stat" id="testWebCount">0 web</span>
+                </div>
+            </div>
+            <div class="test-bank-toolbar">
+                <input
+                    type="search"
+                    id="testQuestionSearch"
+                    class="search-input"
+                    placeholder="Tìm trong bộ câu hỏi test..."
+                    aria-label="Tìm câu hỏi test"
+                >
+                <div class="test-bank-filters">
+                    <button type="button" class="test-filter-btn active" data-test-group="all">Tất cả</button>
+                    <button type="button" class="test-filter-btn" data-test-group="local_data">Local data</button>
+                    <button type="button" class="test-filter-btn" data-test-group="web_search">Web search</button>
+                </div>
+            </div>
+            <div class="test-question-grid" id="testQuestionGrid"></div>
+            <div id="testQuestionEmpty" class="empty-state" hidden>Không có câu hỏi test phù hợp.</div>
+        </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite">Đã xuất CSV thành công</div>
+
+    <script>
+        const mockLogs = [
+            {
+                id: 1,
+                timestamp: "2026-05-21T08:12:00+07:00",
+                question: "Điểm chuẩn ngành CNTT năm 2024 là bao nhiêu?",
+                answer: "Điểm chuẩn ngành Công nghệ thông tin năm 2024 được công bố trong quy chế tuyển sinh.",
+                retrievedChunks: ["Điểm chuẩn theo ngành năm 2024", "Mã ngành Công nghệ thông tin"],
+                latencyMs: 642,
+                relevanceScore: 0.91,
+                sourceDocument: "QuyCheTuyenSinh2024.pdf"
+            },
+            {
+                id: 2,
+                timestamp: "2026-05-21T08:38:00+07:00",
+                question: "Học phí học kỳ 2 năm học 2024-2025 là bao nhiêu?",
+                answer: "Học phí phụ thuộc số tín chỉ đăng ký và đơn giá tín chỉ của chương trình đào tạo.",
+                retrievedChunks: ["Bảng học phí theo tín chỉ", "Hướng dẫn nộp học phí HK2"],
+                latencyMs: 724,
+                relevanceScore: 0.86,
+                sourceDocument: "BieuMauHocPhi.xlsx"
+            },
+            {
+                id: 3,
+                timestamp: "2026-05-21T09:05:00+07:00",
+                question: "Thời khóa biểu tuần này ở đâu?",
+                answer: "Sinh viên xem thời khóa biểu trên cổng đào tạo hoặc thông báo của phòng đào tạo.",
+                retrievedChunks: ["Tra cứu thời khóa biểu", "Hướng dẫn dùng cổng đào tạo"],
+                latencyMs: 512,
+                relevanceScore: 0.82,
+                sourceDocument: "HuongDanCongDaoTao.pdf"
+            },
+            {
+                id: 4,
+                timestamp: "2026-05-21T09:24:00+07:00",
+                question: "Quy định về điểm rèn luyện như thế nào?",
+                answer: "Điểm rèn luyện được đánh giá theo các tiêu chí tham gia học tập, chấp hành nội quy và hoạt động phong trào.",
+                retrievedChunks: ["Thang điểm rèn luyện", "Các mức xếp loại DRL"],
+                latencyMs: 938,
+                relevanceScore: 0.79,
+                sourceDocument: "QuyDinhDRL.docx"
+            },
+            {
+                id: 5,
+                timestamp: "2026-05-21T10:11:00+07:00",
+                question: "Làm thế nào để đăng ký học lại?",
+                answer: "Sinh viên đăng ký học lại trên hệ thống quản lý đào tạo theo lịch mở đăng ký của nhà trường.",
+                retrievedChunks: ["Quy trình đăng ký học lại", "Mẫu đơn học lại"],
+                latencyMs: 681,
+                relevanceScore: 0.88,
+                sourceDocument: "HuongDanDangKyHocLai.pdf"
+            },
+            {
+                id: 6,
+                timestamp: "2026-05-21T10:46:00+07:00",
+                question: "Lịch thi cuối kỳ xem ở đâu?",
+                answer: "Lịch thi cuối kỳ được cập nhật trên website phòng đào tạo và cổng thông tin sinh viên.",
+                retrievedChunks: ["Thông báo lịch thi", "Tra cứu lịch thi cá nhân"],
+                latencyMs: 477,
+                relevanceScore: 0.84,
+                sourceDocument: "ThongBaoLichThiHK2.pdf"
+            },
+            {
+                id: 7,
+                timestamp: "2026-05-21T11:20:00+07:00",
+                question: "Em muốn xin giấy xác nhận sinh viên thì làm thế nào?",
+                answer: "Sinh viên nộp yêu cầu tại phòng công tác sinh viên hoặc theo biểu mẫu trực tuyến nếu có thông báo.",
+                retrievedChunks: ["Quy trình cấp giấy xác nhận", "Biểu mẫu xác nhận sinh viên"],
+                latencyMs: 860,
+                relevanceScore: 0.72,
+                sourceDocument: "QuyTrinhCongTacSinhVien.docx"
+            },
+            {
+                id: 8,
+                timestamp: "2026-05-21T13:17:00+07:00",
+                question: "Điều kiện xét học bổng khuyến khích học tập là gì?",
+                answer: "Điều kiện xét học bổng gồm kết quả học tập, rèn luyện và không vi phạm kỷ luật trong kỳ xét.",
+                retrievedChunks: ["Tiêu chí học bổng", "Mức học bổng theo loại"],
+                latencyMs: 591,
+                relevanceScore: 0.9,
+                sourceDocument: "QuyDinhHocBong.pdf"
+            },
+            {
+                id: 9,
+                timestamp: "2026-05-21T14:08:00+07:00",
+                question: "Mã ngành Khoa học dữ liệu của ICTU là gì?",
+                answer: "Thông tin mã ngành được liệt kê trong đề án tuyển sinh của trường.",
+                retrievedChunks: ["Danh mục ngành tuyển sinh", "Mã ngành năm 2025"],
+                latencyMs: 533,
+                relevanceScore: 0.81,
+                sourceDocument: "DeAnTuyenSinh2025.pdf"
+            },
+            {
+                id: 10,
+                timestamp: "2026-05-21T14:42:00+07:00",
+                question: "Có được rút bớt học phần sau khi đăng ký không?",
+                answer: "Sinh viên được điều chỉnh đăng ký học phần trong thời gian cho phép theo kế hoạch đào tạo.",
+                retrievedChunks: ["Quy định điều chỉnh học phần", "Thời hạn rút học phần"],
+                latencyMs: 791,
+                relevanceScore: 0.76,
+                sourceDocument: "QuyCheDaoTaoTinChi.pdf"
+            },
+            {
+                id: 11,
+                timestamp: "2026-05-20T09:15:00+07:00",
+                question: "Chuẩn đầu ra tiếng Anh của sinh viên là gì?",
+                answer: "Chuẩn đầu ra ngoại ngữ tùy theo chương trình đào tạo và khóa tuyển sinh.",
+                retrievedChunks: ["Chuẩn đầu ra ngoại ngữ", "Điều kiện xét tốt nghiệp"],
+                latencyMs: 1024,
+                relevanceScore: 0.69,
+                sourceDocument: "ChuanDauRaNgoaiNgu.pdf"
+            },
+            {
+                id: 12,
+                timestamp: "2026-05-20T15:05:00+07:00",
+                question: "Hồ sơ nhập học cần những giấy tờ gì?",
+                answer: "Hồ sơ nhập học gồm giấy báo trúng tuyển, học bạ, giấy tờ cá nhân và các biểu mẫu theo thông báo.",
+                retrievedChunks: ["Danh mục hồ sơ nhập học", "Lưu ý nộp hồ sơ"],
+                latencyMs: 458,
+                relevanceScore: 0.93,
+                sourceDocument: "HuongDanNhapHoc2025.pdf"
+            },
+            {
+                id: 13,
+                timestamp: "2026-05-19T16:30:00+07:00",
+                question: "Quên mật khẩu cổng đào tạo thì liên hệ ai?",
+                answer: "Sinh viên liên hệ bộ phận hỗ trợ cổng đào tạo hoặc phòng đào tạo để được cấp lại mật khẩu.",
+                retrievedChunks: ["Hỗ trợ tài khoản sinh viên", "Thông tin liên hệ phòng đào tạo"],
+                latencyMs: 697,
+                relevanceScore: 0.77,
+                sourceDocument: "HuongDanTaiKhoanSinhVien.pdf"
+            },
+            {
+                id: 14,
+                timestamp: "2026-05-18T10:50:00+07:00",
+                question: "Khi nào bắt đầu đăng ký học phần kỳ tới?",
+                answer: "Lịch đăng ký học phần được công bố theo kế hoạch đào tạo từng học kỳ.",
+                retrievedChunks: ["Kế hoạch học kỳ", "Mốc thời gian đăng ký học phần"],
+                latencyMs: 833,
+                relevanceScore: 0.74,
+                sourceDocument: "KeHoachDaoTao2025.xlsx"
+            },
+            {
+                id: 15,
+                timestamp: "2026-05-17T08:22:00+07:00",
+                question: "Sinh viên bị cảnh báo học vụ khi nào?",
+                answer: "Cảnh báo học vụ căn cứ vào điểm trung bình học kỳ, số tín chỉ nợ và quy định đào tạo hiện hành.",
+                retrievedChunks: ["Điều kiện cảnh báo học vụ", "Xử lý kết quả học tập"],
+                latencyMs: 612,
+                relevanceScore: 0.87,
+                sourceDocument: "QuyCheDaoTaoTinChi.pdf"
+            },
+            {
+                id: 16,
+                timestamp: "2026-05-15T13:40:00+07:00",
+                question: "ICTU có xét tuyển học bạ ngành An toàn thông tin không?",
+                answer: "Thông tin phương thức xét tuyển theo từng ngành nằm trong đề án tuyển sinh năm tương ứng.",
+                retrievedChunks: ["Phương thức xét tuyển học bạ", "Ngành An toàn thông tin"],
+                latencyMs: 550,
+                relevanceScore: 0.89,
+                sourceDocument: "DeAnTuyenSinh2025.pdf"
+            },
+            {
+                id: 17,
+                timestamp: "2026-05-12T11:08:00+07:00",
+                question: "Nộp học phí qua ngân hàng nào?",
+                answer: "Sinh viên nộp học phí theo hướng dẫn thanh toán của phòng kế hoạch tài chính.",
+                retrievedChunks: ["Tài khoản ngân hàng thu học phí", "Nội dung chuyển khoản"],
+                latencyMs: 765,
+                relevanceScore: 0.8,
+                sourceDocument: "HuongDanNopHocPhi.pdf"
+            },
+            {
+                id: 18,
+                timestamp: "2026-05-08T17:25:00+07:00",
+                question: "Trường có xe buýt nội trú không?",
+                answer: "",
+                retrievedChunks: [],
+                latencyMs: 389,
+                relevanceScore: 0.18,
+                sourceDocument: ""
+            },
+            {
+                id: 19,
+                timestamp: "2026-04-30T09:44:00+07:00",
+                question: "Điều kiện làm khóa luận tốt nghiệp là gì?",
+                answer: "Điều kiện làm khóa luận tốt nghiệp phụ thuộc số tín chỉ tích lũy và kết quả học tập theo quy định khoa.",
+                retrievedChunks: ["Điều kiện nhận khóa luận", "Quy trình xét tốt nghiệp"],
+                latencyMs: 946,
+                relevanceScore: 0.67,
+                sourceDocument: "QuyDinhTotNghiep.docx"
+            },
+            {
+                id: 20,
+                timestamp: "2026-04-22T14:12:00+07:00",
+                question: "Học quân sự của sinh viên năm nhất tổ chức ở đâu?",
+                answer: "Thông tin học giáo dục quốc phòng được công bố theo kế hoạch sinh viên từng khóa.",
+                retrievedChunks: [],
+                latencyMs: 703,
+                relevanceScore: 0.41,
+                sourceDocument: ""
+            }
+        ];
+
+        const ictuThirtyQuestionLogs = [
+            {
+                id: 101,
+                timestamp: "2026-05-21T15:00:00+07:00",
+                question: "Sổ tay sinh viên 2025-2026 áp dụng cho đối tượng nào?",
+                answer: "Sổ tay sinh viên 2025-2026 là tài liệu lưu hành nội bộ dành cho sinh viên khóa 24 của ICTU.",
+                retrievedChunks: ["Đối tượng áp dụng sổ tay sinh viên 2025-2026", "Thông tin sinh viên khóa 24"],
+                latencyMs: 436,
+                relevanceScore: 0.95,
+                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
+            },
+            {
+                id: 102,
+                timestamp: "2026-05-21T15:05:00+07:00",
+                question: "Sinh viên khóa 24 dùng sổ tay sinh viên năm học nào?",
+                answer: "Sinh viên khóa 24 dùng Sổ tay sinh viên 2025-2026.",
+                retrievedChunks: ["Sinh viên khóa 24", "Sổ tay sinh viên 2025-2026"],
+                latencyMs: 389,
+                relevanceScore: 0.94,
+                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
+            },
+            {
+                id: 103,
+                timestamp: "2026-05-21T15:10:00+07:00",
+                question: "Trong sổ tay 2025-2026, giá trị cốt lõi của Trường là gì?",
+                answer: "Giá trị cốt lõi của Trường là Đoàn kết - Tận tâm - Sáng tạo - Thực tiễn.",
+                retrievedChunks: ["Giá trị cốt lõi", "Văn hóa nhà trường"],
+                latencyMs: 511,
+                relevanceScore: 0.92,
+                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
+            },
+            {
+                id: 104,
+                timestamp: "2026-05-21T15:15:00+07:00",
+                question: "Trong sổ tay 2025-2026, triết lý giáo dục của Trường được nêu như thế nào?",
+                answer: "Triết lý giáo dục lấy người học làm trung tâm, đào tạo công dân số và nuôi dưỡng lòng nhân ái.",
+                retrievedChunks: ["Triết lý giáo dục", "Người học làm trung tâm"],
+                latencyMs: 584,
+                relevanceScore: 0.9,
+                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
+            },
+            {
+                id: 105,
+                timestamp: "2026-05-21T15:20:00+07:00",
+                question: "Sổ tay 2025-2026 nêu địa chỉ và thông tin liên hệ của Trường là gì?",
+                answer: "Sổ tay nêu địa chỉ ICTU tại phường Quyết Thắng, tỉnh Thái Nguyên cùng điện thoại, email và website liên hệ.",
+                retrievedChunks: ["Địa chỉ ICTU", "Thông tin liên hệ ICTU"],
+                latencyMs: 622,
+                relevanceScore: 0.88,
+                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
+            },
+            {
+                id: 106,
+                timestamp: "2026-05-21T15:25:00+07:00",
+                question: "Quy định về công tác người học áp dụng cho ai?",
+                answer: "Quy định áp dụng cho người học đang học tập, nghiên cứu và rèn luyện tại ICTU.",
+                retrievedChunks: ["Công tác người học", "Đối tượng áp dụng"],
+                latencyMs: 472,
+                relevanceScore: 0.86,
+                sourceDocument: "student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md"
+            },
+            {
+                id: 107,
+                timestamp: "2026-05-21T15:30:00+07:00",
+                question: "Mục đích của công tác người học là gì?",
+                answer: "Công tác người học nhằm bảo đảm mục tiêu giáo dục và quyền, nhiệm vụ của người học trong nhà trường.",
+                retrievedChunks: ["Mục đích công tác người học", "Quyền và nhiệm vụ người học"],
+                latencyMs: 531,
+                relevanceScore: 0.84,
+                sourceDocument: "student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md"
+            },
+            {
+                id: 108,
+                timestamp: "2026-05-21T15:35:00+07:00",
+                question: "Người học tại ICTU có nhiệm vụ gì?",
+                answer: "Người học phải chấp hành quy định, học tập và rèn luyện theo kế hoạch, tôn trọng nhà giáo và thực hiện nghĩa vụ học phí, bảo hiểm.",
+                retrievedChunks: ["Nhiệm vụ của sinh viên", "Chấp hành quy chế nhà trường"],
+                latencyMs: 719,
+                relevanceScore: 0.82,
+                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
+            },
+            {
+                id: 109,
+                timestamp: "2026-05-21T15:40:00+07:00",
+                question: "Người học được hưởng những quyền gì?",
+                answer: "Sinh viên được học đúng ngành, được cung cấp thông tin, sử dụng thư viện, tham gia nghiên cứu khoa học và hưởng chính sách nếu đủ điều kiện.",
+                retrievedChunks: ["Quyền của sinh viên", "Chính sách hỗ trợ người học"],
+                latencyMs: 756,
+                relevanceScore: 0.81,
+                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
+            },
+            {
+                id: 110,
+                timestamp: "2026-05-21T15:45:00+07:00",
+                question: "Người học không được làm những hành vi nào?",
+                answer: "Người học không được thực hiện hành vi pháp luật cấm, gian lận học tập, xúc phạm người khác hoặc phá hoại tài sản.",
+                retrievedChunks: ["Các hành vi người học không được làm", "Vi phạm quy định nhà trường"],
+                latencyMs: 603,
+                relevanceScore: 0.83,
+                sourceDocument: "student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md"
+            },
+            {
+                id: 111,
+                timestamp: "2026-05-21T15:50:00+07:00",
+                question: "Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?",
+                answer: "Danh hiệu sinh viên căn cứ vào kết quả học tập theo thang điểm 4 và kết quả rèn luyện tương ứng.",
+                retrievedChunks: ["Danh hiệu sinh viên Khá", "Danh hiệu sinh viên Giỏi và Xuất sắc"],
+                latencyMs: 684,
+                relevanceScore: 0.87,
+                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
+            },
+            {
+                id: 112,
+                timestamp: "2026-05-21T15:55:00+07:00",
+                question: "Sinh viên học lực bình thường phải đăng ký tối thiểu bao nhiêu tín chỉ mỗi học kỳ chính?",
+                answer: "Sinh viên học lực bình thường phải đăng ký tối thiểu 14 tín chỉ mỗi học kỳ chính, trừ học kỳ cuối khóa.",
+                retrievedChunks: ["Khối lượng học tập tối thiểu", "Đăng ký tín chỉ học kỳ chính"],
+                latencyMs: 421,
+                relevanceScore: 0.93,
+                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
+            },
+            {
+                id: 113,
+                timestamp: "2026-05-21T16:00:00+07:00",
+                question: "Sinh viên học lực yếu được đăng ký bao nhiêu tín chỉ?",
+                answer: "Sinh viên học lực yếu phải đăng ký tối thiểu 10 tín chỉ và tối đa 14 tín chỉ mỗi học kỳ chính, trừ học kỳ cuối khóa.",
+                retrievedChunks: ["Sinh viên học lực yếu", "Giới hạn đăng ký tín chỉ"],
+                latencyMs: 493,
+                relevanceScore: 0.91,
+                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
+            },
+            {
+                id: 114,
+                timestamp: "2026-05-21T16:05:00+07:00",
+                question: "Học kỳ phụ được đăng ký tối đa bao nhiêu tín chỉ?",
+                answer: "Khối lượng học tập tối đa ở học kỳ phụ là 10 tín chỉ.",
+                retrievedChunks: ["Học kỳ phụ", "Tối đa 10 tín chỉ"],
+                latencyMs: 455,
+                relevanceScore: 0.92,
+                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
+            },
+            {
+                id: 115,
+                timestamp: "2026-05-21T16:10:00+07:00",
+                question: "Sinh viên cần nộp chứng chỉ trước đợt xét tốt nghiệp bao lâu?",
+                answer: "Sinh viên cần nộp các chứng chỉ bắt buộc chậm nhất trước 10 ngày trong các đợt xét tốt nghiệp.",
+                retrievedChunks: ["Chứng chỉ xét tốt nghiệp", "Thời hạn nộp trước 10 ngày"],
+                latencyMs: 537,
+                relevanceScore: 0.89,
+                sourceDocument: "student_handbooks/3. SO TAY SINH VIEN 2020-2021.questions.md"
+            },
+            {
+                id: 116,
+                timestamp: "2026-05-20T08:00:00+07:00",
+                question: "ICTU hôm nay có thông báo mới nhất gì cho sinh viên?",
+                answer: "Câu hỏi realtime cần kiểm tra luồng web search để lấy thông báo mới nhất từ nguồn ICTU chính thức.",
+                retrievedChunks: ["Tin mới ICTU", "Thông báo sinh viên"],
+                latencyMs: 1046,
+                relevanceScore: 0.71,
+                sourceDocument: "ictu.edu.vn/thong-bao"
+            },
+            {
+                id: 117,
+                timestamp: "2026-05-20T08:10:00+07:00",
+                question: "ICTU tuyển sinh năm nay có thông tin mới nhất nào?",
+                answer: "Cần tra cứu trang tuyển sinh ICTU để lấy thông tin mới nhất theo thời điểm hỏi.",
+                retrievedChunks: ["Tuyển sinh ICTU", "Tin tuyển sinh mới nhất"],
+                latencyMs: 982,
+                relevanceScore: 0.76,
+                sourceDocument: "tuyensinh.ictu.edu.vn"
+            },
+            {
+                id: 118,
+                timestamp: "2026-05-20T08:20:00+07:00",
+                question: "ICTU có lịch tuyển sinh mới nhất không?",
+                answer: "Cần dùng web search để kiểm tra lịch tuyển sinh mới nhất trên kênh tuyển sinh chính thức.",
+                retrievedChunks: ["Lịch tuyển sinh", "Kế hoạch tuyển sinh"],
+                latencyMs: 917,
+                relevanceScore: 0.74,
+                sourceDocument: "tuyensinh.ictu.edu.vn/lich-tuyen-sinh"
+            },
+            {
+                id: 119,
+                timestamp: "2026-05-20T08:30:00+07:00",
+                question: "ICTU có tin tức mới nhất về học phí không?",
+                answer: "Cần kiểm tra thông báo học phí mới nhất; nếu chưa có thông báo thì nêu rõ chưa tìm thấy cập nhật chính thức.",
+                retrievedChunks: ["Thông báo học phí", "Tin tài chính sinh viên"],
+                latencyMs: 1128,
+                relevanceScore: 0.68,
+                sourceDocument: "ictu.edu.vn/thong-bao-hoc-phi"
+            },
+            {
+                id: 120,
+                timestamp: "2026-05-20T08:40:00+07:00",
+                question: "ICTU có thông báo mới về bảo hiểm y tế sinh viên không?",
+                answer: "Cần dùng web search vì thông báo BHYT thay đổi theo từng năm hoặc từng đợt.",
+                retrievedChunks: ["BHYT sinh viên", "Thông báo bảo hiểm y tế"],
+                latencyMs: 895,
+                relevanceScore: 0.7,
+                sourceDocument: "ictu.edu.vn/bhyt-sinh-vien"
+            },
+            {
+                id: 121,
+                timestamp: "2026-05-20T08:50:00+07:00",
+                question: "ICTU cập nhật lịch học mới nhất ở đâu?",
+                answer: "Câu trả lời nên ưu tiên nguồn chính thức của ICTU và nêu đường dẫn nếu web search tìm được.",
+                retrievedChunks: ["Lịch học mới nhất", "Cổng thông tin sinh viên ICTU"],
+                latencyMs: 811,
+                relevanceScore: 0.73,
+                sourceDocument: "ictu.edu.vn/lich-hoc"
+            },
+            {
+                id: 122,
+                timestamp: "2026-05-20T09:00:00+07:00",
+                question: "ICTU cập nhật lịch thi mới nhất cho sinh viên ở đâu?",
+                answer: "Cần tra cứu thông báo lịch thi mới nhất trên nguồn chính thức và kèm ngày thông báo nếu có.",
+                retrievedChunks: ["Lịch thi sinh viên", "Thông báo lịch thi"],
+                latencyMs: 867,
+                relevanceScore: 0.75,
+                sourceDocument: "ictu.edu.vn/lich-thi"
+            },
+            {
+                id: 123,
+                timestamp: "2026-05-20T09:10:00+07:00",
+                question: "ICTU gần đây có thông báo xét tốt nghiệp nào?",
+                answer: "Cần dùng web search để tìm thông báo xét tốt nghiệp gần đây; corpus nội bộ chỉ hỗ trợ quy định chung.",
+                retrievedChunks: ["Xét tốt nghiệp", "Thông báo tốt nghiệp ICTU"],
+                latencyMs: 974,
+                relevanceScore: 0.72,
+                sourceDocument: "ictu.edu.vn/xet-tot-nghiep"
+            },
+            {
+                id: 124,
+                timestamp: "2026-05-20T09:20:00+07:00",
+                question: "ICTU có tin mới về việc làm hoặc tuyển dụng sinh viên không?",
+                answer: "Cần kiểm tra các tin việc làm, tuyển dụng hoặc hướng nghiệp mới nhất liên quan đến sinh viên ICTU.",
+                retrievedChunks: ["Việc làm sinh viên", "Tin tuyển dụng ICTU"],
+                latencyMs: 786,
+                relevanceScore: 0.78,
+                sourceDocument: "ictu.edu.vn/viec-lam"
+            },
+            {
+                id: 125,
+                timestamp: "2026-05-20T09:30:00+07:00",
+                question: "ICTU năm nay có thông báo học bổng mới nhất không?",
+                answer: "Cần tra cứu thông báo học bổng mới nhất trong năm; nếu không thấy nguồn chính thức thì nêu rõ đang cập nhật.",
+                retrievedChunks: ["Học bổng ICTU", "Thông báo học bổng"],
+                latencyMs: 923,
+                relevanceScore: 0.69,
+                sourceDocument: "ictu.edu.vn/hoc-bong"
+            },
+            {
+                id: 126,
+                timestamp: "2026-05-20T09:40:00+07:00",
+                question: "ICTU có cập nhật mới nhất về email sinh viên không?",
+                answer: "Cần kiểm tra thông báo hoặc hướng dẫn mới nhất về email sinh viên; FAQ nội bộ chỉ làm thông tin nền.",
+                retrievedChunks: [],
+                latencyMs: 654,
+                relevanceScore: 0.35,
+                sourceDocument: ""
+            },
+            {
+                id: 127,
+                timestamp: "2026-05-20T09:50:00+07:00",
+                question: "ICTU có thông báo mới về nhập học cho tân sinh viên không?",
+                answer: "Cần kiểm tra thông báo nhập học mới nhất cho tân sinh viên trên kênh ICTU chính thức.",
+                retrievedChunks: ["Nhập học tân sinh viên", "Hồ sơ nhập học"],
+                latencyMs: 842,
+                relevanceScore: 0.77,
+                sourceDocument: "tuyensinh.ictu.edu.vn/nhap-hoc"
+            },
+            {
+                id: 128,
+                timestamp: "2026-05-20T10:00:00+07:00",
+                question: "ICTU có tin tức mới nhất về cổng thông tin sinh viên không?",
+                answer: "Cần dùng web search để tìm thông báo mới nhất về cổng thông tin sinh viên hoặc hệ thống phục vụ sinh viên.",
+                retrievedChunks: [],
+                latencyMs: 701,
+                relevanceScore: 0.42,
+                sourceDocument: ""
+            },
+            {
+                id: 129,
+                timestamp: "2026-05-20T10:10:00+07:00",
+                question: "ICTU có thông báo mới nhất về ký túc xá không?",
+                answer: "Cần kiểm tra thông báo mới nhất về ký túc xá, nội trú hoặc dịch vụ sinh viên.",
+                retrievedChunks: ["Ký túc xá ICTU", "Thông báo nội trú"],
+                latencyMs: 914,
+                relevanceScore: 0.66,
+                sourceDocument: "ictu.edu.vn/ky-tuc-xa"
+            },
+            {
+                id: 130,
+                timestamp: "2026-05-20T10:20:00+07:00",
+                question: "ICTU có lịch sự kiện sinh viên mới nhất hôm nay không?",
+                answer: "Cần tra cứu lịch sự kiện hoặc tin sinh viên mới nhất trong ngày, kèm nguồn và thời điểm truy cập.",
+                retrievedChunks: [],
+                latencyMs: 593,
+                relevanceScore: 0.31,
+                sourceDocument: ""
+            }
+        ];
+
+        const dashboardMockLogs = [...mockLogs, ...ictuThirtyQuestionLogs];
+
+        let allLogs = [...dashboardMockLogs];
+        let testQuestions = [];
+        let activeTestQuestionGroup = "all";
+        let currentRange = "today";
+        let currentPage = 1;
+        const rowsPerPage = 10;
+        let latencyChart;
+        let hitMissChart;
+
+        const els = {
+            avgLatency: document.getElementById("avgLatency"),
+            p95Latency: document.getElementById("p95Latency"),
+            latencyDelta: document.getElementById("latencyDelta"),
+            hitRate: document.getElementById("hitRate"),
+            hitRatio: document.getElementById("hitRatio"),
+            avgRelevance: document.getElementById("avgRelevance"),
+            thresholdState: document.getElementById("thresholdState"),
+            totalQueries: document.getElementById("totalQueries"),
+            failedCount: document.getElementById("failedCount"),
+            searchInput: document.getElementById("searchInput"),
+            tableBody: document.getElementById("logTableBody"),
+            emptyState: document.getElementById("emptyState"),
+            pageInfo: document.getElementById("pageInfo"),
+            prevPageBtn: document.getElementById("prevPageBtn"),
+            currentPageBtn: document.getElementById("currentPageBtn"),
+            nextPageBtn: document.getElementById("nextPageBtn"),
+            exportAllBtn: document.getElementById("exportAllBtn"),
+            exportFilteredBtn: document.getElementById("exportFilteredBtn"),
+            themeToggle: document.getElementById("themeToggle"),
+            themeIcon: document.getElementById("themeIcon"),
+            themeText: document.getElementById("themeText"),
+            testQuestionSearch: document.getElementById("testQuestionSearch"),
+            testQuestionGrid: document.getElementById("testQuestionGrid"),
+            testQuestionEmpty: document.getElementById("testQuestionEmpty"),
+            testTotalCount: document.getElementById("testTotalCount"),
+            testLocalCount: document.getElementById("testLocalCount"),
+            testWebCount: document.getElementById("testWebCount"),
+            toast: document.getElementById("toast")
+        };
+
+        async function fetchLogs() {
+            // TODO: replace mock fallback once the production evaluation API records full RAG fields.
+            try {
+                const response = await fetch("/api/logs");
+                if (!response.ok) return [...dashboardMockLogs];
+                const logs = await response.json();
+                return Array.isArray(logs) && logs.length ? logs : [...dashboardMockLogs];
+            } catch {
+                return [...dashboardMockLogs];
+            }
+        }
+
+        async function fetchMetrics() {
+            // TODO: replace mock-derived cards with this response when backend metrics include all dashboard fields.
+            try {
+                const response = await fetch("/api/metrics");
+                return response.ok ? response.json() : null;
+            } catch {
+                return null;
+            }
+        }
+
+        async function fetchTestQuestions() {
+            try {
+                const response = await fetch("/api/test-questions");
+                if (!response.ok) return [];
+                const questions = await response.json();
+                return Array.isArray(questions) ? questions : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function isHit(log) {
+            return Boolean(log.sourceDocument && log.retrievedChunks && log.retrievedChunks.length > 0);
+        }
+
+        function isFailed(log) {
+            return !log.answer || !isHit(log);
+        }
+
+        function getStatus(log) {
+            if (!isHit(log)) return "Miss";
+            if (log.latencyMs > 800) return "Slow";
+            return "Good";
+        }
+
+        function formatTime(value) {
+            return new Intl.DateTimeFormat("vi-VN", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            }).format(new Date(value));
+        }
+
+        function formatDay(value) {
+            return new Intl.DateTimeFormat("vi-VN", {
+                day: "2-digit",
+                month: "2-digit"
+            }).format(new Date(value));
+        }
+
+        function startOfDay(date) {
+            const next = new Date(date);
+            next.setHours(0, 0, 0, 0);
+            return next;
+        }
+
+        function getLatestLogDate(logs) {
+            const latest = logs.reduce((max, log) => Math.max(max, new Date(log.timestamp).getTime()), 0);
+            return latest ? new Date(latest) : new Date();
+        }
+
+        function filterByRange(logs) {
+            if (currentRange === "all") return [...logs];
+            const latest = startOfDay(getLatestLogDate(logs));
+            let minDate = new Date(latest);
+            if (currentRange === "today") {
+                minDate = latest;
+            } else if (currentRange === "7d") {
+                minDate.setDate(minDate.getDate() - 6);
+            } else if (currentRange === "30d") {
+                minDate.setDate(minDate.getDate() - 29);
+            }
+            return logs.filter(log => new Date(log.timestamp) >= minDate);
+        }
+
+        function percentile(values, p) {
+            if (!values.length) return 0;
+            const sorted = [...values].sort((a, b) => a - b);
+            const index = Math.ceil((p / 100) * sorted.length) - 1;
+            return sorted[Math.max(0, Math.min(index, sorted.length - 1))];
+        }
+
+        function average(values) {
+            if (!values.length) return 0;
+            return values.reduce((sum, value) => sum + value, 0) / values.length;
+        }
+
+        function getSearchFilteredLogs() {
+            const ranged = filterByRange(allLogs);
+            const term = els.searchInput.value.trim().toLowerCase();
+            if (!term) return ranged;
+            return ranged.filter(log => log.question.toLowerCase().includes(term));
+        }
+
+        function getMetricLogs() {
+            return filterByRange(allLogs);
+        }
+
+        function getPreviousPeriodLogs(logs) {
+            if (currentRange === "all") return [];
+            const latest = startOfDay(getLatestLogDate(allLogs));
+            const currentStart = new Date(latest);
+            const previousStart = new Date(latest);
+            if (currentRange === "today") {
+                currentStart.setDate(currentStart.getDate());
+                previousStart.setDate(previousStart.getDate() - 1);
+            } else if (currentRange === "7d") {
+                currentStart.setDate(currentStart.getDate() - 6);
+                previousStart.setDate(previousStart.getDate() - 13);
+            } else if (currentRange === "30d") {
+                currentStart.setDate(currentStart.getDate() - 29);
+                previousStart.setDate(previousStart.getDate() - 59);
+            }
+            return logs.filter(log => {
+                const time = new Date(log.timestamp);
+                return time >= previousStart && time < currentStart;
+            });
+        }
+
+        function updateMetrics() {
+            const logs = getMetricLogs();
+            const latencies = logs.map(log => log.latencyMs);
+            const avgLatency = Math.round(average(latencies));
+            const p95 = Math.round(percentile(latencies, 95));
+            const hitCount = logs.filter(isHit).length;
+            const avgRelevance = average(logs.map(log => log.relevanceScore));
+            const failedCount = logs.filter(isFailed).length;
+
+            const previousLogs = getPreviousPeriodLogs(allLogs);
+            const previousAvg = average(previousLogs.map(log => log.latencyMs));
+            const delta = previousAvg ? ((avgLatency - previousAvg) / previousAvg) * 100 : 0;
+            const deltaText = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`;
+
+            els.avgLatency.textContent = avgLatency.toLocaleString("vi-VN");
+            els.p95Latency.textContent = `${p95.toLocaleString("vi-VN")} ms`;
+            els.latencyDelta.textContent = deltaText;
+            els.latencyDelta.classList.toggle("bad", delta > 0);
+            els.hitRate.textContent = logs.length ? Math.round((hitCount / logs.length) * 100) : 0;
+            els.hitRatio.textContent = `${hitCount}/${logs.length}`;
+            els.avgRelevance.textContent = avgRelevance.toFixed(2);
+            els.thresholdState.textContent = avgRelevance >= 0.75 ? "Đạt" : "Dưới ngưỡng";
+            els.thresholdState.classList.toggle("bad", avgRelevance < 0.75);
+            els.totalQueries.textContent = logs.length.toLocaleString("vi-VN");
+            els.failedCount.textContent = failedCount.toLocaleString("vi-VN");
+        }
+
+        function groupByDay(logs) {
+            const map = new Map();
+            logs.forEach(log => {
+                const key = log.timestamp.slice(0, 10);
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(log);
+            });
+            return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+        }
+
+        function getChartTextColor() {
+            return getComputedStyle(document.documentElement).getPropertyValue("--muted").trim();
+        }
+
+        function getChartGridColor() {
+            return getComputedStyle(document.documentElement).getPropertyValue("--border").trim();
+        }
+
+        function buildChartOptions(stacked = false) {
+            const textColor = getChartTextColor();
+            const gridColor = getChartGridColor();
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: textColor, boxWidth: 14, font: { weight: "bold" } }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked,
+                        ticks: { color: textColor },
+                        grid: { color: gridColor }
+                    },
+                    y: {
+                        stacked,
+                        beginAtZero: true,
+                        ticks: { color: textColor },
+                        grid: { color: gridColor }
+                    }
+                }
+            };
+        }
+
+        function updateCharts() {
+            const logs = getMetricLogs();
+            const grouped = groupByDay(logs);
+            const labels = grouped.map(([day]) => formatDay(`${day}T00:00:00+07:00`));
+            const p50 = grouped.map(([, dayLogs]) => Math.round(percentile(dayLogs.map(log => log.latencyMs), 50)));
+            const p95 = grouped.map(([, dayLogs]) => Math.round(percentile(dayLogs.map(log => log.latencyMs), 95)));
+            const hits = grouped.map(([, dayLogs]) => dayLogs.filter(isHit).length);
+            const misses = grouped.map(([, dayLogs]) => dayLogs.filter(log => !isHit(log)).length);
+
+            if (latencyChart) latencyChart.destroy();
+            if (hitMissChart) hitMissChart.destroy();
+
+            latencyChart = new Chart(document.getElementById("latencyChart"), {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "P50 latency",
+                            data: p50,
+                            borderColor: "#1565C0",
+                            backgroundColor: "#1565C0",
+                            tension: 0.25,
+                            borderWidth: 2,
+                            pointRadius: 3
+                        },
+                        {
+                            label: "P95 latency",
+                            data: p95,
+                            borderColor: "#E53935",
+                            backgroundColor: "#E53935",
+                            tension: 0.25,
+                            borderWidth: 2,
+                            pointRadius: 3
+                        }
+                    ]
+                },
+                options: buildChartOptions(false)
+            });
+
+            hitMissChart = new Chart(document.getElementById("hitMissChart"), {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Hit",
+                            data: hits,
+                            backgroundColor: "#2E7D32",
+                            borderColor: "#2E7D32",
+                            borderWidth: 1
+                        },
+                        {
+                            label: "Miss",
+                            data: misses,
+                            backgroundColor: "#E53935",
+                            borderColor: "#E53935",
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: buildChartOptions(true)
+            });
+        }
+
+        function relevanceColor(score) {
+            if (score >= 0.8) return "green";
+            if (score >= 0.6) return "yellow";
+            return "red";
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function testGroupLabel(group) {
+            return group === "web_search" ? "Web search" : "Local data";
+        }
+
+        function getFilteredTestQuestions() {
+            const term = (els.testQuestionSearch?.value || "").trim().toLowerCase();
+            return testQuestions.filter(question => {
+                const groupMatch = activeTestQuestionGroup === "all" || question.group === activeTestQuestionGroup;
+                if (!groupMatch) return false;
+                if (!term) return true;
+                const haystack = [
+                    question.id,
+                    question.group,
+                    question.question,
+                    question.expected_tool,
+                    question.expected_flow,
+                    ...(question.expected_source_contains || []),
+                ].join(" ").toLowerCase();
+                return haystack.includes(term);
+            });
+        }
+
+        function updateTestQuestionStats() {
+            const total = testQuestions.length;
+            const localCount = testQuestions.filter(item => item.group === "local_data").length;
+            const webCount = testQuestions.filter(item => item.group === "web_search").length;
+            els.testTotalCount.textContent = `${total} câu`;
+            els.testLocalCount.textContent = `${localCount} local`;
+            els.testWebCount.textContent = `${webCount} web`;
+        }
+
+        function renderTestQuestions() {
+            const filtered = getFilteredTestQuestions();
+            updateTestQuestionStats();
+
+            els.testQuestionEmpty.hidden = filtered.length > 0;
+            els.testQuestionGrid.innerHTML = filtered.map(item => {
+                const isWeb = item.group === "web_search";
+                const sources = Array.isArray(item.expected_source_contains) && item.expected_source_contains.length
+                    ? item.expected_source_contains.join(", ")
+                    : "Không ràng buộc nguồn cụ thể";
+                return `
+                    <article class="test-question-card">
+                        <div class="test-question-meta">
+                            <span class="test-id">${escapeHtml(item.id || item.index)}</span>
+                            <span class="test-group ${isWeb ? "web" : "local"}">${escapeHtml(testGroupLabel(item.group))}</span>
+                        </div>
+                        <p class="test-question-text">${escapeHtml(item.question)}</p>
+                        <div class="test-question-source">
+                            Flow: <strong>${escapeHtml(item.expected_flow || "-")}</strong><br>
+                            Tool: <strong>${escapeHtml(item.expected_tool || "-")}</strong><br>
+                            Source: ${escapeHtml(sources)}
+                        </div>
+                        <div class="test-card-actions">
+                            <button type="button" class="copy-question-btn" data-copy-question="${escapeHtml(item.question)}">Copy câu hỏi</button>
+                        </div>
+                    </article>
+                `;
+            }).join("");
+        }
+
+        function renderTable() {
+            const filtered = getSearchFilteredLogs();
+            const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+            currentPage = Math.min(currentPage, totalPages);
+            const start = (currentPage - 1) * rowsPerPage;
+            const pageRows = filtered.slice(start, start + rowsPerPage);
+
+            els.tableBody.innerHTML = pageRows.map(log => {
+                const hit = isHit(log);
+                const status = getStatus(log);
+                const statusClass = status.toLowerCase();
+                const source = log.sourceDocument || "Không tìm thấy nguồn";
+                const relevanceClass = relevanceColor(log.relevanceScore);
+                const relevancePercent = Math.round(log.relevanceScore * 100);
+
+                return `
+                    <tr>
+                        <td>${formatTime(log.timestamp)}</td>
+                        <td class="question-cell">${escapeHtml(log.question)}</td>
+                        <td>${escapeHtml(source)}</td>
+                        <td><strong>${log.latencyMs.toLocaleString("vi-VN")} ms</strong></td>
+                        <td><span class="hit-pill ${hit ? "hit" : "miss"}">${hit ? "Hit" : "Miss"}</span></td>
+                        <td class="relevance-cell">
+                            <div class="relevance-label">
+                                <span>${log.relevanceScore.toFixed(2)}</span>
+                                <span>${relevancePercent}%</span>
+                            </div>
+                            <div class="progress" aria-label="Relevance ${relevancePercent}%">
+                                <div class="progress-bar ${relevanceClass}" style="width: ${relevancePercent}%"></div>
+                            </div>
+                        </td>
+                        <td><span class="status-badge ${statusClass}">${status}</span></td>
+                    </tr>
+                `;
+            }).join("");
+
+            els.emptyState.hidden = filtered.length > 0;
+            const shownStart = filtered.length ? start + 1 : 0;
+            const shownEnd = Math.min(start + rowsPerPage, filtered.length);
+            els.pageInfo.textContent = `${shownStart}-${shownEnd} / ${filtered.length}`;
+            els.currentPageBtn.textContent = String(currentPage);
+            els.prevPageBtn.disabled = currentPage <= 1;
+            els.nextPageBtn.disabled = currentPage >= totalPages;
+        }
+
+        function renderDashboard() {
+            updateMetrics();
+            updateCharts();
+            renderTable();
+        }
+
+        function toCsvValue(value) {
+            const text = String(value ?? "");
+            return `"${text.replaceAll('"', '""')}"`;
+        }
+
+        function exportCsv(logs, filename) {
+            const header = [
+                "Timestamp",
+                "Question",
+                "Answer",
+                "Source Document",
+                "Latency (ms)",
+                "Hit",
+                "Relevance",
+                "Status",
+                "Retrieved Chunks"
+            ];
+            const rows = logs.map(log => [
+                formatTime(log.timestamp),
+                log.question,
+                log.answer,
+                log.sourceDocument || "",
+                log.latencyMs,
+                isHit(log) ? "Hit" : "Miss",
+                log.relevanceScore.toFixed(2),
+                getStatus(log),
+                (log.retrievedChunks || []).join(" | ")
+            ]);
+            const csv = [header, ...rows]
+                .map(row => row.map(toCsvValue).join(","))
+                .join("\r\n");
+            const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            showToast("Đã xuất CSV thành công");
+        }
+
+        function showToast(message) {
+            els.toast.textContent = message;
+            els.toast.classList.add("show");
+            window.clearTimeout(showToast.timer);
+            showToast.timer = window.setTimeout(() => {
+                els.toast.classList.remove("show");
+            }, 2200);
+        }
+
+        function setTheme(theme) {
+            document.documentElement.dataset.theme = theme;
+            const isDark = theme === "dark";
+            els.themeIcon.textContent = isDark ? "☀" : "☾";
+            els.themeText.textContent = isDark ? "Light" : "Dark";
+            els.themeToggle.classList.toggle("active", isDark);
+            localStorage.setItem("ictu-eval-theme", theme);
+            if (latencyChart || hitMissChart) updateCharts();
+        }
+
+        document.querySelectorAll(".range-btn").forEach(button => {
+            button.addEventListener("click", () => {
+                document.querySelectorAll(".range-btn").forEach(item => item.classList.remove("active"));
+                button.classList.add("active");
+                currentRange = button.dataset.range;
+                currentPage = 1;
+                renderDashboard();
+            });
+        });
+
+        els.searchInput.addEventListener("input", () => {
+            currentPage = 1;
+            renderTable();
+        });
+
+        els.testQuestionSearch.addEventListener("input", renderTestQuestions);
+
+        document.querySelectorAll(".test-filter-btn").forEach(button => {
+            button.addEventListener("click", () => {
+                activeTestQuestionGroup = button.dataset.testGroup || "all";
+                document.querySelectorAll(".test-filter-btn").forEach(item => {
+                    item.classList.toggle("active", item === button);
+                });
+                renderTestQuestions();
+            });
+        });
+
+        els.testQuestionGrid.addEventListener("click", async event => {
+            const button = event.target.closest("[data-copy-question]");
+            if (!button) return;
+            const question = button.dataset.copyQuestion || "";
+            try {
+                await navigator.clipboard.writeText(question);
+                showToast("Đã copy câu hỏi test");
+            } catch {
+                showToast("Không copy được câu hỏi");
+            }
+        });
+
+        els.prevPageBtn.addEventListener("click", () => {
+            currentPage = Math.max(1, currentPage - 1);
+            renderTable();
+        });
+
+        els.nextPageBtn.addEventListener("click", () => {
+            currentPage += 1;
+            renderTable();
+        });
+
+        els.exportAllBtn.addEventListener("click", () => {
+            exportCsv(allLogs, "ictu-chatbot-all-logs.csv");
+        });
+
+        els.exportFilteredBtn.addEventListener("click", () => {
+            exportCsv(getSearchFilteredLogs(), "ictu-chatbot-filtered-logs.csv");
+        });
+
+        els.themeToggle.addEventListener("click", () => {
+            const current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+            setTheme(current === "dark" ? "light" : "dark");
+        });
+
+        async function init() {
+            allLogs = await fetchLogs();
+            testQuestions = await fetchTestQuestions();
+            // TODO: replace with real API by using returned metrics if backend pre-aggregates values.
+            await fetchMetrics();
+            const savedTheme = localStorage.getItem("ictu-eval-theme") || "light";
+            setTheme(savedTheme === "dark" ? "dark" : "light");
+            renderDashboard();
+            renderTestQuestions();
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -37,6 +37,10 @@ _AMBIGUOUS_YEAR_RE = re.compile(r"\b20\d{2}(?:[-/]\d{4})?\b")
 _AMBIGUOUS_COHORT_RE = re.compile(r"\b(?:k|khoa)\s*0*\d{2}\b", flags=re.IGNORECASE)
 _AMBIGUOUS_SEMESTER_RE = re.compile(r"\b(?:hoc ky|hk)\s*[12]\b", flags=re.IGNORECASE)
 _AMBIGUOUS_ROUND_RE = re.compile(r"\b(?:dot|lan)\s*\d+\b", flags=re.IGNORECASE)
+_SOURCE_CITATION_BLOCK_RE = re.compile(
+    r"\n+(?:-{3,}\s*)?(?:📚\s*)?(?:Nguồn tham khảo|References)\s*:\s*(?:\n\s*[-*]\s+\S.*)+\s*$",
+    flags=re.IGNORECASE,
+)
 _POLICY_TIMEFRAME_MARKERS = (
     "học phí",
     "học bổng",
@@ -320,27 +324,10 @@ def _fallback_kb_reply(state: ChatGraphState) -> str:
 
 
 def _append_source_citations(response: str, state: ChatGraphState) -> str:
-    """Append block nguồn tham khảo vào cuối response text.
-
-    Đảm bảo client không render field `sources` vẫn thấy được nguồn.
-    """
-    sources = state.get("sources", [])
-    if not sources or not response:
+    """Keep answer text clean; clients render structured sources separately."""
+    if not response:
         return response
-
-    unique_sources = list(dict.fromkeys(
-        s for s in sources
-        if s and s != "BOT_RULE" and len(s) > 2
-    ))
-    if not unique_sources:
-        return response
-
-    current_lang = get_current_language(state.get("session_id", "default"))
-    heading = "📚 Nguồn tham khảo:" if current_lang == "vi" else "📚 References:"
-    source_lines = [f"- {source}" for source in unique_sources[:5]]
-    citation_block = f"\n\n---\n{heading}\n" + "\n".join(source_lines)
-
-    return response.rstrip() + citation_block
+    return _SOURCE_CITATION_BLOCK_RE.sub("", response).rstrip()
 
 
 def _generate_answer(state: ChatGraphState) -> ChatGraphState:
@@ -425,9 +412,21 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
     user_row_id = 0
     bot_row_id = 0
     if message:
-        user_row_id = save_message("user", message, session_id=session_id)
+        user_row_id = save_message(
+            "user",
+            message,
+            session_id=session_id,
+            owner_username=str(state.get("owner_username") or ""),
+            owner_role=str(state.get("owner_role") or ""),
+        )
     if response:
-        bot_row_id = save_message("bot", response, session_id=session_id)
+        bot_row_id = save_message(
+            "bot",
+            response,
+            session_id=session_id,
+            owner_username=str(state.get("owner_username") or ""),
+            owner_role=str(state.get("owner_role") or ""),
+        )
 
     if response and "web_search" in str(state.get("mode", "")):
         state["web_kb_status"] = save_web_search_answer(
@@ -516,7 +515,13 @@ def _build_chat_graph() -> RAGChatGraph:
     )
 
 
-async def process_chat_message(message: str, session_id: str = "default", llm_model: str = "auto") -> dict:
+async def process_chat_message(
+    message: str,
+    session_id: str = "default",
+    llm_model: str = "auto",
+    owner_username: str = "",
+    owner_role: str = "",
+) -> dict:
     started_at = time.perf_counter()
     memory_store = get_default_memory_store()
     memory_key = stable_session_id(anonymous_id=session_id)
@@ -531,6 +536,8 @@ async def process_chat_message(message: str, session_id: str = "default", llm_mo
         "session_id": session_id,
         "selected_llm_model": llm_model,
         "persistent_memory": persistent_memory,
+        "owner_username": owner_username,
+        "owner_role": owner_role,
     }
     state = _build_chat_graph().invoke(state)
     response_time_ms = int((time.perf_counter() - started_at) * 1000)

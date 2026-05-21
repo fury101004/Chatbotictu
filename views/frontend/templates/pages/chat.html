@@ -123,7 +123,7 @@
 </div>
 
 <script>
-const CHAT_STORAGE_SCOPE = "{{ current_role if is_authenticated else 'guest' }}";
+const CHAT_STORAGE_SCOPE = {{ chat_storage_scope|tojson }};
 const CHAT_STATE_KEY = `ictu-dashboard-chat-state:${CHAT_STORAGE_SCOPE}`;
 const CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:${CHAT_STORAGE_SCOPE}`;
 const MAX_CHAT_MESSAGE_CHARS = Number("{{ max_chat_message_chars|default(2000) }}");
@@ -306,6 +306,23 @@ function formatModelName(value) {
     return labels[value] || value;
 }
 
+function normalizeSources(rawSources) {
+    if (!Array.isArray(rawSources)) return [];
+    const seen = new Set();
+    return rawSources
+        .map((source) => String(source || "").trim())
+        .filter((source) => source && source !== "BOT_RULE" && !seen.has(source) && seen.add(source));
+}
+
+function renderSourceItem(source) {
+    const safeSource = escapeHtml(source);
+    if (/^https?:\/\//i.test(source)) {
+        return `<li><a href="${safeSource}" target="_blank" rel="noopener noreferrer">${safeSource}</a></li>`;
+    }
+    const previewUrl = `/source-preview?source=${encodeURIComponent(source)}`;
+    return `<li><a href="${previewUrl}" target="_blank" rel="noopener noreferrer">${safeSource}</a></li>`;
+}
+
 const modelState = {
     value: "auto",
     label: "Auto"
@@ -395,19 +412,13 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null,
     const metaHtml = metaParts.length
         ? `<div class="message-meta">${metaParts.join(" | ")}</div>`
         : "";
-    const sources = Array.isArray(meta?.sources) ? meta.sources.filter(Boolean) : [];
+    const sources = normalizeSources(meta?.sources);
     const sourcesHtml = sources.length
         ? `
             <div class="message-sources">
                 <div class="message-sources-label">Nguồn tham khảo</div>
                 <ul class="message-sources-list">
-                    ${sources.map((source) => {
-                        const safeSource = escapeHtml(String(source));
-                        if (/^https?:\/\//i.test(String(source))) {
-                            return `<li><a href="${safeSource}" target="_blank" rel="noopener noreferrer">${safeSource}</a></li>`;
-                        }
-                        return `<li>${safeSource}</li>`;
-                    }).join("")}
+                    ${sources.map(renderSourceItem).join("")}
                 </ul>
             </div>
         `
@@ -893,6 +904,13 @@ body {
     border-color: #00ff88;
 }
 
+.header-actions .chat-new-button {
+    width: auto;
+    min-width: 64px;
+    padding: 0 0.85rem;
+    font-weight: 700;
+}
+
 /* Messages container */
 .messages-container {
     flex: 1;
@@ -1104,6 +1122,17 @@ body {
     color: inherit;
     font-size: 0.82rem;
     line-height: 1.45;
+}
+
+.message-sources-list a {
+    color: #b9a7ff;
+    overflow-wrap: anywhere;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.message-sources-list a:hover {
+    color: #d8ccff;
 }
 
 .message-content strong {
