@@ -308,7 +308,30 @@ Lệnh smoke test nhanh thường dùng khi sửa auth/web:
 Build và chạy bằng Docker Compose:
 
 ```powershell
+docker-compose up --build
+```
+
+Nếu máy có Docker Compose plugin thì có thể dùng lệnh tương đương:
+
+```powershell
 docker compose up --build
+```
+
+Image mặc định được tag là `ictu-rag-api:local`. Có thể đổi tag trước khi build/push:
+
+```powershell
+$env:DOCKER_IMAGE="your-dockerhub-user/ictu-rag-api:latest"
+docker-compose build
+docker push $env:DOCKER_IMAGE
+```
+
+Nếu máy local không đủ RAM/dung lượng để build, dùng workflow GitHub Actions `Build Docker image`.
+Workflow này push image lên GitHub Container Registry:
+
+```powershell
+docker pull ghcr.io/<github-owner>/<repo-name>:latest
+$env:DOCKER_IMAGE="ghcr.io/<github-owner>/<repo-name>:latest"
+docker-compose up -d --no-build
 ```
 
 `docker-compose.yml` mount các thư mục runtime:

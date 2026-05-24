@@ -1,5 +1,6 @@
 services:
   bot:
+    image: ${DOCKER_IMAGE:-ictu-rag-api:local}
     build: .
     container_name: ictu-rag-api
     restart: unless-stopped
