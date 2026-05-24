@@ -18,8 +18,10 @@ from services.content.knowledge_base_service import get_knowledge_base_payload
 from services.evaluation_question_service import get_evaluation_test_questions
 from services.eval_tracker import get_eval_tracker
 from services.llm.rate_limit_monitor import reset_429_stats, snapshot_429_stats
+from services.user_feedback_service import get_feedback_summary
 from views.api_view import (
     build_chat_response,
+    build_deployment_status_response,
     build_health_response,
     build_knowledge_base_response,
     build_token_response,
@@ -83,6 +85,12 @@ async def api_eval_test_questions(request: Request):
     return get_evaluation_test_questions()
 
 
+@router_api.get("/feedback/summary")
+async def api_feedback_summary(request: Request):
+    _require_admin_session(request)
+    return await get_feedback_summary()
+
+
 @router_v1.post("/chat", response_model=ChatResponse)
 @router_api.post("/chat", response_model=ChatResponse)
 @limiter.limit(settings.API_RATE_CHAT)
@@ -126,6 +134,12 @@ async def api_knowledge_base(
 @router_root.get("/health")
 async def health():
     return build_health_response()
+
+
+@router_v1.get("/deployment/status")
+@router_api.get("/deployment/status")
+async def deployment_status():
+    return build_deployment_status_response()
 
 
 @router_v1.get("/metrics/rate-limit-429")

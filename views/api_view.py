@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from config.settings import settings
@@ -49,6 +52,56 @@ def build_health_response() -> dict:
         "model": PRIMARY_MODEL_NAME,
         "llm_configured": configured_model is not None,
         "embedding_backend_ready": embedding_backend_ready(),
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+def _directory_exists(path: Path) -> bool:
+    return path.exists() and path.is_dir()
+
+
+def _directory_writable(path: Path) -> bool:
+    if not _directory_exists(path):
+        return False
+    probe = path / f".readiness-{uuid.uuid4().hex}.tmp"
+    try:
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
+
+
+def build_deployment_status_response() -> dict:
+    data_dir = Path(settings.DATA_DIR)
+    vectorstore_dir = Path(settings.VECTORSTORE_DIR)
+    log_dir = Path(settings.LOG_DIR)
+    configured_model = get_model()
+
+    checks = {
+        "data_dir_exists": _directory_exists(data_dir),
+        "data_dir_writable": _directory_writable(data_dir),
+        "vectorstore_dir_exists": _directory_exists(vectorstore_dir),
+        "vectorstore_dir_writable": _directory_writable(vectorstore_dir),
+        "log_dir_exists": _directory_exists(log_dir),
+        "log_dir_writable": _directory_writable(log_dir),
+        "llm_configured": configured_model is not None,
+        "embedding_backend_ready": embedding_backend_ready(),
+    }
+
+    return {
+        "app_name": settings.APP_NAME,
+        "environment": settings.ENVIRONMENT,
+        "port": os.getenv("PORT", "8000"),
+        "data_dir": str(data_dir),
+        "vectorstore_dir": str(vectorstore_dir),
+        "log_dir": str(log_dir),
+        "checks": checks,
+        "status": "ready" if all(checks.values()) else "degraded",
         "timestamp": datetime.now().isoformat(),
     }
 

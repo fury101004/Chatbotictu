@@ -38,6 +38,7 @@ from services.content.document_service import (
 from services.content.knowledge_base_service import approve_chat_entry, get_knowledge_base_payload, reject_chat_entry
 from services.ingestion_queue import get_ingestion_queue
 from services.llm.llm_service import get_chat_model_options
+from services.user_feedback_service import save_user_feedback
 from services.vector.vector_admin_service import delete_chunk_by_id
 from repositories.vector_repository import fetch_documents_by_source
 from views.web_view import current_prompt_response, render_page, redirect_vector_manager, unauthorized_response
@@ -335,6 +336,47 @@ async def chat_web(
     )
     result["session_id"] = current_session_id
     return result
+
+
+@router.post("/chat/feedback")
+@limiter.limit(settings.API_RATE_CHAT)
+async def chat_feedback(
+    request: Request,
+    session_id: str = Form(...),
+    question: str = Form(...),
+    answer: str = Form(...),
+    thumbs_up: bool = Form(...),
+    comment: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    if not is_web_authenticated(request):
+        return JSONResponse({"status": "error", "detail": "Login required"}, status_code=401)
+    if not validate_csrf_token(request, csrf_token):
+        return JSONResponse({"status": "error", "detail": "CSRF Invalid!"}, status_code=403)
+
+    cleaned_question = str(question or "").strip()
+    cleaned_answer = str(answer or "").strip()
+    if not cleaned_question or not cleaned_answer:
+        return JSONResponse(
+            {"status": "error", "detail": "Question and answer are required."},
+            status_code=422,
+        )
+
+    current_session_id = resolve_chat_session_id(request, session_id)
+    feedback_id = await save_user_feedback(
+        session_id=current_session_id,
+        question=cleaned_question,
+        answer=cleaned_answer,
+        thumbs_up=thumbs_up,
+        comment=comment,
+    )
+    return JSONResponse(
+        {
+            "status": "ok",
+            "feedback_id": feedback_id,
+            "message": "Đã ghi nhận đánh giá.",
+        }
+    )
 
 
 @router.get("/source-preview")

@@ -323,6 +323,95 @@ function renderSourceItem(source) {
     return `<li><a href="${previewUrl}" target="_blank" rel="noopener noreferrer">${safeSource}</a></li>`;
 }
 
+function normalizeFeedbackPayload(feedback, fallbackAnswer) {
+    if (!feedback || typeof feedback !== "object") return null;
+    const question = String(feedback.question || "").trim();
+    const answer = String(feedback.answer || fallbackAnswer || "").trim();
+    if (!question || !answer) return null;
+    return {
+        session_id: String(feedback.session_id || activeChatSessionId || "default"),
+        question,
+        answer,
+        submitted: Boolean(feedback.submitted),
+        feedback_id: feedback.feedback_id || null,
+    };
+}
+
+function markFeedbackSubmitted(messageId, feedbackId) {
+    const store = loadChatStore();
+    const session = getActiveSession(store);
+    const message = (session.messages || []).find(item => item.id === messageId);
+    if (!message || !message.feedback) return;
+    message.feedback.submitted = true;
+    message.feedback.feedback_id = feedbackId || message.feedback.feedback_id || null;
+    session.updatedAt = new Date().toISOString();
+    store.activeSessionId = activeChatSessionId;
+    saveChatStore(store);
+}
+
+async function submitFeedback(wrapper, messageId, feedback, thumbsUp) {
+    if (!wrapper || !feedback || feedback.submitted) return;
+    const buttons = wrapper.querySelectorAll("button");
+    const status = wrapper.querySelector(".feedback-status");
+    buttons.forEach(button => { button.disabled = true; });
+    if (status) status.textContent = "Đang gửi...";
+
+    try {
+        const response = await fetch("/chat/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+                session_id: feedback.session_id,
+                question: feedback.question,
+                answer: feedback.answer,
+                thumbs_up: thumbsUp ? "1" : "0",
+                comment: "",
+                csrf_token: document.getElementById("csrfToken")?.value || "",
+            }),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.status !== "ok") {
+            throw new Error(payload.detail || payload.message || "Không gửi được đánh giá.");
+        }
+        feedback.submitted = true;
+        feedback.feedback_id = payload.feedback_id || null;
+        wrapper.classList.add("submitted");
+        if (status) status.textContent = "Đã ghi nhận đánh giá.";
+        markFeedbackSubmitted(messageId, feedback.feedback_id);
+    } catch (err) {
+        buttons.forEach(button => { button.disabled = false; });
+        if (status) status.textContent = err.message || "Không gửi được đánh giá.";
+    }
+}
+
+function createFeedbackElement(messageId, feedback) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "feedback-actions";
+    if (feedback.submitted) wrapper.classList.add("submitted");
+
+    const positiveButton = document.createElement("button");
+    positiveButton.type = "button";
+    positiveButton.className = "feedback-button";
+    positiveButton.textContent = "👍 Hữu ích";
+
+    const negativeButton = document.createElement("button");
+    negativeButton.type = "button";
+    negativeButton.className = "feedback-button";
+    negativeButton.textContent = "👎 Chưa đúng";
+
+    const status = document.createElement("span");
+    status.className = "feedback-status";
+    status.textContent = feedback.submitted ? "Đã ghi nhận đánh giá." : "";
+
+    positiveButton.disabled = feedback.submitted;
+    negativeButton.disabled = feedback.submitted;
+    positiveButton.addEventListener("click", () => submitFeedback(wrapper, messageId, feedback, true));
+    negativeButton.addEventListener("click", () => submitFeedback(wrapper, messageId, feedback, false));
+
+    wrapper.append(positiveButton, negativeButton, status);
+    return wrapper;
+}
+
 const modelState = {
     value: "auto",
     label: "Auto"
@@ -423,6 +512,9 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null,
             </div>
         `
         : "";
+    const feedbackPayload = sender === "bot"
+        ? normalizeFeedbackPayload(options.feedback, text)
+        : null;
     
     msgElement.innerHTML = `
         <div class="message-header">
@@ -433,6 +525,9 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null,
         ${sourcesHtml}
         ${metaHtml}
     `;
+    if (feedbackPayload) {
+        msgElement.appendChild(createFeedbackElement(messageId, feedbackPayload));
+    }
     
     if (bgColor) {
         msgElement.style.borderLeft = `3px solid ${bgColor}`;
@@ -450,6 +545,7 @@ function addMessage(sender, text, name = "ICTU AI", bgColor = null, meta = null,
             name,
             bgColor,
             meta: meta || null,
+            feedback: feedbackPayload,
             timestamp: timestampIso,
             timeLabel: timestamp,
         });
@@ -517,6 +613,7 @@ function restoreSavedConversation() {
                 id: message.id,
                 timestamp: message.timestamp,
                 timeLabel: message.timeLabel,
+                feedback: message.feedback || null,
                 persist: false,
             },
         );
@@ -559,6 +656,12 @@ document.getElementById("chatForm").onsubmit = async (e) => {
                 llm_model: data.llm_model,
                 sources: data.sources,
                 response_time_ms: data.response_time_ms,
+            }, {
+                feedback: {
+                    session_id: activeChatSessionId || data.session_id || "default",
+                    question: msg,
+                    answer: data.response,
+                },
             });
         }
     } catch (err) {
@@ -1092,6 +1195,47 @@ body {
     font-family: 'Roboto Mono', monospace;
     font-size: 0.72rem;
     word-break: break-word;
+}
+
+.feedback-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.8rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.feedback-button {
+    appearance: none;
+    border: 1px solid rgba(0, 255, 136, 0.28);
+    border-radius: 999px;
+    background: rgba(0, 255, 136, 0.08);
+    color: #d8fff0;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.2;
+    min-height: 32px;
+    padding: 0.42rem 0.72rem;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.feedback-button:hover:not(:disabled) {
+    background: rgba(0, 255, 136, 0.16);
+    border-color: rgba(0, 255, 136, 0.46);
+}
+
+.feedback-button:disabled {
+    cursor: default;
+    opacity: 0.58;
+}
+
+.feedback-status {
+    color: #9aa8bc;
+    font-size: 0.78rem;
 }
 
 .message-sources {
@@ -1666,6 +1810,16 @@ body[data-chat-theme="light"] {
         max-width: 85%;
         font-size: 0.9rem;
         padding: 0.75rem 1rem;
+    }
+
+    .feedback-actions {
+        gap: 0.35rem;
+    }
+
+    .feedback-button {
+        font-size: 0.74rem;
+        min-height: 30px;
+        padding: 0.38rem 0.62rem;
     }
     
     .welcome-section {

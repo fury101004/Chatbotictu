@@ -375,6 +375,31 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertIn("local_001", question_ids)
         self.assertIn("web_015", question_ids)
 
+    def test_feedback_summary_requires_admin_session(self) -> None:
+        summary = {
+            "total_feedback": 2,
+            "positive_feedback": 1,
+            "negative_feedback": 1,
+            "positive_rate": 50.0,
+        }
+
+        with patch("controllers.api_controller.get_feedback_summary", AsyncMock(return_value=summary)):
+            anonymous = TestClient(main.app)
+            anonymous_response = anonymous.get("/api/feedback/summary")
+            self.assertEqual(anonymous_response.status_code, 401)
+
+            user_client = TestClient(main.app)
+            _login_as_user(user_client)
+            user_response = user_client.get("/api/feedback/summary")
+            self.assertEqual(user_response.status_code, 403)
+
+            admin_client = TestClient(main.app)
+            _login_as_admin(admin_client)
+            admin_response = admin_client.get("/api/feedback/summary")
+
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertEqual(admin_response.json(), summary)
+
     def test_logout_clears_session_and_redirects_to_login(self) -> None:
         client = TestClient(main.app)
         _login_as_user(client)
@@ -414,6 +439,66 @@ class WebCsrfSecurityTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json().get("detail"), "CSRF Invalid!")
+
+    def test_chat_feedback_requires_login_and_csrf(self) -> None:
+        anonymous = TestClient(main.app)
+        anonymous_response = anonymous.post(
+            "/chat/feedback",
+            data={
+                "session_id": "feedback-1",
+                "question": "Q",
+                "answer": "A",
+                "thumbs_up": "1",
+                "csrf_token": "missing",
+            },
+        )
+        self.assertEqual(anonymous_response.status_code, 401)
+
+        client = TestClient(main.app)
+        _login_as_user(client)
+        response = client.post(
+            "/chat/feedback",
+            data={
+                "session_id": "feedback-1",
+                "question": "Q",
+                "answer": "A",
+                "thumbs_up": "1",
+                "csrf_token": "invalid",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json().get("detail"), "CSRF Invalid!")
+
+    def test_chat_feedback_saves_for_logged_in_user(self) -> None:
+        client = TestClient(main.app)
+        _login_as_user(client)
+        csrf_token = _csrf_from_chat_page(client)
+
+        with patch("controllers.web_controller.save_user_feedback", AsyncMock(return_value=42)) as save_mock:
+            response = client.post(
+                "/chat/feedback",
+                data={
+                    "session_id": "feedback-1",
+                    "question": "Dieu kien tot nghiep la gi?",
+                    "answer": "Can du tin chi theo quy dinh.",
+                    "thumbs_up": "1",
+                    "comment": "",
+                    "csrf_token": csrf_token,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["feedback_id"], 42)
+        save_mock.assert_awaited_once_with(
+            session_id="feedback-1",
+            question="Dieu kien tot nghiep la gi?",
+            answer="Can du tin chi theo quy dinh.",
+            thumbs_up=True,
+            comment="",
+        )
 
     def test_source_preview_requires_login_and_renders_vector_chunks(self) -> None:
         anonymous = TestClient(main.app)

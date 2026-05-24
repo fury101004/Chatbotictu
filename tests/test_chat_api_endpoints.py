@@ -129,6 +129,25 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(root_response.json()["status"], "healthy")
         self.assertIn("llm_configured", api_response.json())
 
+    def test_deployment_status_routes_are_available(self) -> None:
+        client = TestClient(main.app)
+
+        with (
+            patch("views.api_view.embedding_backend_ready", return_value=True),
+            patch("views.api_view.get_model", return_value=SimpleNamespace(label="groq:test-model")),
+        ):
+            v1_response = client.get("/api/v1/deployment/status")
+            api_response = client.get("/api/deployment/status")
+
+        self.assertEqual(v1_response.status_code, 200)
+        self.assertEqual(api_response.status_code, 200)
+        payload = v1_response.json()
+        self.assertEqual(payload["app_name"], settings.APP_NAME)
+        self.assertIn(payload["status"], {"ready", "degraded"})
+        self.assertEqual(payload["checks"]["llm_configured"], True)
+        self.assertEqual(payload["checks"]["embedding_backend_ready"], True)
+        self.assertIn("data_dir_writable", payload["checks"])
+
     def test_api_chat_alias_returns_expected_payload(self) -> None:
         client = TestClient(main.app)
         token = self._get_token(client)
