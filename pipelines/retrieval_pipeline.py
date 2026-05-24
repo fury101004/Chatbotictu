@@ -62,6 +62,9 @@ _SELF_CONTAINED_QUERY_MARKERS = tuple(
         "bảo hiểm",
         "chương trình",
         "tín chỉ",
+        "học lại",
+        "cải thiện điểm",
+        "điểm học phần",
         "email",
         "hồ sơ",
     )

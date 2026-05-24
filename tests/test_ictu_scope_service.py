@@ -17,6 +17,7 @@ class ICTUScopeServiceTests(unittest.TestCase):
     def test_detects_student_context_queries_without_school_name(self) -> None:
         self.assertTrue(is_ictu_related_query("Nam dau tien hoc bao nhieu tin chi?"))
         self.assertTrue(is_ictu_related_query("Em can dong BHYT dot nao?"))
+        self.assertTrue(is_ictu_related_query("Học lại có được cải thiện điểm không?"))
         self.assertTrue(
             is_ictu_related_query(
                 "Dieu kien dat danh hieu nguoi hoc Kha, Gioi, Xuat sac la gi?"

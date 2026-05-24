@@ -65,6 +65,30 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["llm_model"], "local:quick_reply")
         self.assertTrue(result["response"])
 
+    async def test_process_chat_message_answers_retake_improvement_question_from_handbook(self) -> None:
+        question = "Học lại có được cải thiện điểm không?"
+        eval_tracker = SimpleNamespace(log_response=AsyncMock())
+
+        with (
+            patch("services.rag.rag_service._route_retrieval_flow_by_llm", return_value=None),
+            patch(
+                "services.chat.chat_service.chat_multilingual",
+                return_value=("Có, sinh viên được học lại để cải thiện điểm C hoặc D.", "local:test"),
+            ) as chat_mock,
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
+            patch("services.chat.chat_service.append_retrieval_memory"),
+            patch("services.content.knowledge_base_service.mark_chat_entry_pending"),
+            patch("services.chat.chat_service.get_eval_tracker", return_value=eval_tracker),
+        ):
+            result = await process_chat_message(question, session_id="retake-improvement-1")
+
+        self.assertFalse(result["needs_clarification"])
+        self.assertEqual(result["rag_tool"], "student_handbook_rag")
+        self.assertEqual(result["sources"], ["student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"])
+        context_text = chat_mock.call_args.kwargs["context_text"]
+        self.assertIn("được phép đăng ký học lại để cải thiện điểm", context_text)
+        self.assertIn("điểm C hoặc D", context_text)
+
 
     async def test_process_chat_message_queues_source_grounded_answer_for_review(self) -> None:
         rag_result = RAGResult(

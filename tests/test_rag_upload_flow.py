@@ -151,6 +151,16 @@ class RagRouterTests(unittest.TestCase):
         self.assertTrue(route_name.startswith("router_keyword_score:"))
         llm_router.assert_not_called()
 
+    def test_keyword_router_prefers_handbook_for_retake_improvement_question(self) -> None:
+        question = "Học lại có được cải thiện điểm không?"
+
+        with patch("services.rag.rag_service._route_rag_tool_by_llm") as llm_router:
+            tool_name, route_name = route_rag_tool(question)
+
+        self.assertEqual(tool_name, "student_handbook_rag")
+        self.assertTrue(route_name.startswith("router_keyword_score:"))
+        llm_router.assert_not_called()
+
 
 class RetrievalFlowPlannerTests(unittest.TestCase):
     def test_retrieval_flow_prompt_with_json_example_formats_as_plain_text(self) -> None:
@@ -373,6 +383,23 @@ Sinh vien Kha can ket qua hoc tap tu 2,50 den 3,19.
         matches = _search_documents((raw_doc, question_doc), question, limit=2)
 
         self.assertEqual(matches[0][1].path.name, "handbook.questions.md")
+
+    def test_retake_improvement_exact_question_extracts_answer(self) -> None:
+        text = """
+**Question:** Người học không được làm những hành vi nào?
+**Answer:** Người học không được thực hiện các hành vi pháp luật cấm.
+
+## Question 69
+
+**Question:** Học lại có được cải thiện điểm không?
+**Answer:** Có. Đối với học phần đã có kết quả đạt điểm C hoặc D, sinh viên được phép đăng ký học lại để cải thiện điểm; điểm cao nhất của các lần học là điểm chính thức của học phần.
+"""
+        question = "Học lại có được cải thiện điểm không?"
+        snippet = _extract_relevant_snippet(self._doc("handbook.questions.md", text), question, _tokenize(question))
+
+        self.assertIn("được phép đăng ký học lại để cải thiện điểm", snippet)
+        self.assertIn("điểm cao nhất", snippet)
+        self.assertNotIn("pháp luật cấm", snippet)
 
     def test_year_specific_query_prefers_matching_handbook_file(self) -> None:
         question = "So tay sinh vien 2024-2025 la tai lieu nao?"

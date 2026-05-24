@@ -69,6 +69,11 @@ _STUDENT_HANDBOOK_ROUTE_CUES = (
     "hanh vi nao",
     "chuong trinh dao tao",
     "tong so tin chi",
+    "hoc lai",
+    "dang ky hoc lai",
+    "hoc cai thien",
+    "cai thien diem",
+    "diem hoc phan",
 )
 _SCHOOL_POLICY_ROUTE_CUES = (
     "bao hiem y te",
