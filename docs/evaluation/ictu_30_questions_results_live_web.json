@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-20T18:03:19+07:00",
+  "generated_at": "2026-05-20T18:11:27+07:00",
   "dataset_path": "E:\\new-test\\docs\\evaluation\\ictu_30_questions_dataset.json",
   "total_cases": 30,
   "local_data_cases": 15,
@@ -11,13 +11,13 @@
   "flow_accuracy": 1.0,
   "source_hit_rate": 0.9333,
   "source_top1_hit_rate": 0.9333,
-  "avg_latency_ms": 130.95,
-  "min_latency_ms": 0.13,
-  "max_latency_ms": 1902.45,
-  "avg_chunks_used": 2.1,
+  "avg_latency_ms": 6602.89,
+  "min_latency_ms": 119.65,
+  "max_latency_ms": 26407.88,
+  "avg_chunks_used": 3.9,
   "web_search_configured": true,
   "use_llm_router": false,
-  "live_web_enabled": false,
+  "live_web_enabled": true,
   "embedding_backend_ready": true,
   "vectorstore_chunks": 3321,
   "group_distribution": {
@@ -61,7 +61,7 @@
       "chunks_used": 1,
       "mode": "student_faq_rag",
       "context_excerpt": "[Approved Chat QA - khóa 24 này cần bao nhiêu tín chỉ để tốt nghiệp cử nhân? | source: uploads/student_faq_rag/_knowledge_base_chat/approved-chat-78-khoa-24-nay-can-bao-nhieu-tin-chi-de-tot-nghiep-.md | score: 71] # Approved Chat QA - khóa 24 này cần bao nhiêu tín chỉ để tốt nghiệp cử nhân? ## Câu hỏi khóa 24 này cần bao nhiêu tín chỉ để tốt nghiệp cử nhân? ## Trả lời đã duyệt **Ý chính:** Để tốt nghiệp cử nhân, sinh ...",
-      "latency_ms": 258.26,
+      "latency_ms": 119.65,
       "passed": false
     }
   ],
@@ -92,7 +92,7 @@
       "chunks_used": 1,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 8. SO TAY SINH VIEN 2025-2026 | source: student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md | score: 151] **Question:** Sổ tay sinh viên 2025-2026 áp dụng cho đối tượng nào? **Answer:** Sổ tay sinh viên 2025-2026 là tài liệu lưu hành nội bộ dành cho sinh viên khóa 24 của Trường Đại học Công nghệ Thông tin và Truyền thông - Đại học Thái Nguyên.",
-      "latency_ms": 1902.45,
+      "latency_ms": 1590.38,
       "passed": true
     },
     {
@@ -121,7 +121,7 @@
       "chunks_used": 1,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 8. SO TAY SINH VIEN 2025-2026 | source: student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md | score: 144] **Question:** Sổ tay sinh viên 2025-2026 áp dụng cho đối tượng nào? **Answer:** Sổ tay sinh viên 2025-2026 là tài liệu lưu hành nội bộ dành cho sinh viên khóa 24 của Trường Đại học Công nghệ Thông tin và Truyền thông - Đại học Thái Nguyên.",
-      "latency_ms": 127.97,
+      "latency_ms": 138.28,
       "passed": true
     },
     {
@@ -150,7 +150,7 @@
       "chunks_used": 1,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 8. SO TAY SINH VIEN 2025-2026 | source: student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md | score: 130] **Question:** Giá trị cốt lõi của Trường là gì? **Answer:** Giá trị cốt lõi, giá trị văn hóa của Trường là Đoàn kết - Tận tâm - Sáng tạo - Thực tiễn.",
-      "latency_ms": 125.91,
+      "latency_ms": 142.42,
       "passed": true
     },
     {
@@ -179,7 +179,7 @@
       "chunks_used": 1,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 8. SO TAY SINH VIEN 2025-2026 | source: student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md | score: 142] **Question:** Triết lý giáo dục của Trường được nêu như thế nào? **Answer:** Triết lý giáo dục là giáo dục toàn diện lấy người học làm trung tâm; đào tạo hình mẫu công dân số, kiến tạo tương lai và nuôi dưỡng lòng nhân ái.",
-      "latency_ms": 127.89,
+      "latency_ms": 145.77,
       "passed": true
     },
     {
@@ -208,7 +208,7 @@
       "chunks_used": 1,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 8. SO TAY SINH VIEN 2025-2026 | source: student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md | score: 153] **Question:** Địa chỉ và thông tin liên hệ của Trường là gì? **Answer:** Trường Đại học Công nghệ Thông tin và Truyền thông - Đại học Thái Nguyên có địa chỉ tại phường Quyết Thắng, tỉnh Thái Nguyên; điện thoại 0208.3846254; fax 0208.3846237; email contact@ictu.edu.vn; website www.ictu.edu ...",
-      "latency_ms": 126.96,
+      "latency_ms": 148.89,
       "passed": true
     },
     {
@@ -240,7 +240,7 @@
       "chunks_used": 4,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 6. SO TAY SINH VIEN 2023-2024 | source: student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md | score: 106] **Question:** Quy định về công tác người học áp dụng cho ai? **Answer:** Quy định áp dụng đối với người học đang học tập, nghiên cứu và rèn luyện tại Trường Đại học Công nghệ Thông tin và Truyền thông. [Question Set - 7. SO TAY SINH VIEN 2024-2025 | source: student_handbooks/7. SO TAY SIN ...",
-      "latency_ms": 134.06,
+      "latency_ms": 143.82,
       "passed": true
     },
     {
@@ -271,7 +271,7 @@
       "chunks_used": 3,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 6. SO TAY SINH VIEN 2023-2024 | source: student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md | score: 98] **Question:** Mục đích của công tác người học là gì? **Answer:** Công tác người học nhằm bảo đảm thực hiện mục tiêu giáo dục theo Luật Giáo dục hiện hành và bảo đảm người học được hưởng quyền, thực hiện nhiệm vụ trong Đại học Thái Nguyên và trong Trường. [Question Set - 7. SO TAY SINH VIEN ...",
-      "latency_ms": 129.02,
+      "latency_ms": 141.9,
       "passed": true
     },
     {
@@ -307,7 +307,7 @@
       "chunks_used": 8,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 1. SO TAY SINH VIEN 2018-2019 | source: student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md | score: 69] **Question:** Sinh viên có những nhiệm vụ chính nào? **Answer:** Sinh viên phải chấp hành chủ trương, chính sách, pháp luật, điều lệ và quy chế của Trường; học tập và rèn luyện theo kế hoạch; tôn trọng nhà giáo, cán bộ, viên chức; giữ gìn tài sản; khám sức khỏe theo quy định; đóng học phí ...",
-      "latency_ms": 145.45,
+      "latency_ms": 154.08,
       "passed": true
     },
     {
@@ -343,7 +343,7 @@
       "chunks_used": 8,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 6. SO TAY SINH VIEN 2023-2024 | source: student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md | score: 75] **Question:** Người học không được làm những hành vi nào? **Answer:** Người học không được thực hiện các hành vi pháp luật cấm, trái đạo đức xã hội; xâm phạm lợi ích quốc gia, dân tộc, quyền và lợi ích hợp pháp của người khác; tổ chức hoặc tham gia hoạt động trái pháp luật; gian lận trong ...",
-      "latency_ms": 144.26,
+      "latency_ms": 154.79,
       "passed": true
     },
     {
@@ -379,7 +379,7 @@
       "chunks_used": 8,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 6. SO TAY SINH VIEN 2023-2024 | source: student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md | score: 103] **Question:** Người học không được làm những hành vi nào? **Answer:** Người học không được thực hiện các hành vi pháp luật cấm, trái đạo đức xã hội; xâm phạm lợi ích quốc gia, dân tộc, quyền và lợi ích hợp pháp của người khác; tổ chức hoặc tham gia hoạt động trái pháp luật; gian lận trong ...",
-      "latency_ms": 138.04,
+      "latency_ms": 152.53,
       "passed": true
     },
     {
@@ -412,7 +412,7 @@
       "chunks_used": 5,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 1. SO TAY SINH VIEN 2018-2019 | source: student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md | score: 124] **Question:** Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì? **Answer:** Sinh viên Khá cần kết quả học tập từ 2,50 đến 3,19 theo thang điểm 4 và rèn luyện từ khá trở lên; sinh viên Giỏi cần kết quả học tập từ 3,20 đến 3,59 và rèn luyện từ tốt trở lên; sinh viên Xuất sắc cần ...",
-      "latency_ms": 135.0,
+      "latency_ms": 146.24,
       "passed": true
     },
     {
@@ -445,7 +445,7 @@
       "chunks_used": 5,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 1. SO TAY SINH VIEN 2018-2019 | source: student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md | score: 156] **Question:** Sinh viên học lực bình thường phải đăng ký tối thiểu bao nhiêu tín chỉ mỗi học kỳ chính? **Answer:** Sinh viên học lực bình thường phải đăng ký tối thiểu 14 tín chỉ mỗi học kỳ chính, trừ học kỳ cuối khóa. [Question Set - 2. SO TAY SINH VIEN 2019-2020 | source: student_handbo ...",
-      "latency_ms": 139.24,
+      "latency_ms": 155.0,
       "passed": true
     },
     {
@@ -481,7 +481,7 @@
       "chunks_used": 8,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 1. SO TAY SINH VIEN 2018-2019 | source: student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md | score: 136] **Question:** Sinh viên học lực yếu được đăng ký bao nhiêu tín chỉ? **Answer:** Sinh viên đang bị xếp hạng học lực yếu phải đăng ký tối thiểu 10 tín chỉ mỗi học kỳ chính và chỉ được đăng ký tối đa 14 tín chỉ mỗi học kỳ chính, trừ học kỳ cuối khóa. [Question Set - 2. SO TAY SINH VIEN 2019- ...",
-      "latency_ms": 146.31,
+      "latency_ms": 162.9,
       "passed": true
     },
     {
@@ -517,7 +517,7 @@
       "chunks_used": 8,
       "mode": "student_handbook_rag",
       "context_excerpt": "[Question Set - 1. SO TAY SINH VIEN 2018-2019 | source: student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md | score: 122] **Question:** Học kỳ phụ được đăng ký tối đa bao nhiêu tín chỉ? **Answer:** Khối lượng học tập tối đa ở học kỳ phụ là 10 tín chỉ và không quy định khối lượng học tập tối thiểu. [Question Set - 2. SO TAY SINH VIEN 2019-2020 | source: student_handbooks/2. SO TAY SINH VIEN 2019-2020.question ...",
-      "latency_ms": 145.46,
+      "latency_ms": 179.07,
       "passed": true
     },
     {
@@ -546,7 +546,7 @@
       "chunks_used": 1,
       "mode": "student_faq_rag",
       "context_excerpt": "[Approved Chat QA - khóa 24 này cần bao nhiêu tín chỉ để tốt nghiệp cử nhân? | source: uploads/student_faq_rag/_knowledge_base_chat/approved-chat-78-khoa-24-nay-can-bao-nhieu-tin-chi-de-tot-nghiep-.md | score: 71] # Approved Chat QA - khóa 24 này cần bao nhiêu tín chỉ để tốt nghiệp cử nhân? ## Câu hỏi khóa 24 này cần bao nhiêu tín chỉ để tốt nghiệp cử nhân? ## Trả lời đã duyệt **Ý chính:** Để tốt nghiệp cử nhân, sinh ...",
-      "latency_ms": 258.26,
+      "latency_ms": 119.65,
       "passed": false
     },
     {
@@ -567,11 +567,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.2,
+      "sources": [
+        "https://fet.ictu.edu.vn/category/thong-bao/thong-bao-sinh-vien/",
+        "https://fet.ictu.edu.vn/tuyen-sinh-thac-si-nam-2026-co-hoi-hoc-truoc-danh-cho-sinh-vien-ictu/",
+        "https://ictu.edu.vn/ictu-to-chuc-le-ky-niem-ngay-nha-giao-viet-nam-20-11-tri-an-ket-noi-lan-toa/",
+        "https://ictu.edu.vn/tai-sao-an-toan-thong-tin-tro-nen-quan-trong-hon-bao-gio-het-trong-thap-ky-toi/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: ThôngbáoSinhviên- Khoa Kỹ Thuật và Công nghệ | source: https://fet.ictu.edu.vn/category/thong-bao/thong-bao-sinh-vien/] Nhằm thúc đẩy phong trào nghiên cứu khoa học và sáng tạo trong sinh viên, Khoa Kỹ thuật và Công nghệ chính thức phát động cuộc thi “IoT Challenge 2025” với chủ đề “Smart Future of Things” – Tương lai thông minh. Đây là cơ... Thông báo Sinh viên Đây chính là nội dung chính c ...",
+      "latency_ms": 12044.16,
       "passed": true
     },
     {
@@ -592,11 +597,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.15,
+      "sources": [
+        "https://ictu.edu.vn/",
+        "https://tuyensinh.ictu.edu.vn/ttts2025/",
+        "http://ect.ictu.edu.vn/",
+        "https://ictu.edu.vn/tai-sao-an-toan-thong-tin-tro-nen-quan-trong-hon-bao-gio-het-trong-thap-ky-toi/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Trường Đại học Công NghệThôngTinvà TruyềnThông | source: https://ictu.edu.vn/] Ngày 14/12/2001, Khoa Công nghệ thông tin trực thuộc Đại học Thái Nguyên được thành lập theo quyết định 6946/QĐ-BGDĐT-TCCB của Bộ trưởng Bộ Giáo dục và Đào tạo. Năm 2005 đánh dấu nhiệm kỳ thứ 2 của Khoa Công nghệ thông tin, Khoa được giao đào tạo thêm các ngành mới và thành lập thêm các đơn vị trực thuộc để đảm bả ...",
+      "latency_ms": 10282.87,
       "passed": true
     },
     {
@@ -617,11 +627,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://fet.ictu.edu.vn/tuyen-sinh-thac-si-nam-2026-co-hoi-hoc-truoc-danh-cho-sinh-vien-ictu/",
+        "http://laptrinh.ictu.edu.vn/",
+        "https://ictu.edu.vn/ictu-gianh-giai-ba-cuoc-thi-innovation-tech-challenge-2025-do-samsung-to-chuc/",
+        "https://tuyensinh.ictu.edu.vn/ttnt-qt/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Tuyểnsinhthạc sĩ năm 2026 –cơhội học trước dành... | source: https://fet.ictu.edu.vn/tuyen-sinh-thac-si-nam-2026-co-hoi-hoc-truoc-danh-cho-sinh-vien-ictu/] 12/03/2026 TUYỂN SINH THẠC SĨ NĂM 2026 – CƠ HỘI HỌC TRƯỚC DÀNH CHO SINH VIÊN ICTU Khoa Kỹ thuật và Công nghệ, Trường Đại học Công nghệ Thông tin và Truyền thông – Đại học Thái Nguyên (ICTU) chính thức thông báo tuyển sinh đào tạo trình độ ...",
+      "latency_ms": 26407.88,
       "passed": true
     },
     {
@@ -642,11 +657,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://ictu.edu.vn/tai-sao-an-toan-thong-tin-tro-nen-quan-trong-hon-bao-gio-het-trong-thap-ky-toi/",
+        "https://ictu.edu.vn/ictu-vtieducation/",
+        "https://ictu.edu.vn/he-thong-phan-mem-chup-anh-ao-buoc-tien-moi-trong-dao-tao-ky-thuat-nhiep-anh/",
+        "http://laptrinh.ictu.edu.vn/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Tại sao an toàn thôngtintrở nên quan trọng hơn bao giờ hết trong... | source: https://ictu.edu.vn/tai-sao-an-toan-thong-tin-tro-nen-quan-trong-hon-bao-gio-het-trong-thap-ky-toi/] Tại sao an toàn thông tin trở nên quan trọng hơn bao giờ hết trong thập kỷ tới? Theo báo cáo của Cybersecurity Ventures, tạp chí nghiên cứu hàng đầu thế giới về nền kinh tế mạng toàn cầu cho thấy tổng tổn thất do tộ ...",
+      "latency_ms": 4999.87,
       "passed": true
     },
     {
@@ -667,11 +687,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.15,
+      "sources": [
+        "https://en.ictu.edu.vn/",
+        "https://ictu.edu.vn/ictu-to-chuc-tuyen-dung-ung-vien-cho-cong-ty-tnhh-lens-viet-nam/",
+        "https://fet.ictu.edu.vn/tuyen-sinh-thac-si-nam-2026-co-hoi-hoc-truoc-danh-cho-sinh-vien-ictu/",
+        "https://fet.ictu.edu.vn/category/thong-bao/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: ICTU– University of Information and Communication Technology | source: https://en.ictu.edu.vn/] On March 4, 2026, Thai Nguyen University of Information and Communication Technology (ICTU) welcomed and held a working session with a high-level delegation from Kyungpook National University (KNU), Republic of Korea. [Web search ICTU | title: ICTUtổ chức tuyển dụng ứngviêncho Công ty TNHH Lens vi ...",
+      "latency_ms": 4994.23,
       "passed": true
     },
     {
@@ -692,11 +717,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://fet.ictu.edu.vn/doi-ngu-cbgv-cua-fet-ictu-tiep-tuc-tham-du-chuong-trinh-hoi-thao-chuong-trinh-dao-tao-cho-nganh-cong-nghiep-vi-mach-ban-dan-den-nam-2030-thach-thuc-va-giai-phap/",
+        "https://ictu.edu.vn/tan-sinh-vien-khoa-17-phan-khoi-trong-ngay-dau-nhap-hoc/",
+        "http://ect.ictu.edu.vn/",
+        "http://laptrinh.ictu.edu.vn/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Đội ngũ CBGV của FET -ICTUtiếp tục tham dự Chương trình Hội thảo... | source: https://fet.ictu.edu.vn/doi-ngu-cbgv-cua-fet-ictu-tiep-tuc-tham-du-chuong-trinh-hoi-thao-chuong-trinh-dao-tao-cho-nganh-cong-nghiep-vi-mach-ban-dan-den-nam-2030-thach-thuc-va-giai-phap/] 16/05/2024 Đội ngũ CBGV của FET – ICTU tiếp tục tham dự Chương trình Hội thảo “Chương trình đào tạo cho ngành Công nghiệp Vi mạch ...",
+      "latency_ms": 5374.68,
       "passed": true
     },
     {
@@ -717,11 +747,13 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://en.ictu.edu.vn/"
+      ],
+      "chunks_used": 1,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: ICTU– University of Information and Communication Technology | source: https://en.ictu.edu.vn/] On March 4, 2026, Thai Nguyen University of Information and Communication Technology (ICTU) welcomed and held a working session with a high-level delegation from Kyungpook National University (KNU), Republic of Korea.",
+      "latency_ms": 10459.05,
       "passed": true
     },
     {
@@ -742,11 +774,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://fet.ictu.edu.vn/thong-bao-355-tb-dhcntttt-nguong-diem-xet-tuyen-theo-diem-thi-tot-nghiep-thpt-vao-cac-nganh-dao-tao-he-dhcq-nam-2021/",
+        "https://ictu.edu.vn/thong-bao-423-v-v-cong-bo-diem-trung-tuyen-he-dai-hoc-chinh-quy-theo-phuong-thuc-xet-tuyen-theo-ket-qua-thi-tot-nghiep-thpt-nam-2021/",
+        "https://fet.ictu.edu.vn/",
+        "https://ictu.edu.vn/category/cong-thong-tin-sinh-vien/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Thôngbáo355/TB-ĐHCNTT&TT ngưỡng điểmxéttuyển theo điểm thi... | source: https://fet.ictu.edu.vn/thong-bao-355-tb-dhcntttt-nguong-diem-xet-tuyen-theo-diem-thi-tot-nghiep-thpt-vao-cac-nganh-dao-tao-he-dhcq-nam-2021/] Thông báo 355/TB-ĐHCNTT&TT ngưỡng điểm xét tuyển theo điểm thi tốt nghiệp THPT vào các ngành đào tạo hệ ĐHCQ năm 2021 Căn cứ Kết luận cuộc họp của Hội đồng tuyển sinh Trường Đại h ...",
+      "latency_ms": 11822.74,
       "passed": true
     },
     {
@@ -767,11 +804,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://ictu.edu.vn/200-sinh-vien-ictu-phong-van-tuyen-dung-truc-tiep-truoc-them-tot-nghiep/",
+        "https://fet.ictu.edu.vn/co-hoi-vang-den-duc-lam-viec-thuc-tap-tai-siemens-porsche-bosch-cho-sinh-vien-co-dien-tu-cong-nghe-o-to-va-tu-dong-hoa-ictu/",
+        "https://mmc.ictu.edu.vn/cong-ty-water-media-wevic-ve-ictu-tuyen-dung-co-hoi-ung-tuyen-cho-sinh-vien-nam-cuoi-ac",
+        "https://ictu.edu.vn/ictu-to-chuc-tuyen-dung-ung-vien-cho-cong-ty-tnhh-lens-viet-nam/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: 200sinhviênICTUphỏng vấntuyểndụngtrực tiếp trước... -ICTU | source: https://ictu.edu.vn/200-sinh-vien-ictu-phong-van-tuyen-dung-truc-tiep-truoc-them-tot-nghiep/] 200 sinh viên ICTU phỏng vấn tuyển dụng trực tiếp trước thềm tốt nghiệp Sáng ngày 18/4/2025, Trường Đại học Công nghệ Thông tin và Truyền thông (ICTU) – Đại học Thái Nguyên đã phối hợp cùng Tập đoàn Foxconn tổ chức buổi tuyển dụng t ...",
+      "latency_ms": 10448.11,
       "passed": true
     },
     {
@@ -792,11 +834,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "http://ect.ictu.edu.vn/",
+        "http://laptrinh.ictu.edu.vn/",
+        "https://ictu.edu.vn/ictu-to-chuc-ky-niem-39-nam-ngay-nha-giao-viet-nam/",
+        "https://fet.ictu.edu.vn/category/thong-bao/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Khoa Công nghệ Điện tử và Truyềnthông- ĐạihọcCông nghệ... | source: http://ect.ictu.edu.vn/] Ứng dụng khoa học công nghệ Sau một thời gian tích cực nghiên cứu, thiết kế và thi công nhóm Giảng viên Bộ môn Công nghệ Kỹ thuật máy tính đã hoàn thành hệ thống các bài thực ... Hoạt động sinh viên Nhằm tiếp tục nâng cao tính thực tiễn của hoạt động đào tạo ngành Kỹ thuật Y sinh tại Khoa Công nghệ Đ ...",
+      "latency_ms": 22304.12,
       "passed": true
     },
     {
@@ -817,11 +864,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.15,
+      "sources": [
+        "http://laptrinh.ictu.edu.vn/",
+        "https://ictu.edu.vn/tan-sinh-vien-khoa-17-phan-khoi-trong-ngay-dau-nhap-hoc/",
+        "https://mmc.ictu.edu.vn/hoc-3d-thuc-chien-cung-doanh-nghiep-tai-ictu-co-hoi-vang-danh-cho-sinh-vien-ac",
+        "http://ect.ictu.edu.vn/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Home -ICTU: Online Judge | source: http://laptrinh.ictu.edu.vn/] SinhviênICTUCóđam mê lập trình, yêu thích thuật toán và tư duy logicƯu tiênsinhviêncótinh thần tự học, chủ động và nghiêm túc trong học tập. [Web search ICTU | title: Tânsinhviênkhóa 17 phấn khởi trong ngày đầu nhập học – [ICTU] | source: https://ictu.edu.vn/tan-sinh-vien-khoa-17-phan-khoi-trong-ngay-dau-nhap-hoc/] Tân sinh viê ...",
+      "latency_ms": 24541.49,
       "passed": true
     },
     {
@@ -842,11 +894,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://ictu.edu.vn/tan-sinh-vien-khoa-17-phan-khoi-trong-ngay-dau-nhap-hoc/",
+        "https://mmc.ictu.edu.vn/tan-sinh-vien-khoa-17-phan-khoi-trong-ngay-dau-nhap-hoc",
+        "https://fet.ictu.edu.vn/tuyen-sinh-thac-si-nam-2026-co-hoi-hoc-truoc-danh-cho-sinh-vien-ictu/",
+        "http://laptrinh.ictu.edu.vn/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Tânsinhviênkhóa 17 phấn khởi trong ngày đầunhậphọc– [ICTU] | source: https://ictu.edu.vn/tan-sinh-vien-khoa-17-phan-khoi-trong-ngay-dau-nhap-hoc/] Tân sinh viên khóa 17 phấn khởi trong ngày đầu nhập học Không biết tự bao giờ mùa thu được các thế hệ sinh viên gọi một cách thân thương là “mùa nhập học”. Đến hẹn lại lên, mùa nhập học năm nay của Trường Đại học Công nghệ Thông tin và Truyền thôn ...",
+      "latency_ms": 4955.21,
       "passed": true
     },
     {
@@ -867,11 +924,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.14,
+      "sources": [
+        "https://ictu.edu.vn/category/tin-tuc/page/14/",
+        "https://ictu.edu.vn/category/tin-tuc/page/22/",
+        "https://ictu.edu.vn/tai-sao-an-toan-thong-tin-tro-nen-quan-trong-hon-bao-gio-het-trong-thap-ky-toi/",
+        "https://ictu.edu.vn/ictu-gianh-giai-ba-cuoc-thi-innovation-tech-challenge-2025-do-samsung-to-chuc/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Tintức- Sự kiện -ICTU | source: https://ictu.edu.vn/category/tin-tuc/page/14/] 12/08/2024 Tối ngày 10/8, tại Nhà hát Ca, Múa, Nhạc dân gian Việt Bắc (TP Thái Nguyên), đội văn nghệ Công đoàn Trường Đại học Công nghệ Thông tin và Truyền thông (ICTU) đã tham gia Hội diễn văn nghệ công nhân, viên chức, lao động... [Web search ICTU | title: Tintức- Sự kiện -ICTU | source: https://ictu.edu.vn/cate ...",
+      "latency_ms": 9398.91,
       "passed": true
     },
     {
@@ -892,11 +954,16 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.13,
+      "sources": [
+        "http://laptrinh.ictu.edu.vn/",
+        "https://ictu.edu.vn/ictu-ron-rang-don-tan-sinh-vien-lam-thu-tuc-nhap-hoc/",
+        "https://ictu.edu.vn/ictu-vtieducation/",
+        "https://ictu.edu.vn/ictu-gianh-giai-ba-cuoc-thi-innovation-tech-challenge-2025-do-samsung-to-chuc/"
+      ],
+      "chunks_used": 4,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: Home -ICTU: Online Judge | source: http://laptrinh.ictu.edu.vn/] THÔNGBÁOĐĂNGKÝTHAM GIA CUỘC THI LẬP TRÌNHICTUOJ CHALLENGE 2025 Code mạnh – Tư duy nhanh – Khẳng định đẳng cấp sinh viênICTU! GIỚI THIỆU CUỘC THI. [Web search ICTU | title: ICTUrộn ràng đón tân sinh viên làm thủtụcnhập học -ICTU | source: https://ictu.edu.vn/ictu-ron-rang-don-tan-sinh-vien-lam-thu-tuc-nhap-hoc/] ICTU rộn ràng đó ...",
+      "latency_ms": 25435.28,
       "passed": true
     },
     {
@@ -917,11 +984,13 @@
       "expected_source_contains": [],
       "source_match_rank": null,
       "source_hit": null,
-      "sources": [],
-      "chunks_used": 0,
-      "mode": "web_search_plan_only",
-      "context_excerpt": "Đã chọn luồng web_search theo realtime marker; không gọi live web trong lần chạy này.",
-      "latency_ms": 0.13,
+      "sources": [
+        "https://en.ictu.edu.vn/"
+      ],
+      "chunks_used": 1,
+      "mode": "web_search",
+      "context_excerpt": "[Web search ICTU | title: ICTU– University of Information and Communication Technology | source: https://en.ictu.edu.vn/] On March 4, 2026, Thai Nguyen University of Information and Communication Technology (ICTU) welcomed and held a working session with a high-level delegation from Kyungpook National University (KNU), Republic of Korea.",
+      "latency_ms": 10942.46,
       "passed": true
     }
   ],
