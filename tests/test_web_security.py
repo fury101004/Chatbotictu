@@ -540,6 +540,23 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertIn("function renderSourceItem", response.text)
         self.assertIn("/source-preview?source=", response.text)
 
+    def test_chat_page_starts_clean_and_shows_suggestions(self) -> None:
+        client = TestClient(main.app)
+        _login_as_user(client)
+
+        response = client.get("/chat")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("resetChatOnPageLoad", response.text)
+        self.assertNotIn("localStorage.setItem(LEGACY_CHAT_STATE_KEY", response.text)
+        self.assertNotIn("localStorage.setItem(LEGACY_CHAT_ACTIVE_KEY", response.text)
+        self.assertIn("Điều kiện tốt nghiệp là gì?", response.text)
+        self.assertIn("Học lại có được cải thiện điểm không?", response.text)
+        self.assertIn("Cuộc trò chuyện mới", response.text)
+        self.assertIn("Lịch sử của tôi", response.text)
+        self.assertIn("Thông báo Telegram", response.text)
+        self.assertNotIn("Dashboard đánh giá", response.text)
+
     def test_update_config_rejects_invalid_csrf(self) -> None:
         client = TestClient(main.app)
         response = client.post(
