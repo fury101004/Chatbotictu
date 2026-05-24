@@ -522,6 +522,21 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertIn("Noi dung hoc vu", response.text)
         self.assertIn("&lt;b&gt;can escape&lt;/b&gt;", response.text)
 
+    def test_source_preview_uses_friendly_handbook_question_title(self) -> None:
+        client = TestClient(main.app)
+        _login_as_user(client)
+        source = "student_handbooks/5. SO TAY SINH VIEN 2022-2023.questions.md"
+
+        with patch(
+            "controllers.web_controller.fetch_documents_by_source",
+            return_value=(["Noi dung hoc vu"], [{"source": source}]),
+        ):
+            response = client.get(f"/source-preview?source={source}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Sổ tay sinh viên 2022-2023 (hỏi đáp trích xuất)", response.text)
+        self.assertIn(source, response.text)
+
     def test_source_preview_returns_404_when_source_missing(self) -> None:
         client = TestClient(main.app)
         _login_as_user(client)
@@ -538,6 +553,8 @@ class WebCsrfSecurityTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("function renderSourceItem", response.text)
+        self.assertIn("function formatSourceLabel", response.text)
+        self.assertIn("source_details: data.source_details", response.text)
         self.assertIn("/source-preview?source=", response.text)
 
     def test_chat_page_starts_clean_and_shows_suggestions(self) -> None:

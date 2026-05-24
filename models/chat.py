@@ -36,6 +36,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     sources: Optional[list[str]] = None
+    source_details: Optional[list[dict[str, str]]] = None
     mode: Optional[str] = None
     chunks_used: Optional[int] = None
     language: Optional[str] = None
@@ -84,6 +85,7 @@ class ChatGraphState(TypedDict, total=False):
     target_file: Optional[str]
     context_text: str
     sources: list[str]
+    source_details: list[dict[str, str]]
     chunks_used: int
     chunks: list[RetrievedChunk]
     rag_tool: str

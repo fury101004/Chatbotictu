@@ -38,6 +38,7 @@ from services.content.document_service import (
 from services.content.knowledge_base_service import approve_chat_entry, get_knowledge_base_payload, reject_chat_entry
 from services.ingestion_queue import get_ingestion_queue
 from services.llm.llm_service import get_chat_model_options
+from services.rag.source_display_service import format_source_label
 from services.user_feedback_service import save_user_feedback
 from services.vector.vector_admin_service import delete_chunk_by_id
 from repositories.vector_repository import fetch_documents_by_source
@@ -395,7 +396,11 @@ async def source_preview_page(request: Request, source: str = ""):
         return HTMLResponse("Source not found in vector database.", status_code=404)
 
     shown_chunks = chunks[:20]
-    source_title = html.escape(normalized_source)
+    display_source = format_source_label(normalized_source) or normalized_source
+    source_title = html.escape(display_source)
+    raw_source_html = ""
+    if display_source != normalized_source:
+        raw_source_html = f'<div class="raw-source">Đường dẫn nội bộ: {html.escape(normalized_source)}</div>'
     chunk_count = len(chunks)
     chunks_html = "\n".join(
         (
@@ -471,6 +476,12 @@ async def source_preview_page(request: Request, source: str = ""):
             color: var(--muted);
             font-size: 0.95rem;
         }}
+        .raw-source {{
+            color: var(--muted);
+            font-size: 0.86rem;
+            margin-top: 4px;
+            overflow-wrap: anywhere;
+        }}
         .chunk {{
             background: var(--panel);
             border: 1px solid var(--border);
@@ -506,6 +517,7 @@ async def source_preview_page(request: Request, source: str = ""):
         </div>
         <h1>{source_title}</h1>
         <div class="meta">Nguồn tham khảo nội bộ trong vector database. Tổng số đoạn: {chunk_count}.</div>
+        {raw_source_html}
         {chunks_html}
     </main>
 </body>

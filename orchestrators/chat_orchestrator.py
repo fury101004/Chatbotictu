@@ -4,6 +4,7 @@ import time
 from typing import Any, Callable
 
 from models.chat import ChatGraphState
+from services.rag.source_display_service import build_source_details
 
 
 StepHandler = Callable[[ChatGraphState], ChatGraphState]
@@ -34,6 +35,7 @@ async def process_chat_message(
 
 
 def build_chat_response_payload(state: ChatGraphState, *, response_time_ms: int) -> dict[str, Any]:
+    sources = state.get("sources") or []
     result: dict[str, Any] = {
         "response": state.get("response", ""),
         "language": state.get("language"),
@@ -41,6 +43,8 @@ def build_chat_response_payload(state: ChatGraphState, *, response_time_ms: int)
         "needs_clarification": state.get("needs_clarification"),
         "response_time_ms": response_time_ms,
     }
+    if sources:
+        result["source_details"] = build_source_details(sources)
 
     for key in (
         "sources",

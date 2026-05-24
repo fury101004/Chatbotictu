@@ -85,6 +85,15 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["needs_clarification"])
         self.assertEqual(result["rag_tool"], "student_handbook_rag")
         self.assertEqual(result["sources"], ["student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"])
+        self.assertEqual(
+            result["source_details"],
+            [
+                {
+                    "source": "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md",
+                    "label": "Sổ tay sinh viên 2025-2026 (hỏi đáp trích xuất)",
+                }
+            ],
+        )
         context_text = chat_mock.call_args.kwargs["context_text"]
         self.assertIn("được phép đăng ký học lại để cải thiện điểm", context_text)
         self.assertIn("điểm C hoặc D", context_text)
@@ -205,6 +214,7 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(payload["session_id"], "api-chat-1")
         self.assertEqual(payload["response_time_ms"], 12)
         self.assertEqual(payload["sources"], ["uploads/student_faq_rag/hoc_phi.md"])
+        self.assertIsNone(payload["source_details"])
 
 
 if __name__ == "__main__":

@@ -185,13 +185,48 @@ function normalizeSources(rawSources) {
         .filter((source) => source && source !== "BOT_RULE" && !seen.has(source) && seen.add(source));
 }
 
-function renderSourceItem(source) {
+function formatSourceLabel(source) {
+    const normalized = String(source || "").trim().replace(/\\/g, "/");
+    const handbookMatch = normalized.match(/(?:^|\/)(?:\d+\.\s*)?SO TAY SINH VIEN (20\d{2}[-_]20\d{2})(\.questions)?\.md$/i);
+    if (handbookMatch) {
+        const year = handbookMatch[1].replace("_", "-");
+        return handbookMatch[2]
+            ? `Sổ tay sinh viên ${year} (hỏi đáp trích xuất)`
+            : `Sổ tay sinh viên ${year} (bản đầy đủ)`;
+    }
+    const filename = normalized.split("/").pop() || normalized;
+    if (/\.questions\.md$/i.test(filename)) {
+        return `${filename.replace(/\.questions\.md$/i, "")} (hỏi đáp trích xuất)`;
+    }
+    return filename || normalized;
+}
+
+function normalizeSourceDetails(rawDetails, rawSources) {
+    const seen = new Set();
+    if (Array.isArray(rawDetails) && rawDetails.length) {
+        return rawDetails
+            .map((item) => ({
+                source: String(item?.source || "").trim(),
+                label: String(item?.label || item?.source || "").trim(),
+            }))
+            .filter((item) => item.source && item.source !== "BOT_RULE" && !seen.has(item.source) && seen.add(item.source));
+    }
+    return normalizeSources(rawSources).map((source) => ({
+        source,
+        label: formatSourceLabel(source),
+    }));
+}
+
+function renderSourceItem(sourceInfo) {
+    const source = String(sourceInfo?.source || "").trim();
+    const label = String(sourceInfo?.label || source).trim();
     const safeSource = escapeHtml(source);
+    const safeLabel = escapeHtml(label || source);
     if (/^https?:\/\//i.test(source)) {
-        return `<li><a href="${safeSource}" target="_blank" rel="noopener noreferrer">${safeSource}</a></li>`;
+        return `<li><a href="${safeSource}" target="_blank" rel="noopener noreferrer">${safeLabel}</a></li>`;
     }
     const previewUrl = `/source-preview?source=${encodeURIComponent(source)}`;
-    return `<li><a href="${previewUrl}" target="_blank" rel="noopener noreferrer">${safeSource}</a></li>`;
+    return `<li><a href="${previewUrl}" target="_blank" rel="noopener noreferrer" title="${safeSource}">${safeLabel}</a></li>`;
 }
 
 function messageTextToHtml(text) {
@@ -308,7 +343,7 @@ function addMessage(sender, text, name = "ICTU AI", meta = null, options = {}) {
     if (typeof meta?.response_time_ms === "number") metaParts.push(`Thời gian: ${escapeHtml(`${meta.response_time_ms} ms`)}`);
     const metaHtml = metaParts.length ? `<div class="message-meta">${metaParts.join(" | ")}</div>` : "";
 
-    const sources = normalizeSources(meta?.sources);
+    const sources = normalizeSourceDetails(meta?.source_details, meta?.sources);
     const sourcesHtml = sources.length
         ? `
             <div class="message-sources">
@@ -405,6 +440,7 @@ async function submitQuestion(rawQuestion) {
         addMessage("bot", data.response, "ICTU AI", {
             llm_model: data.llm_model,
             sources: data.sources,
+            source_details: data.source_details,
             response_time_ms: data.response_time_ms,
         }, {
             feedback: {

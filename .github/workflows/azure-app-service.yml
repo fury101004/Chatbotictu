@@ -1,6 +1,26 @@
 name: Deploy backend to Azure App Service
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/azure-app-service.yml
+      - requirements.txt
+      - startup.sh
+      - config/**
+      - controllers/**
+      - middleware/**
+      - models/**
+      - orchestrators/**
+      - pipelines/**
+      - providers/**
+      - repositories/**
+      - routers/**
+      - services/**
+      - shared/**
+      - views/**
+      - main.py
   workflow_dispatch:
     inputs:
       deploy_note:
