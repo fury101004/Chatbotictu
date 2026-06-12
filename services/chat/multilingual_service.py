@@ -231,6 +231,11 @@ def _build_final_prompt(
             "If the context is relevant but incomplete, state the reliable part first and then ask exactly one short "
             "clarification question."
         )
+        evidence_instruction = (
+            "When the context contains relevant credit totals, graduation requirements, or program details, extract "
+            "and report the concrete values instead of saying they are not mentioned. If values differ by major or "
+            "program, say so, list the values found, state exactly which major/program is missing, and ask for it."
+        )
         ambiguity_instruction = (
             "If the question lacks a required discriminator such as academic year, semester, round, cohort, training "
             "system, or target group, ask exactly one short clarification question instead of guessing."
@@ -251,6 +256,12 @@ def _build_final_prompt(
             "Nếu ngữ cảnh liên quan nhưng chưa đủ để kết luận đầy đủ, hãy nêu rõ phần chắc chắn trước rồi hỏi lại đúng "
             "một câu ngắn để làm rõ."
         )
+        evidence_instruction = (
+            "Khi ngữ cảnh có thông tin liên quan về tổng số tín chỉ, điều kiện tốt nghiệp hoặc chương trình đào tạo, "
+            "phải trích và nêu các số liệu/điều kiện tìm được, không được nói chung chung rằng thông tin không được đề "
+            "cập. Nếu số tín chỉ khác nhau theo ngành/chương trình, hãy nói rõ điều đó, liệt kê thông tin tìm được, nêu "
+            "chính xác đang thiếu ngành/chương trình nào và hỏi lại người dùng."
+        )
         ambiguity_instruction = (
             "Nếu câu hỏi thiếu mốc phân biệt bắt buộc như năm học, học kỳ, đợt, khóa, hệ đào tạo hoặc đối tượng áp "
             "dụng, hãy hỏi lại đúng một câu ngắn thay vì tự đoán."
@@ -266,6 +277,7 @@ def _build_final_prompt(
         context_instruction=context_instruction,
         qa_instruction=qa_instruction,
         clarification_instruction=clarification_instruction,
+        evidence_instruction=evidence_instruction,
         no_info_reply=no_info_reply,
         ambiguity_instruction=ambiguity_instruction,
         privacy_instruction=privacy_instruction,

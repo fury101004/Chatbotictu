@@ -22,6 +22,7 @@ from services.rag.rag_types import (
 
 TOOL_LEXICAL_RETRIEVAL_LIMIT = 8
 FALLBACK_LEXICAL_RETRIEVAL_LIMIT = 8
+SCOPE_CORPUS_MATCH_MIN_SCORE = 90
 ROUTER_REQUEST_TIMEOUT_SECONDS = 10
 ROUTER_EXECUTOR_TIMEOUT_SECONDS = 4
 FOLLOW_UP_MAX_TOKENS = 3
@@ -432,6 +433,19 @@ def build_retrieval_query(runtime: RetrievalRuntime, session_id: str, message: s
     return f"{previous_q} {current_message}"
 
 
+def query_is_in_ictu_scope(runtime: RetrievalRuntime, query: str) -> bool:
+    if runtime.is_ictu_related_query(query):
+        return True
+
+    try:
+        matches = runtime.search_documents(runtime.load_all_tool_documents(), query, limit=1)
+    except Exception as exc:
+        print(f"Scope corpus lookup unavailable: {exc}")
+        return False
+
+    return bool(matches and matches[0][0] >= SCOPE_CORPUS_MATCH_MIN_SCORE)
+
+
 def _build_general_fallback_result(
     runtime: RetrievalRuntime,
     *,
@@ -508,7 +522,7 @@ def retrieve_tool_context(
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
     scope_query = build_retrieval_query(runtime, session_id, message)
-    if not runtime.is_ictu_related_query(scope_query):
+    if not query_is_in_ictu_scope(runtime, scope_query):
         return runtime.build_scope_guard_result(route_name=route_name, tool_name=tool_name)
 
     flow_plan = retrieval_plan or runtime.route_retrieval_flow(scope_query, tool_name)
@@ -577,7 +591,7 @@ def retrieve_fallback_context(
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
     scope_query = build_retrieval_query(runtime, session_id, message)
-    if not runtime.is_ictu_related_query(scope_query):
+    if not query_is_in_ictu_scope(runtime, scope_query):
         return runtime.build_scope_guard_result(route_name=route_name, tool_name=runtime.fallback_rag_node)
 
     flow_plan = retrieval_plan or runtime.route_retrieval_flow(scope_query, runtime.fallback_rag_node)
@@ -663,7 +677,7 @@ def retrieve_general_context(
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
     query_for_retrieval = build_retrieval_query(runtime, session_id, message)
-    if not runtime.is_ictu_related_query(query_for_retrieval):
+    if not query_is_in_ictu_scope(runtime, query_for_retrieval):
         return runtime.build_scope_guard_result(route_name=route_name, tool_name=tool_name)
 
     flow_plan = retrieval_plan or runtime.route_retrieval_flow(query_for_retrieval, tool_name)

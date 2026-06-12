@@ -13,6 +13,59 @@ from services.chat.chat_service import process_chat_message
 
 
 class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_process_chat_message_rewrites_follow_up_before_route_retrieval_and_generation(self) -> None:
+        original = "thế còn khóa 2025-2026 thì sao?"
+        rewritten = "Khóa 2025-2026 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?"
+        rag_result = RAGResult(
+            context_text="Chương trình đào tạo đại học (cử nhân) có khối lượng học tập tối thiểu 120 tín chỉ.",
+            chunks=[
+                RetrievedChunk(
+                    document="Chương trình cử nhân tối thiểu 120 tín chỉ.",
+                    metadata={"source": "student_handbooks/8.md", "score": 157},
+                )
+            ],
+            mode="student_handbook_rag",
+            sources=["student_handbooks/8.md"],
+            chunks_used=1,
+            rag_tool="student_handbook_rag",
+            rag_route="router_handbook",
+        )
+        memory_store = SimpleNamespace(
+            load=AsyncMock(
+                return_value=[
+                    {
+                        "role": "user",
+                        "content": "khóa 2024-2025 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?",
+                    },
+                    {"role": "model", "content": "Chương trình cử nhân cần 120 tín chỉ."},
+                ]
+            ),
+            save=AsyncMock(),
+        )
+        eval_tracker = SimpleNamespace(log_response=AsyncMock())
+
+        with (
+            patch("services.chat.chat_service.get_default_memory_store", return_value=memory_store),
+            patch("services.chat.chat_service.get_eval_tracker", return_value=eval_tracker),
+            patch("services.chat.chat_service.route_rag_tool", return_value=("student_handbook_rag", "router_handbook")) as route_mock,
+            patch("services.chat.chat_service.retrieve_tool_context", return_value=rag_result) as retrieval_mock,
+            patch("services.chat.chat_service.chat_multilingual", return_value=("Cần tối thiểu 120 tín chỉ.", "local:test")) as chat_mock,
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]) as save_mock,
+            patch("services.chat.chat_service.append_retrieval_memory"),
+            patch("services.content.knowledge_base_service.mark_chat_entry_pending"),
+        ):
+            result = await process_chat_message(original, session_id="follow-up-1")
+
+        self.assertNotEqual(result["mode"], "ictu_scope_guard")
+        route_mock.assert_called_once_with(rewritten)
+        self.assertEqual(retrieval_mock.call_args.kwargs["message"], rewritten)
+        self.assertEqual(chat_mock.call_args.kwargs["user_question"], rewritten)
+        self.assertEqual(save_mock.call_args_list[0].args[:2], ("user", original))
+        self.assertEqual(save_mock.call_args_list[0].kwargs["rewritten_question"], rewritten)
+        self.assertEqual(eval_tracker.log_response.call_args.kwargs["query"], rewritten)
+        saved_memory = memory_store.save.call_args.args[1]
+        self.assertEqual(saved_memory[-2], {"role": "user", "content": rewritten})
+
     async def test_process_chat_message_asks_for_clarification_when_question_lacks_required_scope(self) -> None:
         empty_result = RAGResult(
             context_text="Thông tin đang được cập nhật.",

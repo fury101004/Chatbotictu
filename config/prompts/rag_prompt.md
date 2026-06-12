@@ -7,6 +7,7 @@
 - {context_instruction}
 - {qa_instruction}
 - {clarification_instruction}
+- {evidence_instruction}
 - Reply with exactly "{no_info_reply}" only when the current context is empty or not relevant to the user's question.
 - {ambiguity_instruction}
 - {privacy_instruction}

@@ -8,6 +8,7 @@ from services.rag.ictu_scope_service import is_ictu_related_query
 class ICTUScopeServiceTests(unittest.TestCase):
     def test_detects_explicit_ictu_queries(self) -> None:
         self.assertTrue(is_ictu_related_query("ICTU co quy dinh hoc phi the nao?"))
+        self.assertTrue(is_ictu_related_query("Khoa Công nghệ Thông tin được thành lập vào ngày nào?"))
         self.assertTrue(
             is_ictu_related_query(
                 "Dai hoc Cong nghe Thong tin va Truyen thong Thai Nguyen o dau?"

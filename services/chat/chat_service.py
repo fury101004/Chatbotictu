@@ -10,9 +10,10 @@ from orchestrators.rag_orchestrator import retrieve_context as retrieve_rag_cont
 from config.settings import settings
 from config.rag_tools import DEFAULT_RAG_TOOL
 from models.chat import ChatGraphState, RAGResult
-from repositories.conversation_repository import save_conversation_message
+from repositories.conversation_repository import load_chat_history, save_conversation_message
 from shared.prompt_loader import render_prompt
 from services.chat.intent_service import detect_intent, get_intent_response
+from services.chat.contextual_query_service import rewrite_contextual_question
 from services.rag.ictu_scope_service import normalize_scope_text
 from services.chat.memory_service import append_retrieval_memory
 from services.chat.moderation_service import contains_swear, get_swear_response
@@ -133,16 +134,41 @@ def retrieve_general_context(
 
 def _log_step(step: str, state: ChatGraphState, **payload: object) -> None:
     session_id = state.get("session_id", "default")
-    safe_payload = ", ".join(f"{key}={value}" for key, value in payload.items())
+    debug_payload = {
+        "original_question": state.get("original_question"),
+        "rewritten_question": state.get("rewritten_question"),
+        "detected_intent": state.get("detected_intent"),
+        "scope_result": state.get("scope_result"),
+        "retrieval_query": state.get("retrieval_query"),
+        "answer_model": state.get("llm_model"),
+    }
+    safe_payload = ", ".join(
+        f"{key}={value}"
+        for key, value in {**debug_payload, **payload}.items()
+        if value not in (None, "", [])
+    )
     logger.info("[chat_agent] step=%s session=%s %s", step, session_id, safe_payload)
 
 
 def _normalize_input(state: ChatGraphState) -> ChatGraphState:
-    message = (state.get("message") or "").strip()
+    original_question = (state.get("message") or "").strip()
     session_id = (state.get("session_id") or "default").strip() or "default"
     selected_llm_model = (state.get("selected_llm_model") or "auto").strip() or "auto"
+    history = list(state.get("persistent_memory") or [])
+    if not any(str(item.get("role") or "").casefold() == "user" for item in history):
+        try:
+            history = load_chat_history(session_id)
+        except Exception as exc:
+            logger.warning("[chat_agent] contextual_history_load_failed session=%s error=%s", session_id, exc)
+
+    rewritten_question = rewrite_contextual_question(original_question, history)
+    message = rewritten_question or original_question
 
     state["message"] = message
+    state["original_question"] = original_question
+    state["rewritten_question"] = message
+    state["retrieval_query"] = message
+    state["is_follow_up"] = bool(original_question and message != original_question)
     state["session_id"] = session_id
     state["selected_llm_model"] = selected_llm_model
     state["language"] = get_current_language(session_id)
@@ -150,9 +176,15 @@ def _normalize_input(state: ChatGraphState) -> ChatGraphState:
     state["stop_graph"] = False
     state["needs_clarification"] = False
     state["intent"] = "rag"
-    _log_step("normalize_input", state, message_length=len(message), llm_model=selected_llm_model)
+    _log_step(
+        "normalize_input",
+        state,
+        message_length=len(message),
+        llm_model=selected_llm_model,
+        is_follow_up=state["is_follow_up"],
+    )
 
-    if not message:
+    if not original_question:
         state["response"] = "Bạn hãy nhập câu hỏi để mình hỗ trợ nhé."
         state["llm_model"] = "local:empty_input"
         state["intent"] = "empty_input"
@@ -192,6 +224,7 @@ def _classify_intent(state: ChatGraphState) -> ChatGraphState:
     else:
         state["intent"] = detected_intent or "rag"
 
+    state["detected_intent"] = state["intent"]
     state["language"] = get_current_language(session_id)
     _log_step("classify_intent", state, intent=state.get("intent"), handled=state.get("handled"))
     return state
@@ -219,7 +252,28 @@ def _apply_rag_result(state: ChatGraphState, rag_result: RAGResult) -> ChatGraph
         state["rag_tool"] = rag_result.rag_tool
     if rag_result.rag_route:
         state["rag_route"] = rag_result.rag_route
+    state["scope_result"] = "blocked" if rag_result.mode == "ictu_scope_guard" else "allowed"
     return state
+
+
+def _top_retrieval_debug(state: ChatGraphState, limit: int = 5) -> tuple[list[str], list[object]]:
+    top_sources: list[str] = []
+    top_scores: list[object] = []
+    for chunk in state.get("chunks", [])[:limit]:
+        metadata = dict(chunk.metadata or {})
+        source = str(metadata.get("source") or metadata.get("path") or "").strip()
+        if source:
+            top_sources.append(source)
+        score = next(
+            (
+                metadata.get(key)
+                for key in ("score", "hybrid_score", "vector_score", "bm25_score")
+                if metadata.get(key) is not None
+            ),
+            None,
+        )
+        top_scores.append(score)
+    return top_sources, top_scores
 
 
 def _context_is_missing(state: ChatGraphState) -> bool:
@@ -284,11 +338,13 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
         )
 
     state = _apply_rag_result(state, result)
+    state["retrieval_query"] = state["message"]
     clarification_question = _build_clarification_question(state["message"])
     if clarification_question and (_context_is_missing(state) or len(state.get("sources", [])) > 1):
         state["needs_clarification"] = True
         state["clarification_question"] = clarification_question
 
+    top_sources, top_scores = _top_retrieval_debug(state)
     _log_step(
         "retrieve_context",
         state,
@@ -296,6 +352,8 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
         sources=len(state.get("sources", [])),
         chunks_used=state.get("chunks_used", 0),
         needs_clarification=state.get("needs_clarification"),
+        top_sources=top_sources,
+        top_scores=top_scores,
     )
     return state
 
@@ -405,7 +463,8 @@ def _should_auto_approve(state: ChatGraphState) -> bool:
 
 
 def _save_history(state: ChatGraphState) -> ChatGraphState:
-    message = state.get("message", "")
+    message = state.get("original_question") or state.get("message", "")
+    rewritten_question = state.get("rewritten_question") or message
     response = state.get("response", "")
     session_id = state.get("session_id", "default")
 
@@ -418,6 +477,8 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
             session_id=session_id,
             owner_username=str(state.get("owner_username") or ""),
             owner_role=str(state.get("owner_role") or ""),
+            original_question=message,
+            rewritten_question=rewritten_question,
         )
     if response:
         bot_row_id = save_message(
@@ -441,7 +502,9 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
     if state.get("chunks"):
         append_retrieval_memory(
             session_id,
-            query=message,
+            query=state.get("retrieval_query") or rewritten_question,
+            original_question=message,
+            rewritten_question=rewritten_question,
             sources=state.get("sources", []),
             retrieved_ids=[
                 chunk.metadata.get("path", chunk.metadata.get("id", ""))
@@ -545,9 +608,10 @@ async def process_chat_message(
     try:
         response = str(state.get("response") or "")
         if message and response:
+            memory_question = str(state.get("rewritten_question") or message)
             updated_memory = [
                 *persistent_memory,
-                {"role": "user", "content": str(message)},
+                {"role": "user", "content": memory_question},
                 {"role": "model", "content": response},
             ][-40:]
             await memory_store.save(memory_key, updated_memory)
@@ -557,7 +621,7 @@ async def process_chat_message(
     try:
         sources = state.get("sources", [])
         await get_eval_tracker().log_response(
-            query=message,
+            query=state.get("retrieval_query") or state.get("rewritten_question") or message,
             answer_length=len(str(state.get("response") or "")),
             sources_returned=len(sources),
             latency_ms=response_time_ms,

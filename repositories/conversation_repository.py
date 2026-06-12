@@ -14,6 +14,8 @@ def save_conversation_message(
     session_id: str = "default",
     owner_username: str = "",
     owner_role: str = "",
+    original_question: str = "",
+    rewritten_question: str = "",
 ) -> int:
     return _save_message(
         role,
@@ -21,6 +23,8 @@ def save_conversation_message(
         session_id=session_id,
         owner_username=owner_username,
         owner_role=owner_role,
+        original_question=original_question,
+        rewritten_question=rewritten_question,
     )
 
 
@@ -45,6 +49,7 @@ def list_chat_history_rows(*, owner_username: str | None = None) -> list[dict[st
     has_session_id = "session_id" in columns
     has_owner = "owner_username" in columns
     has_owner_role = "owner_role" in columns
+    has_question_debug = {"original_question", "rewritten_question"}.issubset(columns)
     owner_filter = str(owner_username or "").strip() if owner_username is not None else None
     where_clause = ""
     params: tuple[str, ...] = ()
@@ -54,10 +59,13 @@ def list_chat_history_rows(*, owner_username: str | None = None) -> list[dict[st
 
     if has_session_id and has_owner:
         owner_role_expr = "COALESCE(owner_role, '')" if has_owner_role else "''"
+        original_question_expr = "COALESCE(original_question, '')" if has_question_debug else "''"
+        rewritten_question_expr = "COALESCE(rewritten_question, '')" if has_question_debug else "''"
         cursor.execute(
             f"""
             SELECT id, role, content, timestamp, session_id,
-                   COALESCE(owner_username, ''), {owner_role_expr}
+                   COALESCE(owner_username, ''), {owner_role_expr},
+                   {original_question_expr}, {rewritten_question_expr}
             FROM chat_history
             {where_clause}
             ORDER BY id ASC
@@ -73,8 +81,20 @@ def list_chat_history_rows(*, owner_username: str | None = None) -> list[dict[st
                 "session_id": session_id or "default",
                 "owner_username": owner_username or "",
                 "owner_role": owner_role or "",
+                "original_question": original_question or "",
+                "rewritten_question": rewritten_question or "",
             }
-            for row_id, role, content, timestamp, session_id, owner_username, owner_role in cursor.fetchall()
+            for (
+                row_id,
+                role,
+                content,
+                timestamp,
+                session_id,
+                owner_username,
+                owner_role,
+                original_question,
+                rewritten_question,
+            ) in cursor.fetchall()
         ]
     elif has_session_id:
         cursor.execute(

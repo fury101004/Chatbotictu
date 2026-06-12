@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from fastapi import UploadFile
 
-from pipelines.retrieval_pipeline import build_retrieval_query
+from pipelines.retrieval_pipeline import build_retrieval_query, query_is_in_ictu_scope
 import services.vector.vector_store_service as vector_store_service
 from services.content.document_service import upload_markdown_files
 from services.rag.rag_service import (
@@ -21,6 +21,7 @@ from services.rag.rag_service import (
     RETRIEVAL_WEB_SEARCH,
     RetrievalFlowPlan,
     _extract_relevant_snippet,
+    _load_tool_corpus,
     _normalize_for_match,
     _search_documents,
     _tokenize,
@@ -314,6 +315,26 @@ class RetrievalQueryBuilderTests(unittest.TestCase):
         self.assertEqual(query, "Sổ tay sinh viên K24 áp dụng cho đối tượng nào? còn học phí")
 
 
+class RetrievalScopeTests(unittest.TestCase):
+    def test_strong_local_corpus_match_is_in_scope(self) -> None:
+        runtime = SimpleNamespace(
+            is_ictu_related_query=lambda _query: False,
+            load_all_tool_documents=lambda: ("internal-doc",),
+            search_documents=lambda _docs, _query, limit: [(106, "internal-doc")],
+        )
+
+        self.assertTrue(query_is_in_ictu_scope(runtime, "Khoa Công nghệ Thông tin được thành lập vào ngày nào?"))
+
+    def test_weak_local_corpus_match_remains_out_of_scope(self) -> None:
+        runtime = SimpleNamespace(
+            is_ictu_related_query=lambda _query: False,
+            load_all_tool_documents=lambda: ("internal-doc",),
+            search_documents=lambda _docs, _query, limit: [(54, "internal-doc")],
+        )
+
+        self.assertFalse(query_is_in_ictu_scope(runtime, "Thời tiết Hà Nội hôm nay thế nào?"))
+
+
 class RagLexicalQaTests(unittest.TestCase):
     def _doc(
         self,
@@ -361,6 +382,21 @@ class RagLexicalQaTests(unittest.TestCase):
         self.assertIn("2,50 den 3,19", snippet)
         self.assertIn("3,60 tro len", snippet)
         self.assertNotIn("cung cap thong tin chung", snippet)
+
+    def test_year_specific_bachelor_credit_query_extracts_concrete_total(self) -> None:
+        question = "khóa 2024-2025 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?"
+        documents = _load_tool_corpus("student_handbook_rag")
+
+        matches = _search_documents(documents, question, limit=3)
+
+        self.assertTrue(matches)
+        self.assertEqual(
+            matches[0][1].source,
+            "student_handbooks/7. SO TAY SINH VIEN 2024-2025.md",
+        )
+        snippet = _extract_relevant_snippet(matches[0][1], question, _tokenize(question))
+        self.assertIn("120 tín chỉ", snippet)
+        self.assertIn("Chương trình đào tạo đại học (cử nhân)", snippet)
 
     def test_question_files_are_ranked_ahead_of_raw_context_for_exact_qa(self) -> None:
         question = "Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?"

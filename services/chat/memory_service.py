@@ -16,6 +16,8 @@ def append_retrieval_memory(
     session_id: str,
     *,
     query: str,
+    original_question: str = "",
+    rewritten_question: str = "",
     sources: list[str],
     retrieved_ids: list[str],
     rag_tool: str | None = None,
@@ -23,6 +25,8 @@ def append_retrieval_memory(
     SESSION_MEMORY[session_id].append(
         {
             "query": query,
+            "original_question": original_question or query,
+            "rewritten_question": rewritten_question or query,
             "timestamp": datetime.now().isoformat(),
             "sources": list(sources),
             "retrieved_ids": list(retrieved_ids),

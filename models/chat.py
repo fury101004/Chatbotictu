@@ -73,6 +73,10 @@ class RAGResult:
 
 class ChatGraphState(TypedDict, total=False):
     message: str
+    original_question: str
+    rewritten_question: str
+    retrieval_query: str
+    is_follow_up: bool
     session_id: str
     response: str
     handled: bool
@@ -80,6 +84,8 @@ class ChatGraphState(TypedDict, total=False):
     mode: str
     language: str
     intent: str
+    detected_intent: str
+    scope_result: str
     needs_clarification: bool
     clarification_question: str
     target_file: Optional[str]

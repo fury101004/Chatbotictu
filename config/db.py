@@ -42,6 +42,16 @@ def _ensure_chat_history_schema(cursor: sqlite3.Cursor) -> None:
         cursor.execute(
             "ALTER TABLE chat_history ADD COLUMN owner_role TEXT NOT NULL DEFAULT ''"
         )
+        columns.append("owner_role")
+    if "original_question" not in columns:
+        cursor.execute(
+            "ALTER TABLE chat_history ADD COLUMN original_question TEXT NOT NULL DEFAULT ''"
+        )
+        columns.append("original_question")
+    if "rewritten_question" not in columns:
+        cursor.execute(
+            "ALTER TABLE chat_history ADD COLUMN rewritten_question TEXT NOT NULL DEFAULT ''"
+        )
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_chat_history_session_id_id "
         "ON chat_history(session_id, id)"
@@ -281,16 +291,27 @@ def save_message(
     session_id: str = "default",
     owner_username: str = "",
     owner_role: str = "",
+    original_question: str = "",
+    rewritten_question: str = "",
 ) -> int:
     conn = get_conn()
     cursor = conn.cursor()
     columns = set(_chat_history_columns(cursor))
 
-    if {"session_id", "owner_username", "owner_role"}.issubset(columns):
+    if {
+        "session_id",
+        "owner_username",
+        "owner_role",
+        "original_question",
+        "rewritten_question",
+    }.issubset(columns):
         cursor.execute(
             """
-            INSERT INTO chat_history (role, content, session_id, owner_username, owner_role)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO chat_history (
+                role, content, session_id, owner_username, owner_role,
+                original_question, rewritten_question
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 role,
@@ -298,6 +319,8 @@ def save_message(
                 session_id,
                 str(owner_username or "").strip(),
                 str(owner_role or "").strip().lower(),
+                str(original_question or "").strip(),
+                str(rewritten_question or "").strip(),
             ),
         )
     elif "session_id" in columns:
@@ -543,10 +566,16 @@ def get_chat_history(session_id: str = "default") -> List[Dict[str, str]]:
     conn = get_conn()
     cursor = conn.cursor()
 
+    columns = set(_chat_history_columns(cursor))
+    has_question_debug = {"original_question", "rewritten_question"}.issubset(columns)
+    original_question_expr = "COALESCE(original_question, '')" if has_question_debug else "''"
+    rewritten_question_expr = "COALESCE(rewritten_question, '')" if has_question_debug else "''"
+
     if _chat_history_has_session_id(cursor):
         cursor.execute(
-            """
-            SELECT role, content FROM chat_history
+            f"""
+            SELECT role, content, {original_question_expr}, {rewritten_question_expr}
+            FROM chat_history
             WHERE session_id = ?
             ORDER BY id ASC
             """,
@@ -554,8 +583,9 @@ def get_chat_history(session_id: str = "default") -> List[Dict[str, str]]:
         )
     else:
         cursor.execute(
-            """
-            SELECT role, content FROM chat_history
+            f"""
+            SELECT role, content, {original_question_expr}, {rewritten_question_expr}
+            FROM chat_history
             ORDER BY id ASC
             """
         )
@@ -564,9 +594,16 @@ def get_chat_history(session_id: str = "default") -> List[Dict[str, str]]:
     conn.close()
 
     history: List[Dict[str, str]] = [{"role": "system", "content": get_system_prompt()}]
-    for role, content in rows:
+    for role, content, original_question, rewritten_question in rows:
         if role == "user":
-            history.append({"role": "user", "content": content})
+            history.append(
+                {
+                    "role": "user",
+                    "content": content,
+                    "original_question": original_question or content,
+                    "rewritten_question": rewritten_question or content,
+                }
+            )
         elif role in ("bot", "assistant"):
             history.append({"role": "assistant", "content": content})
     return history

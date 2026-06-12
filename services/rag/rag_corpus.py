@@ -177,6 +177,18 @@ def _is_program_credit_query(query_tokens: list[str], query_phrases: list[str]) 
     return has_program_terms or has_credit_terms or has_program_phrase
 
 
+def _is_total_credit_query(query_tokens: list[str], query_phrases: list[str]) -> bool:
+    token_set = set(query_tokens)
+    return (
+        "tong so tin chi" in query_phrases
+        or "bao nhieu tin chi" in query_phrases
+        or (
+            {"bao", "nhieu", "tin", "chi"}.issubset(token_set)
+            and bool({"tot", "nghiep", "chuong", "trinh", "cu", "nhan"} & token_set)
+        )
+    )
+
+
 def _score_document(
     doc: CorpusDocument,
     query_tokens: list[str],
@@ -190,7 +202,6 @@ def _score_document(
         return 0
 
     unique_tokens = set(query_tokens)
-    phrase_set = set(query_phrases)
     token_overlap = sum(1 for token in unique_tokens if token in doc.token_set)
     source_overlap = sum(1 for token in unique_tokens if token in doc.normalized_source)
     title_overlap = sum(1 for token in unique_tokens if token in doc.normalized_title)
@@ -229,19 +240,26 @@ def _score_document(
     ):
         program_bonus = 8
 
-    wants_total_credit = (
-        "tong so tin chi" in phrase_set
-        or (
-            {"bao", "nhieu", "tin", "chi"}.issubset(unique_tokens)
-            and ({"chuong", "trinh"}.issubset(unique_tokens) or "ctdt" in unique_tokens)
-        )
-    )
+    wants_total_credit = _is_total_credit_query(query_tokens, query_phrases)
     total_credit_bonus = 0
     if wants_total_credit:
-        if "tong so tin chi" in doc.normalized_text:
+        has_explicit_program_total = any(
+            marker in doc.normalized_text
+            for marker in (
+                "chuong trinh dao tao dai hoc cu nhan",
+                "chuong trinh cu nhan",
+                "khoi luong hoc tap toi thieu 120 tin chi",
+                "120 tin chi",
+            )
+        )
+        if has_explicit_program_total:
+            total_credit_bonus = 48
+        elif "tong so tin chi" in doc.normalized_text:
             total_credit_bonus = 20
         elif doc.path.name.casefold().endswith(".questions.md"):
             total_credit_bonus = -22
+        if doc.path.name.casefold().endswith(".questions.md") and not has_explicit_program_total:
+            total_credit_bonus -= 18
 
     ctdt_sheet_bonus = 0
     if wants_total_credit and (
@@ -368,18 +386,23 @@ def _extract_relevant_snippet(doc: CorpusDocument, message: str, query_tokens: l
     if not lines:
         return doc.text[:max_chars]
 
-    normalized_query = _normalize_for_match(message)
     line_pairs = [(line, _normalize_for_match(line)) for line in lines]
     matched_lines = [line for line, normalized in line_pairs if any(token in normalized for token in query_tokens)]
 
-    token_set = set(query_tokens)
-    asks_total_credit = (
-        ("tong" in token_set and "tin" in token_set and "chi" in token_set)
-        or "bao nhieu tin chi" in normalized_query
-        or "tong so tin chi" in normalized_query
-    )
+    asks_total_credit = _is_total_credit_query(query_tokens, _candidate_phrases(message))
 
     if asks_total_credit:
+        explicit_program_lines = [
+            line
+            for line, normalized in line_pairs
+            if (
+                "chuong trinh dao tao dai hoc" in normalized
+                or "chuong trinh cu nhan" in normalized
+                or "cu nhan" in normalized
+                or "120 tin chi" in normalized
+            )
+            and "tin chi" in normalized
+        ]
         credit_priority_lines = [
             line
             for line, normalized in line_pairs
@@ -387,9 +410,8 @@ def _extract_relevant_snippet(doc: CorpusDocument, message: str, query_tokens: l
             or "tong so tc" in normalized
             or "tin chi tich luy" in normalized
         ]
-        selected_lines = (credit_priority_lines + matched_lines)[:12] if credit_priority_lines else (
-            matched_lines[:10] if matched_lines else lines[:12]
-        )
+        priority_lines = list(dict.fromkeys([*explicit_program_lines, *credit_priority_lines, *matched_lines]))
+        selected_lines = priority_lines[:12] if priority_lines else lines[:12]
     else:
         selected_lines = matched_lines[:10] if matched_lines else lines[:12]
 
@@ -431,15 +453,19 @@ def _search_documents(documents: tuple[CorpusDocument, ...], message: str, limit
         return []
 
     if query_year_ranges:
-        year_range_filtered = [
+        source_year_range_filtered = [
             item
             for item in scored
             if any(
                 year_range in item[1].normalized_source
                 or year_range in item[1].normalized_title
-                or year_range in item[1].normalized_text
                 for year_range in query_year_ranges
             )
+        ]
+        year_range_filtered = source_year_range_filtered or [
+            item
+            for item in scored
+            if any(year_range in item[1].normalized_text for year_range in query_year_ranges)
         ]
         if year_range_filtered:
             scored = year_range_filtered

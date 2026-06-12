@@ -27,6 +27,8 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertIn("Pham vi tri thuc hien tai:", prompt_ascii)
         self.assertIn("ngu canh hien tai ben duoi", prompt_ascii)
         self.assertIn("Neu cau hoi thieu moc phan biet bat buoc", prompt_ascii)
+        self.assertIn("khong duoc noi chung chung rang thong tin khong duoc de cap", prompt_ascii)
+        self.assertIn("thieu nganh/chuong trinh nao", prompt_ascii)
         self.assertIn("Khong neu ten nguon, ten file, route, tool", prompt_ascii)
         self.assertIn('"Thong tin nay hien chua co trong tai lieu cua em."', prompt_ascii)
 

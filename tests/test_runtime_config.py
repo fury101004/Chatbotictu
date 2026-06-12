@@ -46,14 +46,56 @@ class ChatHistorySchemaTests(unittest.TestCase):
                 conn = sqlite3.connect(db_path)
                 columns = [row[1] for row in conn.execute("PRAGMA table_info(chat_history)").fetchall()]
                 row = conn.execute(
-                    "SELECT role, content, session_id FROM chat_history ORDER BY id ASC"
+                    """
+                    SELECT role, content, session_id, original_question, rewritten_question
+                    FROM chat_history ORDER BY id ASC
+                    """
                 ).fetchone()
                 indexes = [row[1] for row in conn.execute("PRAGMA index_list(chat_history)").fetchall()]
                 conn.close()
 
             self.assertIn("session_id", columns)
-            self.assertEqual(row, ("user", "Xin chao", "default"))
+            self.assertIn("original_question", columns)
+            self.assertIn("rewritten_question", columns)
+            self.assertEqual(row, ("user", "Xin chao", "default", "", ""))
             self.assertIn("idx_chat_history_session_id_id", indexes)
+
+    def test_save_message_persists_original_and_rewritten_questions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            db_path = temp_root / "bot_config.db"
+            prompt_path = temp_root / "systemprompt.md"
+
+            with (
+                patch("config.db.DB_PATH", db_path),
+                patch("config.system_prompt.SYSTEM_PROMPT_PATH", prompt_path),
+            ):
+                db.init_db()
+                db.save_message(
+                    "user",
+                    "thế còn khóa 2025-2026 thì sao?",
+                    session_id="follow-up",
+                    original_question="thế còn khóa 2025-2026 thì sao?",
+                    rewritten_question="Khóa 2025-2026 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?",
+                )
+
+                conn = sqlite3.connect(db_path)
+                row = conn.execute(
+                    """
+                    SELECT content, original_question, rewritten_question
+                    FROM chat_history ORDER BY id DESC LIMIT 1
+                    """
+                ).fetchone()
+                conn.close()
+
+        self.assertEqual(
+            row,
+            (
+                "thế còn khóa 2025-2026 thì sao?",
+                "thế còn khóa 2025-2026 thì sao?",
+                "Khóa 2025-2026 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?",
+            ),
+        )
 
 
 class MiddlewareConfigTests(unittest.TestCase):
