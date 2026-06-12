@@ -27,10 +27,6 @@
                 <span class="sidebar-icon">↺</span>
                 Lịch sử của tôi
             </a>
-            <button type="button" class="sidebar-link muted" id="telegramNoticeButton">
-                <span class="sidebar-icon">•</span>
-                Thông báo Telegram
-            </button>
             {% if current_role == "admin" %}
             <a href="/evaluation-dashboard" class="sidebar-link">
                 <span class="sidebar-icon">◎</span>
@@ -500,10 +496,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.getElementById("chatNewButton")?.addEventListener("click", createNewChatSession);
-    document.getElementById("telegramNoticeButton")?.addEventListener("click", () => {
-        alert("Tính năng thông báo Telegram sẽ được cấu hình khi triển khai kênh thông báo chính thức.");
-    });
-
     input.addEventListener("input", () => {
         resizeTextarea(input);
         updateCharCount(input.value.length);
@@ -1055,7 +1047,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     .sidebar-nav {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     }
 
     .chat-main {

@@ -571,7 +571,8 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertIn("Học lại có được cải thiện điểm không?", response.text)
         self.assertIn("Cuộc trò chuyện mới", response.text)
         self.assertIn("Lịch sử của tôi", response.text)
-        self.assertIn("Thông báo Telegram", response.text)
+        self.assertNotIn("Thông báo Telegram", response.text)
+        self.assertNotIn("telegramNoticeButton", response.text)
         self.assertNotIn("Dashboard đánh giá", response.text)
 
     def test_update_config_rejects_invalid_csrf(self) -> None:
