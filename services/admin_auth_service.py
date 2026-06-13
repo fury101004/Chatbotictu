@@ -184,7 +184,10 @@ def logout_web_user(request: Request) -> None:
 
 
 def default_route_for_role(role: str) -> str:
-    return "/" if normalize_role(role) == ADMIN_ROLE else "/chat"
+    normalized_role = normalize_role(role)
+    if normalized_role == ADMIN_ROLE or normalized_role in USER_ROLES:
+        return "/"
+    return "/login"
 
 
 def admin_login_redirect(request: Request) -> RedirectResponse:

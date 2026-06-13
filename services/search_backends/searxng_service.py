@@ -7,7 +7,6 @@ from fastapi import FastAPI, Query
 
 from services.rag.ictu_scope_service import is_ictu_related_query, normalize_scope_text
 
-
 logger = logging.getLogger("searxng")
 
 _ICTU_NEWS_KEYWORDS = (

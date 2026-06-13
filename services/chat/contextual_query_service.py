@@ -33,6 +33,27 @@ _ACADEMIC_FOLLOW_UP_MARKERS = (
     "hoc phi",
     "sinh vien",
 )
+_SOURCE_YEAR_REFERENCE_MARKERS = (
+    "phan nay",
+    "phan tren",
+    "noi dung nay",
+    "noi dung tren",
+    "thong tin nay",
+    "thong tin tren",
+    "quy dinh nay",
+    "quy dinh tren",
+    "cau tra loi nay",
+    "cau tra loi tren",
+)
+_SOURCE_YEAR_QUESTION_MARKERS = (
+    "nam nao",
+    "nam bao nhieu",
+    "nam hoc nao",
+    "nam hoc bao nhieu",
+    "cua nam nao",
+    "thuoc nam nao",
+    "ap dung nam nao",
+)
 _NORMALIZED_FOLLOW_UP_PREFIXES = tuple(normalize_scope_text(prefix) for prefix in _FOLLOW_UP_PREFIXES)
 _NORMALIZED_FOLLOW_UP_SUFFIXES = tuple(normalize_scope_text(suffix) for suffix in _FOLLOW_UP_SUFFIXES)
 
@@ -41,6 +62,13 @@ def _has_academic_follow_up_signal(question: str, normalized: str) -> bool:
     return bool(_YEAR_RANGE_RE.search(question)) or any(
         marker in normalized for marker in _ACADEMIC_FOLLOW_UP_MARKERS
     )
+
+
+def is_source_year_follow_up(question: str) -> bool:
+    normalized = normalize_scope_text(question)
+    return bool(normalized) and any(
+        marker in normalized for marker in _SOURCE_YEAR_REFERENCE_MARKERS
+    ) and any(marker in normalized for marker in _SOURCE_YEAR_QUESTION_MARKERS)
 
 
 def _capitalize_question(text: str) -> str:
@@ -65,6 +93,8 @@ def is_contextual_follow_up(question: str) -> bool:
     normalized = normalize_scope_text(question)
     if not normalized:
         return False
+    if is_source_year_follow_up(question):
+        return True
 
     has_academic_signal = _has_academic_follow_up_signal(question, normalized)
     if any(normalized == prefix for prefix in _NORMALIZED_FOLLOW_UP_PREFIXES):
@@ -131,6 +161,11 @@ def rewrite_follow_up_question(previous_question: str, current_question: str) ->
     current = str(current_question or "").strip()
     if not previous or not current or not is_contextual_follow_up(current):
         return current
+    if is_source_year_follow_up(current):
+        previous_topic = previous.rstrip(" ?.!").lower()
+        return _capitalize_question(
+            f"Nội dung trả lời cho câu hỏi '{previous_topic}' thuộc tài liệu năm học nào"
+        )
 
     year_rewrite = _rewrite_year_follow_up(previous, current)
     if year_rewrite:

@@ -1,0 +1,56 @@
+{% extends "layouts/base.html" %}
+{% block title %}Trang chủ người dùng - ICTU AI{% endblock %}
+
+{% block content %}
+<div class="hero hero-home">
+    <span class="hero-kicker">Khu vực sinh viên</span>
+    <h1 class="hero-title">Xin chào, {{ current_username or "bạn" }}</h1>
+    <p class="hero-subtitle">
+        Trang chủ này chỉ hiển thị các chức năng bạn được sử dụng: trò chuyện với ICTU AI,
+        xem lại lịch sử và tiếp tục phiên làm việc trước.
+    </p>
+</div>
+
+<div class="features-grid">
+    <div class="feature-card card-coral">
+        <h2 class="card-title tone-coral">Trò chuyện</h2>
+        <p>
+            Hỏi về quy chế đào tạo, học bổng, cảnh báo học tập, điều kiện tốt nghiệp và các
+            vấn đề sinh viên ICTU hay gặp.
+        </p>
+        <a href="/chat" class="btn-large btn-coral">Mở chat</a>
+    </div>
+
+    <div class="feature-card card-teal">
+        <h2 class="card-title tone-teal">Lịch sử chat</h2>
+        <p>
+            Xem lại các câu hỏi đã hỏi, tiếp tục phiên trước hoặc tra cứu lại câu trả lời đã nhận.
+        </p>
+        <a href="/history" class="btn-large btn-teal">Mở lịch sử</a>
+    </div>
+
+    <div class="feature-card card-violet">
+        <h2 class="card-title tone-violet">Gợi ý nhanh</h2>
+        <p>
+            Thử ngay các chủ đề như học bổng, cảnh báo học tập, điều kiện tốt nghiệp và đăng ký học phần.
+        </p>
+        <a href="/chat" class="btn-large btn-violet">Xem gợi ý</a>
+    </div>
+</div>
+
+<div class="panel" style="margin-top: 1.5rem;">
+    <div class="panel-header">
+        <div class="header-content">
+            <h2>Phạm vi sử dụng</h2>
+            <p class="panel-subtitle">
+                Không hiển thị các chức năng quản trị như upload, vector manager, cấu hình hay kho tri thức.
+            </p>
+        </div>
+    </div>
+    <div class="stats" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem;">
+        <span class="stat-item">Trò chuyện với ICTU AI</span>
+        <span class="stat-item">Xem lịch sử cá nhân</span>
+        <span class="stat-item">Dùng cùng session hiện tại</span>
+    </div>
+</div>
+{% endblock %}

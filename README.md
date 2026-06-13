@@ -23,6 +23,7 @@ Kiến trúc mã nguồn đi theo hướng Controller - Service - Repository - P
 - Chunking tài liệu Markdown/TXT theo cấu trúc heading, kèm metadata như source, tool, document type, academic year.
 - Quản lý tài liệu học vụ: upload file `.md`, `.markdown`, `.txt`, import seed corpus, reset/re-ingest vector store.
 - Lưu lịch sử hội thoại theo `session_id` trong SQLite.
+- Lưu memory hội thoại rút gọn theo tài khoản hoặc `session_id` trong SQLite, có TTL và giới hạn dung lượng.
 - Giao diện quản trị gồm đăng nhập admin, upload tài liệu, quản lý vector, Knowledge Base, cấu hình và lịch sử chat.
 - Duyệt Knowledge Base từ hội thoại: các cặp hỏi đáp có nguồn có thể được đưa vào trạng thái pending, admin có thể approve/reject.
 - Citation/source grounding: response API và UI có danh sách nguồn; service chat cũng có bước append block nguồn tham khảo vào câu trả lời.
@@ -111,7 +112,7 @@ project/
 
 - Python `3.11` theo `.python-version` và Docker base image `python:3.11-slim-bookworm`.
 - FastAPI, Uvicorn, Starlette, Jinja2.
-- SQLite cho runtime config, chat history, upload records, review state và web knowledge.
+- SQLite cho runtime config, chat history, chat memory, upload records, review state và web knowledge.
 - ChromaDB persistent store tại `vectorstore/`.
 - `sentence-transformers` với model embedding `paraphrase-multilingual-MiniLM-L12-v2`.
 - `rank-bm25` cho keyword retrieval.

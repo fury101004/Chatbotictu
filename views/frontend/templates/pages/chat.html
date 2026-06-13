@@ -101,6 +101,7 @@
 
 <script>
 const MAX_CHAT_MESSAGE_CHARS = Number("{{ max_chat_message_chars|default(2000) }}");
+const CAN_VIEW_CHAT_SOURCES = {{ "true" if current_role == "admin" else "false" }};
 const LEGACY_CHAT_STATE_KEY = `ictu-dashboard-chat-state:{{ chat_storage_scope }}`;
 const LEGACY_CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:{{ chat_storage_scope }}`;
 
@@ -339,7 +340,9 @@ function addMessage(sender, text, name = "ICTU AI", meta = null, options = {}) {
     if (typeof meta?.response_time_ms === "number") metaParts.push(`Thời gian: ${escapeHtml(`${meta.response_time_ms} ms`)}`);
     const metaHtml = metaParts.length ? `<div class="message-meta">${metaParts.join(" | ")}</div>` : "";
 
-    const sources = normalizeSourceDetails(meta?.source_details, meta?.sources);
+    const sources = CAN_VIEW_CHAT_SOURCES
+        ? normalizeSourceDetails(meta?.source_details, meta?.sources)
+        : [];
     const sourcesHtml = sources.length
         ? `
             <div class="message-sources">

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from services.chat.contextual_query_service import rewrite_contextual_question, rewrite_follow_up_question
+from services.chat.contextual_query_service import (
+    is_source_year_follow_up,
+    rewrite_contextual_question,
+    rewrite_follow_up_question,
+)
 from services.rag.ictu_scope_service import is_ictu_related_query
 
 
@@ -89,6 +93,15 @@ class ContextualQueryRewriteTests(unittest.TestCase):
         self.assertEqual(
             rewritten,
             "Khóa 2026-2027 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?",
+        )
+
+    def test_rewrites_source_year_reference_follow_up(self) -> None:
+        current = "phần này là của năm bao nhiêu"
+
+        self.assertTrue(is_source_year_follow_up(current))
+        self.assertEqual(
+            rewrite_follow_up_question("Khi nào sinh viên bị cảnh báo học tập?", current),
+            "Nội dung trả lời cho câu hỏi 'khi nào sinh viên bị cảnh báo học tập' thuộc tài liệu năm học nào?",
         )
 
 

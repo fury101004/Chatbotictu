@@ -30,7 +30,7 @@
     {% set current_path = request.url.path %}
     <div class="app-shell">
         <header class="navbar" aria-label="Điều hướng chính">
-            <a class="nav-brand" href="{% if admin_authenticated %}/{% elif is_authenticated %}/chat{% else %}/login{% endif %}" aria-label="ICTU AI Dashboard">
+            <a class="nav-brand" href="{% if is_authenticated %}/{% else %}/login{% endif %}" aria-label="ICTU AI Dashboard">
                 <span class="nav-brand-mark" aria-hidden="true">AI</span>
                 <span class="nav-brand-text">ICTU AI Dashboard</span>
             </a>

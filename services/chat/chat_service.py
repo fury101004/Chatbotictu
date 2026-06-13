@@ -13,9 +13,9 @@ from models.chat import ChatGraphState, RAGResult
 from repositories.conversation_repository import load_chat_history, save_conversation_message
 from shared.prompt_loader import render_prompt
 from services.chat.intent_service import detect_intent, get_intent_response
-from services.chat.contextual_query_service import rewrite_contextual_question
+from services.chat.contextual_query_service import is_source_year_follow_up, rewrite_contextual_question
 from services.rag.ictu_scope_service import normalize_scope_text
-from services.chat.memory_service import append_retrieval_memory
+from services.chat.memory_service import append_retrieval_memory, get_last_retrieval_years
 from services.chat.moderation_service import contains_swear, get_swear_response
 from services.chat.multilingual_service import chat_multilingual, get_current_language
 from services.chat.quick_reply_service import get_quick_response
@@ -205,7 +205,25 @@ def _classify_intent(state: ChatGraphState) -> ChatGraphState:
     if detected_intent in {"greeting", "thanks", "chitchat"} and looks_like_information_query:
         detected_intent = None
 
-    if contains_swear(message):
+    source_years = (
+        get_last_retrieval_years(session_id, state.get("persistent_memory", []))
+        if is_source_year_follow_up(state.get("original_question") or message)
+        else []
+    )
+    if source_years:
+        if len(source_years) == 1:
+            state["response"] = f"Nội dung vừa trả lời được truy xuất từ tài liệu năm học **{source_years[0]}**."
+        else:
+            state["response"] = (
+                "Nội dung vừa trả lời được đối chiếu từ các tài liệu năm học: "
+                + ", ".join(f"**{year}**" for year in source_years)
+                + "."
+            )
+        state["handled"] = True
+        state["mode"] = "retrieval_memory"
+        state["intent"] = "source_year_follow_up"
+        state["llm_model"] = "local:retrieval_memory"
+    elif contains_swear(message):
         state["response"] = get_swear_response()
         state["handled"] = True
         state["mode"] = "guardrail"
@@ -587,7 +605,10 @@ async def process_chat_message(
 ) -> dict:
     started_at = time.perf_counter()
     memory_store = get_default_memory_store()
-    memory_key = stable_session_id(anonymous_id=session_id)
+    memory_key = stable_session_id(
+        user_id=str(owner_username or "").strip().casefold() or None,
+        anonymous_id=session_id,
+    )
     try:
         persistent_memory = await memory_store.load(memory_key)
     except Exception as exc:
@@ -612,7 +633,11 @@ async def process_chat_message(
             updated_memory = [
                 *persistent_memory,
                 {"role": "user", "content": memory_question},
-                {"role": "model", "content": response},
+                {
+                    "role": "model",
+                    "content": response,
+                    "sources": list(state.get("sources") or []),
+                },
             ][-40:]
             await memory_store.save(memory_key, updated_memory)
     except Exception as exc:

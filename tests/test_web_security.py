@@ -61,7 +61,7 @@ def _login_as_user(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/chat"
+    assert response.headers["location"] == "/"
 
 
 def _csrf_from_chat_page_text(page_text: str) -> str:
@@ -107,6 +107,13 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertIn("/login", response.headers["location"])
 
+    def test_home_page_redirects_to_login_when_not_authenticated(self) -> None:
+        client = TestClient(main.app)
+        response = client.get("/", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("/login", response.headers["location"])
+
     def test_admin_login_allows_access_to_admin_page(self) -> None:
         client = TestClient(main.app)
         csrf_token = _csrf_from_login_page(client, "/admin/login?next=/data-loader")
@@ -127,17 +134,19 @@ class WebCsrfSecurityTests(unittest.TestCase):
         admin_page = client.get("/data-loader")
         self.assertEqual(admin_page.status_code, 200)
 
-    def test_user_login_shows_only_chat_menu_and_blocks_admin_pages(self) -> None:
+    def test_user_login_shows_only_user_menu_and_blocks_admin_pages(self) -> None:
         client = TestClient(main.app)
         _login_as_user(client)
 
-        chat_page = client.get("/chat")
-        nav_html = _nav_html(chat_page.text)
-        self.assertEqual(chat_page.status_code, 200)
+        home_page = client.get("/")
+        nav_html = _nav_html(home_page.text)
+        self.assertEqual(home_page.status_code, 200)
+        self.assertIn("Khu vực sinh viên", home_page.text)
+        self.assertIn("Phạm vi sử dụng", home_page.text)
+        self.assertIn("Trang chủ", nav_html)
         self.assertIn("Trò chuyện", nav_html)
         self.assertIn("Lịch sử chat", nav_html)
         self.assertIn("Đăng xuất", nav_html)
-        self.assertNotIn("Trang chủ", nav_html)
         self.assertNotIn("Upload kiến thức", nav_html)
         self.assertNotIn("Kho vector", nav_html)
         self.assertNotIn("Kho tri thức", nav_html)
@@ -145,14 +154,29 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertNotIn("Đánh giá", nav_html)
         self.assertNotIn("Đăng xuất admin", nav_html)
 
+        chat_page = client.get("/chat")
+        self.assertEqual(chat_page.status_code, 200)
+        self.assertIn("Trang chủ", _nav_html(chat_page.text))
+
         history_page = client.get("/history")
         self.assertEqual(history_page.status_code, 200)
         self.assertIn("Lịch sử của bạn", history_page.text)
         self.assertNotIn("Vector Store", history_page.text)
         self.assertNotIn("Knowledge Base", history_page.text)
 
+        login_redirect = client.get("/login", follow_redirects=False)
+        self.assertEqual(login_redirect.status_code, 303)
+        self.assertEqual(login_redirect.headers["location"], "/")
+
+        admin_login_redirect = client.get("/admin/login", follow_redirects=False)
+        self.assertEqual(admin_login_redirect.status_code, 303)
+        self.assertEqual(admin_login_redirect.headers["location"], "/")
+
+        register_redirect = client.get("/register", follow_redirects=False)
+        self.assertEqual(register_redirect.status_code, 303)
+        self.assertEqual(register_redirect.headers["location"], "/")
+
         for admin_path in (
-            "/",
             "/data-loader",
             "/upload",
             "/vector-manager",
@@ -163,7 +187,6 @@ class WebCsrfSecurityTests(unittest.TestCase):
             "/settings",
             "/evaluation-dashboard",
             "/admin",
-            "/admin/login",
         ):
             response = client.get(admin_path, follow_redirects=False)
             self.assertEqual(response.status_code, 303)
@@ -204,7 +227,11 @@ class WebCsrfSecurityTests(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(login_response.status_code, 303)
-        self.assertEqual(login_response.headers["location"], "/chat")
+        self.assertEqual(login_response.headers["location"], "/")
+
+        home_page = client.get("/")
+        self.assertEqual(home_page.status_code, 200)
+        self.assertIn("Khu vực sinh viên", home_page.text)
 
         chat_page = client.get("/chat")
         self.assertEqual(chat_page.status_code, 200)
@@ -500,6 +527,46 @@ class WebCsrfSecurityTests(unittest.TestCase):
             comment="",
         )
 
+    def test_chat_sources_are_hidden_for_user_and_kept_for_admin(self) -> None:
+        chat_result = {
+            "response": "Can du dieu kien tot nghiep.",
+            "sources": ["student_handbooks/2025.md"],
+            "source_details": [
+                {
+                    "source": "student_handbooks/2025.md",
+                    "label": "So tay sinh vien 2025",
+                }
+            ],
+        }
+
+        with patch("controllers.web_controller.process_chat_message", AsyncMock(return_value=chat_result)):
+            user_client = TestClient(main.app)
+            _login_as_user(user_client)
+            user_response = user_client.post(
+                "/chat",
+                data={
+                    "message": "Dieu kien tot nghiep?",
+                    "session_id": "source-user",
+                    "csrf_token": _csrf_from_chat_page(user_client),
+                },
+            )
+
+            admin_client = TestClient(main.app)
+            _login_as_admin(admin_client)
+            admin_response = admin_client.post(
+                "/chat",
+                data={
+                    "message": "Dieu kien tot nghiep?",
+                    "session_id": "source-admin",
+                    "csrf_token": _csrf_from_chat_page(admin_client),
+                },
+            )
+
+        self.assertNotIn("sources", user_response.json())
+        self.assertNotIn("source_details", user_response.json())
+        self.assertEqual(admin_response.json()["sources"], ["student_handbooks/2025.md"])
+        self.assertEqual(admin_response.json()["source_details"], chat_result["source_details"])
+
     def test_source_preview_requires_login_and_renders_vector_chunks(self) -> None:
         anonymous = TestClient(main.app)
         anonymous_response = anonymous.get(
@@ -509,8 +576,17 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertEqual(anonymous_response.status_code, 303)
         self.assertIn("/login", anonymous_response.headers["location"])
 
+        user_client = TestClient(main.app)
+        _login_as_user(user_client)
+        user_response = user_client.get(
+            "/source-preview?source=student_handbooks/2025.md",
+            follow_redirects=False,
+        )
+        self.assertEqual(user_response.status_code, 303)
+        self.assertEqual(user_response.headers["location"], "/chat")
+
         client = TestClient(main.app)
-        _login_as_user(client)
+        _login_as_admin(client)
         with patch(
             "controllers.web_controller.fetch_documents_by_source",
             return_value=(["Noi dung hoc vu <b>can escape</b>"], [{"source": "student_handbooks/2025.md"}]),
@@ -524,7 +600,7 @@ class WebCsrfSecurityTests(unittest.TestCase):
 
     def test_source_preview_uses_friendly_handbook_question_title(self) -> None:
         client = TestClient(main.app)
-        _login_as_user(client)
+        _login_as_admin(client)
         source = "student_handbooks/5. SO TAY SINH VIEN 2022-2023.questions.md"
 
         with patch(
@@ -539,19 +615,27 @@ class WebCsrfSecurityTests(unittest.TestCase):
 
     def test_source_preview_returns_404_when_source_missing(self) -> None:
         client = TestClient(main.app)
-        _login_as_user(client)
+        _login_as_admin(client)
         with patch("controllers.web_controller.fetch_documents_by_source", return_value=([], [])):
             response = client.get("/source-preview?source=missing.md")
 
         self.assertEqual(response.status_code, 404)
 
-    def test_chat_page_contains_clickable_internal_source_preview_support(self) -> None:
+    def test_chat_page_shows_source_support_only_when_admin_response_contains_sources(self) -> None:
+        user_client = TestClient(main.app)
+        _login_as_user(user_client)
+        user_response = user_client.get("/chat")
+
+        self.assertEqual(user_response.status_code, 200)
+        self.assertIn("const CAN_VIEW_CHAT_SOURCES = false", user_response.text)
+
         client = TestClient(main.app)
-        _login_as_user(client)
+        _login_as_admin(client)
 
         response = client.get("/chat")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("const CAN_VIEW_CHAT_SOURCES = true", response.text)
         self.assertIn("function renderSourceItem", response.text)
         self.assertIn("function formatSourceLabel", response.text)
         self.assertIn("source_details: data.source_details", response.text)

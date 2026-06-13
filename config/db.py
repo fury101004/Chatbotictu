@@ -105,6 +105,31 @@ def _ensure_web_users_schema(cursor: sqlite3.Cursor) -> None:
     )
 
 
+def _ensure_chat_memory_schema(cursor: sqlite3.Cursor) -> None:
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_memory (
+            memory_key TEXT PRIMARY KEY,
+            messages_json TEXT NOT NULL DEFAULT '[]',
+            expires_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_chat_memory_expires_at
+        ON chat_memory(expires_at)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_chat_memory_updated_at
+        ON chat_memory(updated_at)
+        """
+    )
+
+
 def init_db() -> None:
     conn = get_conn()
     cursor = conn.cursor()
@@ -158,6 +183,7 @@ def init_db() -> None:
     )
     _ensure_chat_qa_review_schema(cursor)
     _ensure_web_users_schema(cursor)
+    _ensure_chat_memory_schema(cursor)
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS web_search_knowledge (

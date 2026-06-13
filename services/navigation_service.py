@@ -95,6 +95,7 @@ ADMIN_MENU_CONFIG = (
 )
 
 USER_MENU_CONFIG = (
+    {"label": "Trang chủ", "path": "/", "icon": "home", "active_paths": ("/",)},
     {"label": "Trò chuyện", "path": "/chat", "icon": "message-circle", "active_paths": ("/chat",)},
     {"label": "Lịch sử chat", "path": "/history", "icon": "history", "active_paths": ("/history",)},
 )

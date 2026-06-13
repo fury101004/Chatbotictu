@@ -10,9 +10,14 @@ import main
 from config.settings import settings
 from models.chat import RAGResult, RetrievedChunk
 from services.chat.chat_service import process_chat_message
+from services.chat.memory_service import SESSION_MEMORY, clear_memory_store
+from services.memory_store import stable_session_id
 
 
 class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
+    def tearDown(self) -> None:
+        clear_memory_store()
+
     async def test_process_chat_message_rewrites_follow_up_before_route_retrieval_and_generation(self) -> None:
         original = "thế còn khóa 2025-2026 thì sao?"
         rewritten = "Khóa 2025-2026 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?"
@@ -54,9 +59,16 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
             patch("services.chat.chat_service.append_retrieval_memory"),
             patch("services.content.knowledge_base_service.mark_chat_entry_pending"),
         ):
-            result = await process_chat_message(original, session_id="follow-up-1")
+            result = await process_chat_message(
+                original,
+                session_id="follow-up-1",
+                owner_username="Student@ICTU.edu.vn",
+            )
 
         self.assertNotEqual(result["mode"], "ictu_scope_guard")
+        memory_store.load.assert_awaited_once_with(
+            stable_session_id(user_id="student@ictu.edu.vn", anonymous_id="follow-up-1")
+        )
         route_mock.assert_called_once_with(rewritten)
         self.assertEqual(retrieval_mock.call_args.kwargs["message"], rewritten)
         self.assertEqual(chat_mock.call_args.kwargs["user_question"], rewritten)
@@ -117,6 +129,60 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["intent"], "greeting")
         self.assertEqual(result["llm_model"], "local:quick_reply")
         self.assertTrue(result["response"])
+
+    async def test_process_chat_message_answers_source_year_follow_up_from_retrieval_memory(self) -> None:
+        SESSION_MEMORY["source-year-1"].append(
+            {
+                "query": "Khi nào sinh viên bị cảnh báo học tập?",
+                "sources": [
+                    "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md",
+                    "uploads/student_faq_rag/approved-chat-canh-bao-2025-2026.md",
+                ],
+            }
+        )
+
+        with (
+            patch("services.chat.chat_service.route_rag_tool") as route_mock,
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
+        ):
+            result = await process_chat_message(
+                "phần này là của năm bao nhiêu",
+                session_id="source-year-1",
+            )
+
+        self.assertEqual(result["intent"], "source_year_follow_up")
+        self.assertEqual(result["llm_model"], "local:retrieval_memory")
+        self.assertIn("2025-2026", result["response"])
+        route_mock.assert_not_called()
+
+    async def test_process_chat_message_answers_source_year_follow_up_after_new_session(self) -> None:
+        memory_store = SimpleNamespace(
+            load=AsyncMock(
+                return_value=[
+                    {
+                        "role": "model",
+                        "content": "Sinh viên bị cảnh báo học tập khi...",
+                        "sources": ["student_handbooks/7. SO TAY SINH VIEN 2024-2025.md"],
+                    }
+                ]
+            ),
+            save=AsyncMock(),
+        )
+
+        with (
+            patch("services.chat.chat_service.get_default_memory_store", return_value=memory_store),
+            patch("services.chat.chat_service.route_rag_tool") as route_mock,
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
+        ):
+            result = await process_chat_message(
+                "nội dung trên thuộc năm học nào?",
+                session_id="new-session",
+                owner_username="student",
+            )
+
+        self.assertEqual(result["intent"], "source_year_follow_up")
+        self.assertIn("2024-2025", result["response"])
+        route_mock.assert_not_called()
 
     async def test_process_chat_message_answers_retake_improvement_question_from_handbook(self) -> None:
         question = "Học lại có được cải thiện điểm không?"

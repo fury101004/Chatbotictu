@@ -109,17 +109,18 @@ docker compose up -d
 
 ------------------------------------------------------------------------
 
-### 4. Thêm Redis cache (giảm tải DB 80--90%)
+### 4. Tối ưu SQLite memory
 
-``` bash
-docker run -d --name redis -p 6379:6379 redis:7-alpine
-```
+Chat memory được lưu trong bảng `chat_memory` của `bot_config.db`, không cần chạy Redis.
+Khi scale nhiều worker hoặc container, tất cả instance cần mount cùng thư mục `data/`
+và giữ SQLite ở chế độ WAL.
 
-Trong code Python:
+Có thể giới hạn dung lượng bằng các biến:
 
-``` python
-import redis
-r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+``` env
+CHAT_MEMORY_TTL_SECONDS=2592000
+CHAT_MEMORY_MAX_MESSAGES=40
+CHAT_MEMORY_MAX_SESSIONS=4096
 ```
 
 ------------------------------------------------------------------------

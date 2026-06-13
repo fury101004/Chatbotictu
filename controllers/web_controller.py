@@ -47,6 +47,7 @@ from views.web_view import current_prompt_response, render_page, redirect_vector
 router = APIRouter()
 
 HOME_TEMPLATE = "pages/index.html"
+USER_HOME_TEMPLATE = "pages/user_home.html"
 CHAT_TEMPLATE = "pages/chat.html"
 DATA_LOADER_TEMPLATE = "pages/data_loader.html"
 VECTOR_MANAGER_TEMPLATE = "pages/vector_manager_v2.html"
@@ -149,6 +150,15 @@ def _chat_payload_error(message: str, session_id: str, llm_model: str):
     return None
 
 
+def _filter_chat_sources_for_role(result: dict, role: str) -> dict:
+    if role == "admin":
+        return result
+    filtered = dict(result)
+    filtered.pop("sources", None)
+    filtered.pop("source_details", None)
+    return filtered
+
+
 async def _submit_login(
     request: Request,
     username: str,
@@ -180,10 +190,12 @@ async def _submit_login(
 
 @router.get("/")
 async def home(request: Request):
-    admin_response = _admin_required(request)
-    if admin_response is not None:
-        return admin_response
-    return render_page(request, HOME_TEMPLATE)
+    login_response = _login_required(request)
+    if login_response is not None:
+        return login_response
+    if is_admin_authenticated(request):
+        return render_page(request, HOME_TEMPLATE)
+    return render_page(request, USER_HOME_TEMPLATE)
 
 
 @router.get("/login")
@@ -335,6 +347,7 @@ async def chat_web(
         owner_username=current_username,
         owner_role=current_role,
     )
+    result = _filter_chat_sources_for_role(result, current_role)
     result["session_id"] = current_session_id
     return result
 
@@ -382,9 +395,9 @@ async def chat_feedback(
 
 @router.get("/source-preview")
 async def source_preview_page(request: Request, source: str = ""):
-    login_response = _login_required(request)
-    if login_response is not None:
-        return login_response
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
 
     normalized_source = str(source or "").strip()
     if not normalized_source:

@@ -52,6 +52,7 @@ class ChatHistorySchemaTests(unittest.TestCase):
                     """
                 ).fetchone()
                 indexes = [row[1] for row in conn.execute("PRAGMA index_list(chat_history)").fetchall()]
+                memory_columns = [row[1] for row in conn.execute("PRAGMA table_info(chat_memory)").fetchall()]
                 conn.close()
 
             self.assertIn("session_id", columns)
@@ -59,6 +60,10 @@ class ChatHistorySchemaTests(unittest.TestCase):
             self.assertIn("rewritten_question", columns)
             self.assertEqual(row, ("user", "Xin chao", "default", "", ""))
             self.assertIn("idx_chat_history_session_id_id", indexes)
+            self.assertEqual(
+                memory_columns,
+                ["memory_key", "messages_json", "expires_at", "updated_at"],
+            )
 
     def test_save_message_persists_original_and_rewritten_questions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
