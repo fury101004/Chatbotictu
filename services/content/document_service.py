@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import shutil
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from config.rag_tools import (
     DEFAULT_RAG_TOOL,
@@ -25,6 +26,7 @@ from pipelines.document_admin_pipeline import (
     reingest_source_records,
 )
 from repositories.conversation_repository import get_chat_history_page
+from repositories.config_repository import get_config, set_config
 from repositories.upload_repository import (
     clear_uploaded_file_records,
     list_uploaded_files,
@@ -39,10 +41,16 @@ from repositories.vector_repository import (
 from shared.vector_utils import display_vector_source, infer_vector_tool_name
 from services.rag.rag_corpus import clear_rag_corpus_cache
 from services.vector.vector_store_service import add_documents, embedding_backend_ready, reset_vectorstore
+from services.content.upload_validation import (
+    SUPPORTED_TEXT_SUFFIXES,
+    UploadValidationError,
+    validate_text_upload,
+)
 
-SUPPORTED_TEXT_SUFFIXES = {".md", ".markdown", ".txt"}
 get_uploaded_files = list_uploaded_files
 add_uploaded_file = record_uploaded_file
+
+SEED_CORPUS_SIGNATURE_KEY = "seed_corpus_signature"
 
 
 def _normalize_tool_name(tool_name: Optional[str]) -> str:
@@ -68,11 +76,33 @@ def _existing_uploaded_sources() -> set[str]:
     return existing_sources
 
 
+def _build_seed_corpus_signature(records: list[tuple[Path, str, str]]) -> str:
+    digest = hashlib.sha256()
+    for path, tool_name, source_name in sorted(records, key=lambda item: item[2]):
+        digest.update(source_name.encode("utf-8", errors="ignore"))
+        digest.update(b"\0")
+        digest.update(tool_name.encode("utf-8", errors="ignore"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def compute_seed_corpus_signature(
+    corpus_records: Optional[list[tuple[Path, str, str]]] = None,
+) -> str:
+    records = corpus_records if corpus_records is not None else _iter_seed_source_records()
+    if not records:
+        return ""
+    return _build_seed_corpus_signature(records)
+
+
 async def upload_markdown_files(
     files: list,
     tool_name: Optional[str] = None,
     client_start_time: Optional[float] = None,
     client_total_size: Optional[int] = None,
+    progress_callback: Optional[Callable[[str, int], None]] = None,
 ) -> dict:
     selected_tool = _normalize_tool_name(tool_name)
     upload_dir = get_tool_upload_dir(selected_tool)
@@ -114,36 +144,35 @@ async def upload_markdown_files(
             )
 
     existing_sources = _existing_uploaded_sources()
+    if progress_callback:
+        progress_callback("validating", 10)
 
     for file in file_list:
-        filename = _sanitize_filename(getattr(file, "filename", ""))
-        if not filename:
-            failed_files.append("file_khong_hop_le -> thieu ten file")
-            continue
-
-        if Path(filename).suffix.lower() not in SUPPORTED_TEXT_SUFFIXES:
-            failed_files.append(f"{filename} -> unsupported file type; only .md/.markdown/.txt are allowed")
-            continue
-
-        source_name = build_upload_source_name(selected_tool, filename)
-        file_path = upload_dir / filename
-        existed_before = source_name in existing_sources or file_path.exists()
+        raw_filename = str(getattr(file, "filename", "") or "")
+        display_filename = _sanitize_filename(raw_filename) or "invalid-upload"
 
         try:
             t_read = time.time()
             content = await file.read()
-            if len(content) > settings.MAX_UPLOAD_FILE_SIZE_BYTES:
-                failed_files.append(
-                    f"{filename} -> file too large; maximum is {settings.MAX_UPLOAD_FILE_SIZE_BYTES // (1024 * 1024)}MB"
-                )
-                continue
             if total_upload_size + len(content) > settings.MAX_UPLOAD_BATCH_SIZE_BYTES:
                 failed_files.append(
-                    f"{filename} -> upload batch too large; maximum is {settings.MAX_UPLOAD_BATCH_SIZE_BYTES // (1024 * 1024)}MB"
+                    f"{display_filename} -> upload batch too large; maximum is {settings.MAX_UPLOAD_BATCH_SIZE_BYTES // (1024 * 1024)}MB"
                 )
                 continue
+            validated = validate_text_upload(
+                filename=raw_filename,
+                content=content,
+                content_type=str(getattr(file, "content_type", "") or ""),
+                max_size_bytes=settings.MAX_UPLOAD_FILE_SIZE_BYTES,
+            )
+            filename = validated.filename
+            text = validated.text
+            source_name = build_upload_source_name(selected_tool, filename)
+            file_path = upload_dir / filename
+            existed_before = source_name in existing_sources or file_path.exists()
             total_upload_size += len(content)
-            text = content.decode("utf-8", errors="ignore")
+            if progress_callback:
+                progress_callback("extracting", 25)
             read_speed = len(content) / max(time.time() - t_read, 1e-6) / 1024 / 1024
             print(f"[DOC FILE] {filename}: {read_speed:.2f} MB/s ({len(content)/1024/1024:.2f} MB)")
 
@@ -163,21 +192,28 @@ async def upload_markdown_files(
             else:
                 try:
                     t_chunk = time.time()
+                    if progress_callback:
+                        progress_callback("chunking", 45)
+                        progress_callback("embedding", 65)
                     add_documents(
                         file_content=text,
                         filename=filename,
                         source_name=source_name,
                         tool_name=selected_tool,
                     )
+                    if progress_callback:
+                        progress_callback("indexing", 85)
                     indexed_files.append(filename)
                     chunk_speed = len(content) / max(time.time() - t_chunk, 1e-6) / 1024 / 1024
                     print(f"[CHUNK + ADD] {filename}: {chunk_speed:.2f} MB/s")
                 except Exception as exc:
                     print(f"[INDEX WARNING] {filename}: {exc}")
                     warning_files.append(f"{filename} -> saved but indexing failed: {exc}")
+        except UploadValidationError as exc:
+            failed_files.append(f"{display_filename} -> {exc}")
         except Exception as exc:
-            print(f"[ERROR] {filename}: {exc}")
-            failed_files.append(f"{filename} -> error: {exc}")
+            print(f"[ERROR] {display_filename}: {exc}")
+            failed_files.append(f"{display_filename} -> error: {exc}")
 
     clear_rag_corpus_cache()
 
@@ -276,6 +312,12 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
     if failed_sources:
         msg += f" Failed: {len(failed_sources)} file."
 
+    if imported_files > 0 and not failed_sources:
+        try:
+            set_config(SEED_CORPUS_SIGNATURE_KEY, compute_seed_corpus_signature(corpus_records))
+        except Exception as exc:
+            print(f"[SEED CORPUS SIGNATURE WARNING] {exc}")
+
     return {
         "status": status,
         "msg": msg,
@@ -285,6 +327,47 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
         "failed_sources": failed_sources[:20],
         "total_chunks": total_chunks,
     }
+
+
+def sync_seed_corpus_index(reset_first: bool = False) -> dict:
+    corpus_records = _iter_seed_source_records()
+    if not corpus_records:
+        return {
+            "status": "error",
+            "msg": f"Directory {settings.QA_CORPUS_ROOT} has no .md/.txt files to import",
+            "total_files": 0,
+            "imported_files": 0,
+            "failed_files": 0,
+            "total_chunks": get_vector_collection_readonly().count(),
+        }
+
+    current_signature = compute_seed_corpus_signature(corpus_records)
+    stored_signature = get_config(SEED_CORPUS_SIGNATURE_KEY, "")
+    collection = get_vector_collection_readonly()
+    total_chunks = collection.count()
+
+    if stored_signature == current_signature and total_chunks > 0:
+        return {
+            "status": "skipped",
+            "msg": "Seed corpus already synchronized.",
+            "total_files": len(corpus_records),
+            "imported_files": 0,
+            "failed_files": 0,
+            "total_chunks": total_chunks,
+            "stored_signature": stored_signature,
+            "current_signature": current_signature,
+        }
+
+    result = import_seed_corpus(reset_first=reset_first)
+    result["stored_signature"] = stored_signature
+    result["current_signature"] = current_signature
+    if result.get("failed_files", 0) == 0 and result.get("imported_files", 0) > 0:
+        try:
+            set_config(SEED_CORPUS_SIGNATURE_KEY, current_signature)
+        except Exception as exc:
+            print(f"[SEED CORPUS SIGNATURE WARNING] {exc}")
+        result["seed_corpus_signature"] = current_signature
+    return result
 
 
 def delete_uploaded_document(source_name: str) -> None:
@@ -346,7 +429,7 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
 def _iter_seed_source_records() -> list[tuple[Path, str, str]]:
     return iter_seed_source_records_from_pipeline(
         settings.QA_CORPUS_ROOT,
-        default_tool=DEFAULT_RAG_TOOL,
+        default_tool=None,
         detect_tool_from_path=detect_tool_from_path,
         supported_suffixes=SUPPORTED_TEXT_SUFFIXES,
     )

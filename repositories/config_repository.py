@@ -9,3 +9,11 @@ def get_runtime_config(key: str, default: str = "") -> str:
 
 def set_runtime_config(key: str, value: str) -> None:
     _set_config(key, value)
+
+
+def get_config(key: str, default: str = "") -> str:
+    return _get_config(key, default)
+
+
+def set_config(key: str, value: str) -> None:
+    _set_config(key, value)

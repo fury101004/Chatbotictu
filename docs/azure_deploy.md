@@ -85,8 +85,9 @@ Smoke check:
 Invoke-WebRequest -Uri "https://$APP.azurewebsites.net/api/v1/health" -UseBasicParsing
 ```
 
-After deployment, sign in as admin and run the seed corpus import/re-index from
-the UI. Keep the demo App Service on one instance because SQLite and ChromaDB
+After deployment, the production app now auto-syncs the seed corpus on startup
+when `ENVIRONMENT=production`, so handbook edits are picked up without a manual
+re-index. Keep the demo App Service on one instance because SQLite and ChromaDB
 are local persistent files in this mode.
 
 ## Web App for Containers from GHCR

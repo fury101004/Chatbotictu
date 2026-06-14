@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pipelines.document_admin_pipeline import build_vector_manager_summary
+from pipelines.document_admin_pipeline import build_vector_manager_summary, iter_seed_source_records
 from pipelines.indexing_pipeline import index_document
 import services.vector.vector_store_service as vector_store_service
-from services.content.document_service import reingest_uploaded_documents
+from services.content.document_service import reingest_uploaded_documents, sync_seed_corpus_index
 from services.vector.vector_store_service import smart_chunk
 
 
@@ -120,6 +120,34 @@ class ReingestPipelineTests(unittest.TestCase):
         clear_cache_mock.assert_called_once()
 
 
+class SeedSourceOwnershipTests(unittest.TestCase):
+    def test_seed_import_skips_files_without_an_explicit_tool_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            handbook_dir = root / "student_handbooks"
+            handbook_dir.mkdir()
+            owned_path = handbook_dir / "handbook.md"
+            unowned_path = root / "shared.md"
+            owned_path.write_text("# Handbook", encoding="utf-8")
+            unowned_path.write_text("# Shared", encoding="utf-8")
+
+            records = iter_seed_source_records(
+                root,
+                default_tool=None,
+                detect_tool_from_path=lambda path: (
+                    "student_handbook_rag"
+                    if handbook_dir in path.parents
+                    else None
+                ),
+                supported_suffixes={".md"},
+            )
+
+        self.assertEqual(
+            records,
+            [(owned_path, "student_handbook_rag", "student_handbooks/handbook.md")],
+        )
+
+
 class IndexingPipelineSafetyTests(unittest.TestCase):
     def test_index_document_does_not_delete_existing_when_chunking_fails(self) -> None:
         class _Collection:
@@ -171,6 +199,51 @@ class VectorManagerSummaryTests(unittest.TestCase):
                 limit_per_file=5,
             )
 
+
+class SeedCorpusSyncTests(unittest.TestCase):
+    def test_sync_seed_corpus_skips_when_signature_matches(self) -> None:
+        collection = _FakeCollection()
+
+        with (
+            patch("services.content.document_service._iter_seed_source_records", return_value=[(Path("seed.md"), "student_handbook_rag", "seed.md")]),
+            patch("services.content.document_service.compute_seed_corpus_signature", return_value="seed-signature"),
+            patch("services.content.document_service.get_config", return_value="seed-signature"),
+            patch("services.content.document_service.get_vector_collection_readonly", return_value=collection),
+            patch("services.content.document_service.import_seed_corpus") as import_mock,
+            patch("services.content.document_service.set_config") as set_config_mock,
+        ):
+            result = sync_seed_corpus_index()
+
+        self.assertEqual(result["status"], "skipped")
+        import_mock.assert_not_called()
+        set_config_mock.assert_not_called()
+
+    def test_sync_seed_corpus_imports_when_signature_changes(self) -> None:
+        collection = _FakeCollection()
+
+        with (
+            patch("services.content.document_service._iter_seed_source_records", return_value=[(Path("seed.md"), "student_handbook_rag", "seed.md")]),
+            patch("services.content.document_service.compute_seed_corpus_signature", return_value="new-signature"),
+            patch("services.content.document_service.get_config", return_value="old-signature"),
+            patch("services.content.document_service.get_vector_collection_readonly", return_value=collection),
+            patch(
+                "services.content.document_service.import_seed_corpus",
+                return_value={
+                    "status": "success",
+                    "msg": "ok",
+                    "total_files": 1,
+                    "imported_files": 1,
+                    "failed_files": 0,
+                    "total_chunks": 3,
+                },
+            ) as import_mock,
+            patch("services.content.document_service.set_config") as set_config_mock,
+        ):
+            result = sync_seed_corpus_index()
+
+        self.assertEqual(result["status"], "success")
+        import_mock.assert_called_once_with(reset_first=False)
+        set_config_mock.assert_called_once_with("seed_corpus_signature", "new-signature")
+
 if __name__ == "__main__":
     unittest.main()
-

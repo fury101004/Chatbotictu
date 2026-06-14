@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -11,6 +13,22 @@ from controllers.web_controller import register_web_routes
 from middleware.input_guard import InputGuardMiddleware
 from routers.dashboard import register_dashboard_routes
 from services.runtime_config_manager import apply_runtime_config
+
+
+logger = logging.getLogger(__name__)
+
+
+def _sync_seed_corpus_on_startup() -> None:
+    if not settings.is_production:
+        return
+
+    try:
+        from services.content.document_service import sync_seed_corpus_index
+
+        result = sync_seed_corpus_index()
+        logger.info("Seed corpus sync: %s", result.get("msg", "done"))
+    except Exception:
+        logger.exception("Seed corpus sync failed during app startup")
 
 
 def create_app() -> FastAPI:
@@ -34,5 +52,6 @@ def create_app() -> FastAPI:
     register_web_routes(app)
     register_api_routes(app)
     register_dashboard_routes(app)
+    _sync_seed_corpus_on_startup()
 
     return app
