@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from services.content.web_search import search_web_ictu, should_use_web_search
+from services.content.web_search import _web_search_time_range, search_web_ictu, should_use_web_search
 
 
 class WebSearchServiceTests(unittest.TestCase):
@@ -58,7 +58,10 @@ class WebSearchServiceTests(unittest.TestCase):
             should_use_web_search("Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?")
         )
 
+    def test_today_query_uses_day_filter_but_latest_query_does_not(self) -> None:
+        self.assertEqual(_web_search_time_range("ICTU hôm nay có gì mới?"), "day")
+        self.assertEqual(_web_search_time_range("Thông tin mới nhất về ICTU?"), "")
+
 
 if __name__ == "__main__":
     unittest.main()
-

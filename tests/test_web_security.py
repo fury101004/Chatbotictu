@@ -142,7 +142,8 @@ class WebCsrfSecurityTests(unittest.TestCase):
         nav_html = _nav_html(home_page.text)
         self.assertEqual(home_page.status_code, 200)
         self.assertIn("Khu vực sinh viên", home_page.text)
-        self.assertIn("Phạm vi sử dụng", home_page.text)
+        self.assertNotIn("Phạm vi sử dụng", home_page.text)
+        self.assertNotIn("Không hiển thị các chức năng quản trị", home_page.text)
         self.assertIn("Trang chủ", nav_html)
         self.assertIn("Trò chuyện", nav_html)
         self.assertIn("Lịch sử chat", nav_html)
@@ -189,8 +190,11 @@ class WebCsrfSecurityTests(unittest.TestCase):
             "/admin",
         ):
             response = client.get(admin_path, follow_redirects=False)
-            self.assertEqual(response.status_code, 303)
-            self.assertEqual(response.headers["location"], "/chat")
+            if admin_path == "/evaluation-dashboard":
+                self.assertEqual(response.status_code, 403)
+            else:
+                self.assertEqual(response.status_code, 303)
+                self.assertEqual(response.headers["location"], "/chat")
 
     def test_register_user_then_login_and_block_admin_pages(self) -> None:
         client = TestClient(main.app)
@@ -370,8 +374,7 @@ class WebCsrfSecurityTests(unittest.TestCase):
         user_client = TestClient(main.app)
         _login_as_user(user_client)
         user_response = user_client.get("/evaluation-dashboard", follow_redirects=False)
-        self.assertEqual(user_response.status_code, 303)
-        self.assertEqual(user_response.headers["location"], "/chat")
+        self.assertEqual(user_response.status_code, 403)
 
         admin_client = TestClient(main.app)
         _login_as_admin(admin_client)
@@ -379,6 +382,11 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertEqual(admin_response.status_code, 200)
         self.assertIn("ICTU Chatbot — Evaluation Dashboard", admin_response.text)
         self.assertIn("Bộ 30 câu hỏi kiểm thử ICTU", admin_response.text)
+
+        self.assertIn("Chưa có dữ liệu đánh giá.", admin_response.text)
+        self.assertIn("throw new Error", admin_response.text)
+        self.assertNotIn("mockLogs", admin_response.text)
+        self.assertNotIn("dashboardMockLogs", admin_response.text)
 
     def test_evaluation_api_requires_admin_session(self) -> None:
         anonymous = TestClient(main.app)
@@ -401,6 +409,34 @@ class WebCsrfSecurityTests(unittest.TestCase):
         question_ids = {item.get("id") for item in questions_response.json()}
         self.assertIn("local_001", question_ids)
         self.assertIn("web_015", question_ids)
+
+    def test_legacy_dashboard_and_all_dashboard_data_routes_are_admin_only(self) -> None:
+        protected_paths = (
+            "/dashboard",
+            "/dashboard/metrics",
+            "/dashboard/export",
+            "/api/metrics",
+            "/api/test-questions",
+            "/api/feedback/summary",
+            "/api/v1/metrics/rate-limit-429",
+        )
+        anonymous = TestClient(main.app)
+        for path in protected_paths:
+            with self.subTest(path=path, role="anonymous"):
+                self.assertEqual(anonymous.get(path, follow_redirects=False).status_code, 401)
+
+        user_client = TestClient(main.app)
+        _login_as_user(user_client)
+        for path in protected_paths:
+            with self.subTest(path=path, role="user"):
+                self.assertEqual(user_client.get(path, follow_redirects=False).status_code, 403)
+
+        admin_client = TestClient(main.app)
+        _login_as_admin(admin_client)
+        self.assertEqual(admin_client.get("/dashboard", follow_redirects=False).status_code, 307)
+        for path in protected_paths[1:]:
+            with self.subTest(path=path, role="admin"):
+                self.assertEqual(admin_client.get(path, follow_redirects=False).status_code, 200)
 
     def test_feedback_summary_requires_admin_session(self) -> None:
         summary = {
@@ -527,14 +563,22 @@ class WebCsrfSecurityTests(unittest.TestCase):
             comment="",
         )
 
-    def test_chat_sources_are_hidden_for_user_and_kept_for_admin(self) -> None:
+    def test_chat_citations_are_clean_for_user_and_detailed_for_admin(self) -> None:
         chat_result = {
             "response": "Can du dieu kien tot nghiep.",
             "sources": ["student_handbooks/2025.md"],
             "source_details": [
                 {
+                    "document_name": "So tay sinh vien 2025",
+                    "title": "Dieu kien tot nghiep",
+                    "excerpt": "Can du tin chi.",
+                }
+            ],
+            "_admin_source_details": [
+                {
+                    "document_name": "So tay sinh vien 2025",
                     "source": "student_handbooks/2025.md",
-                    "label": "So tay sinh vien 2025",
+                    "metadata": {"chunk_id": "chunk-1"},
                 }
             ],
         }
@@ -563,9 +607,10 @@ class WebCsrfSecurityTests(unittest.TestCase):
             )
 
         self.assertNotIn("sources", user_response.json())
-        self.assertNotIn("source_details", user_response.json())
+        self.assertNotIn("source", user_response.json()["source_details"][0])
+        self.assertEqual(user_response.json()["source_details"][0]["title"], "Dieu kien tot nghiep")
         self.assertEqual(admin_response.json()["sources"], ["student_handbooks/2025.md"])
-        self.assertEqual(admin_response.json()["source_details"], chat_result["source_details"])
+        self.assertEqual(admin_response.json()["source_details"], chat_result["_admin_source_details"])
 
     def test_source_preview_requires_login_and_renders_vector_chunks(self) -> None:
         anonymous = TestClient(main.app)
@@ -627,7 +672,8 @@ class WebCsrfSecurityTests(unittest.TestCase):
         user_response = user_client.get("/chat")
 
         self.assertEqual(user_response.status_code, 200)
-        self.assertIn("const CAN_VIEW_CHAT_SOURCES = false", user_response.text)
+        self.assertIn("const CAN_VIEW_CHAT_SOURCES = true", user_response.text)
+        self.assertIn("const CAN_PREVIEW_INTERNAL_SOURCES = false", user_response.text)
 
         client = TestClient(main.app)
         _login_as_admin(client)
@@ -636,10 +682,12 @@ class WebCsrfSecurityTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("const CAN_VIEW_CHAT_SOURCES = true", response.text)
+        self.assertIn("const CAN_PREVIEW_INTERNAL_SOURCES = true", response.text)
         self.assertIn("function renderSourceItem", response.text)
         self.assertIn("function formatSourceLabel", response.text)
         self.assertIn("source_details: data.source_details", response.text)
         self.assertIn("/source-preview?source=", response.text)
+        self.assertNotIn("sourceInfo?.excerpt", response.text)
 
     def test_chat_page_starts_clean_and_shows_suggestions(self) -> None:
         client = TestClient(main.app)
@@ -721,7 +769,7 @@ class ApiAuthSecurityTests(unittest.TestCase):
         )
 
         response = client.get(
-            "/api/v1/metrics/rate-limit-429",
+            "/api/v1/knowledge-base",
             headers={"Authorization": f"Bearer {wrong_subject_token}"},
         )
 

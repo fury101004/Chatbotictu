@@ -252,7 +252,7 @@ def _build_status_payload() -> dict:
                 "summary": "Knowledge base được tra cứu ở cả UI quản trị lẫn pipeline chatbot thông qua keyword search, lexical fallback và hybrid search.",
                 "steps": [
                     "API/web knowledge base dùng `get_knowledge_base_payload` để hợp nhất kết quả từ vector store và chat history theo cùng một ô tìm kiếm.",
-                    "Pipeline chatbot đi qua router handbook/policy/FAQ/fallback rồi gọi retrieval theo tool hoặc `retrieve_general_context`.",
+                    "Pipeline chatbot đi qua controlled router handbook/academic policy/FAQ/general ICTU rồi gọi retrieval theo tool đã chọn.",
                     "Nhánh general retrieval ưu tiên hybrid search (vector + BM25), có forced-file khi người dùng nhắc đúng tên tài liệu và có lexical fallback khi vector retrieval không sẵn sàng.",
                     "Ngữ cảnh sau retrieval được đưa sang response composer để sinh câu trả lời, rồi lịch sử chat lại được lưu về để phục vụ vòng KB tiếp theo.",
                 ],
@@ -313,7 +313,7 @@ def _build_report_markdown(payload: dict) -> str:
         "## 5. Luồng 3 - Tra cứu và sử dụng Knowledge Base",
         "",
         "- Ở tầng quản trị, `get_knowledge_base_payload` hợp nhất tìm kiếm trên vector entries và chat entries trong cùng một màn hình.",
-        "- Ở tầng chatbot, `services/chat_service.py` route câu hỏi sang handbook/policy/FAQ/fallback rồi gọi retrieval tương ứng.",
+        "- Ở tầng chatbot, `services/chat_service.py` route câu hỏi sang handbook/academic policy/FAQ/general ICTU rồi gọi retrieval tương ứng.",
         "- `services/rag_service.py` dùng keyword router hoặc LLM router, sau đó retrieval theo tool hoặc general retrieval.",
         "- General retrieval ưu tiên hybrid search (vector + BM25), có forced-file khi nhắc đúng tên tài liệu và lexical fallback khi vector retrieval không sẵn sàng.",
         "",

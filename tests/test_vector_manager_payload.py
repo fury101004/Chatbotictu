@@ -37,12 +37,13 @@ class _FakeCollection:
                     "source": "congvanquyetdinh/policy.md",
                     "title": "Hoc phi",
                     "level": 3,
-                    "tool_name": "school_policy_rag",
+                    "tool_name": "academic_policy_rag",
                 },
                 {
                     "source": "congvanxettn/faq.md",
                     "title": "Email sinh vien",
                     "level": 1,
+                    "tool_name": "student_faq_rag",
                 },
                 {
                     "source": "BOT_RULE",
@@ -54,15 +55,15 @@ class _FakeCollection:
 
 
 class VectorManagerPayloadTests(unittest.TestCase):
-    def test_payload_is_grouped_into_three_rag_tools(self) -> None:
+    def test_payload_is_grouped_into_four_rag_tools(self) -> None:
         with patch("services.content.document_service.get_vector_collection_readonly", return_value=_FakeCollection()):
             payload = get_vector_manager_payload(limit_per_file=10)
 
         self.assertEqual(payload["total_files"], 3)
         self.assertEqual(payload["total_chunks"], 3)
-        self.assertEqual(len(payload["tool_groups"]), 3)
+        self.assertEqual(len(payload["tool_groups"]), 4)
 
-        handbook_group, policy_group, faq_group = payload["tool_groups"]
+        handbook_group, policy_group, faq_group, general_group = payload["tool_groups"]
 
         self.assertEqual(handbook_group["name"], "student_handbook_rag")
         self.assertEqual(handbook_group["total_files"], 1)
@@ -76,13 +77,15 @@ class VectorManagerPayloadTests(unittest.TestCase):
         self.assertEqual(handbook_chunk["page_number"], 24)
         self.assertEqual(handbook_chunk["document_type"], "student_handbook")
 
-        self.assertEqual(policy_group["name"], "school_policy_rag")
+        self.assertEqual(policy_group["name"], "academic_policy_rag")
         self.assertEqual(policy_group["files"][0]["source_label"], "congvanquyetdinh/policy.md")
         self.assertFalse(policy_group["files"][0]["is_upload_source"])
 
         self.assertEqual(faq_group["name"], "student_faq_rag")
         self.assertEqual(faq_group["total_files"], 1)
         self.assertEqual(faq_group["files"][0]["display_name"], "faq.md")
+        self.assertEqual(general_group["name"], "general_ictu_rag")
+        self.assertEqual(general_group["total_files"], 0)
 
         self.assertNotIn("BOT_RULE", payload["chunks_by_file"])
 

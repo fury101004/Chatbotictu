@@ -171,15 +171,15 @@ def technical_svg():
         svg_card(55, 200, 265, 185, '1. Input + Normalizer', ['services/chat_service.py', '_normalize_input', 'Chuẩn hóa message, session_id, language'], C['blue_fill'], C['sky']),
         svg_card(355, 200, 265, 185, '2. Guardrail + Quick Reply', ['_handle_guardrails', 'moderation_service', 'quick_reply_service'], C['green_fill'], C['emerald']),
         svg_card(655, 200, 265, 185, '3. Router', ['_route_rag', 'services/rag_service.py::route_rag_tool', 'Chọn đúng nhánh tri thức'], C['amber_fill'], C['amber']),
-        svg_card(955, 200, 265, 185, '4. Retrieval Layer', ['retrieve_tool_context', 'retrieve_fallback_context', 'student_handbook_rag / school_policy_rag / student_faq_rag / fallback'], C['white'], C['sky']),
+        svg_card(955, 200, 265, 185, '4. Retrieval Layer', ['four controlled retrieval nodes', 'RRF + Cross-Encoder rerank', 'handbook / academic policy / FAQ / general ICTU'], C['white'], C['sky']),
         svg_card(1255, 200, 265, 185, '5. Response Composer', ['_generate_response', 'multilingual_service::chat_multilingual', 'gemini_service'], C['orange_fill'], C['orange']),
         svg_card(1555, 200, 290, 185, '6. Finalize + Memory', ['_finalize', 'config.db.save_message', 'SESSION_MEMORY trong vector_store_service'], C['slate_fill'], C['muted']),
     ]
     mid = [
         svg_card(995, 410, 205, 112, 'student_handbook_rag', ['Sổ tay sinh viên'], C['white'], C['sky'], align='center'),
-        svg_card(995, 542, 205, 112, 'school_policy_rag', ['Văn bản, quy định'], C['white'], C['emerald'], align='center'),
+        svg_card(995, 542, 205, 112, 'academic_policy_rag', ['Văn bản, quy định'], C['white'], C['emerald'], align='center'),
         svg_card(975, 674, 245, 112, 'student_faq_rag', ['FAQ, thông báo', 'sự kiện'], C['white'], C['amber'], align='center'),
-        svg_card(975, 806, 245, 112, 'fallback_rag', ['Tổng hợp khi', 'câu hỏi mơ hồ'], C['white'], C['orange'], align='center'),
+        svg_card(975, 806, 245, 112, 'general_ictu_rag', ['Tổng hợp khi', 'câu hỏi mơ hồ'], C['white'], C['orange'], align='center'),
     ]
     bottom = [
         svg_card(60, 460, 385, 285, 'Tầng dữ liệu và index', ['clean_data/, data/, vectorstore/', 'knowledge_base_service.py và vector_store_service.py', 'Nguồn: sổ tay, quy định, FAQ, metadata'], C['white'], C['line']),

@@ -123,10 +123,12 @@ class EvalTracker:
                     "timestamp": str(row["timestamp"]),
                     "question": str(row["query"] or ""),
                     "answer": "",
-                    "retrievedChunks": [f"{sources_returned} nguồn truy xuất"] if has_sources else [],
+                    "retrievedChunks": [],
                     "latencyMs": int(row["latency_ms"] or 0),
-                    "relevanceScore": 0.75 if has_sources else 0,
-                    "sourceDocument": "RAG vector store" if has_sources else "",
+                    "relevanceScore": 1.0 if has_sources else 0.0,
+                    "sourceDocument": "",
+                    "hasSources": has_sources,
+                    "sourcesReturned": sources_returned,
                 }
             )
         return result

@@ -101,7 +101,8 @@
 
 <script>
 const MAX_CHAT_MESSAGE_CHARS = Number("{{ max_chat_message_chars|default(2000) }}");
-const CAN_VIEW_CHAT_SOURCES = {{ "true" if current_role == "admin" else "false" }};
+const CAN_VIEW_CHAT_SOURCES = {{ "true" if is_authenticated else "false" }};
+const CAN_PREVIEW_INTERNAL_SOURCES = {{ "true" if current_role == "admin" else "false" }};
 const LEGACY_CHAT_STATE_KEY = `ictu-dashboard-chat-state:{{ chat_storage_scope }}`;
 const LEGACY_CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:{{ chat_storage_scope }}`;
 
@@ -202,11 +203,12 @@ function normalizeSourceDetails(rawDetails, rawSources) {
     const seen = new Set();
     if (Array.isArray(rawDetails) && rawDetails.length) {
         return rawDetails
-            .map((item) => ({
-                source: String(item?.source || "").trim(),
-                label: String(item?.label || item?.source || "").trim(),
-            }))
-            .filter((item) => item.source && item.source !== "BOT_RULE" && !seen.has(item.source) && seen.add(item.source));
+            .map((item) => {
+                const source = String(item?.source || item?.url || "").trim();
+                const label = String(item?.document_name || item?.label || source || "Tài liệu ICTU").trim();
+                return { ...item, source, label };
+            })
+            .filter((item) => item.label && !seen.has(`${item.label}|${item.title || ""}|${item.page_number || ""}`) && seen.add(`${item.label}|${item.title || ""}|${item.page_number || ""}`));
     }
     return normalizeSources(rawSources).map((source) => ({
         source,
@@ -221,6 +223,9 @@ function renderSourceItem(sourceInfo) {
     const safeLabel = escapeHtml(label || source);
     if (/^https?:\/\//i.test(source)) {
         return `<li><a href="${safeSource}" target="_blank" rel="noopener noreferrer">${safeLabel}</a></li>`;
+    }
+    if (!CAN_PREVIEW_INTERNAL_SOURCES || !source) {
+        return `<li><strong>${safeLabel}</strong></li>`;
     }
     const previewUrl = `/source-preview?source=${encodeURIComponent(source)}`;
     return `<li><a href="${previewUrl}" target="_blank" rel="noopener noreferrer" title="${safeSource}">${safeLabel}</a></li>`;

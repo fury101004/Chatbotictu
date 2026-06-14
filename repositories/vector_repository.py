@@ -52,13 +52,19 @@ def search_vector_documents(
     *,
     user_id: str = "default",
     n_results: int = 8,
-    alpha: float = 0.75,
+    alpha: float | None = None,
+    fusion_method: str | None = None,
+    rrf_k: int | None = None,
+    metadata_filter: dict[str, Any] | None = None,
 ):
     return query_documents(
         query,
         user_id=user_id,
         n_results=n_results,
         alpha=alpha,
+        fusion_method=fusion_method,
+        rrf_k=rrf_k,
+        metadata_filter=metadata_filter,
     )
 
 

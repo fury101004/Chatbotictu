@@ -62,7 +62,7 @@ class KnowledgeBasePayloadTests(unittest.TestCase):
             VectorKnowledgeEntry(
                 source="congvanquyetdinh/hoc_phi.md",
                 display_name="hoc_phi.md",
-                tool_name="school_policy_rag",
+                tool_name="academic_policy_rag",
                 tool_label="Quy dinh va chinh sach",
                 chunk_count=3,
                 titles=["Hoc phi"],
@@ -99,7 +99,7 @@ class KnowledgeBasePayloadTests(unittest.TestCase):
             VectorKnowledgeEntry(
                 source="congvanquyetdinh/hoc_phi.md",
                 display_name="hoc_phi.md",
-                tool_name="school_policy_rag",
+                tool_name="academic_policy_rag",
                 tool_label="Quy dinh va chinh sach",
                 chunk_count=3,
                 titles=["Hoc phi"],

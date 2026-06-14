@@ -93,6 +93,7 @@ class RetrievalRuntime:
     list_vector_sources: Callable[[], set[str]]
     fetch_documents_by_source: Callable[[str], tuple[list[str], list[dict[str, Any]]]]
     search_vector_documents: Callable[..., tuple[list[str], list[dict[str, Any]], dict[str, Any]]]
+    get_tool_metadata_filter: Callable[[Optional[str]], dict[str, str]]
     default_rag_tool: str
     fallback_rag_node: str
     rag_tool_order: tuple[str, ...]
@@ -344,6 +345,21 @@ def _plan_is_web_first(plan: RetrievalFlowPlan) -> bool:
     return plan.priority == RETRIEVAL_WEB_FIRST or plan.source == RETRIEVAL_WEB_SEARCH
 
 
+def _build_empty_web_search_result(*, route_name: str, tool_name: Optional[str]) -> RAGResult:
+    return RAGResult(
+        context_text="Thông tin đang được cập nhật.",
+        chunks=[],
+        target_file=None,
+        mode="web_search_empty",
+        sources=[],
+        chunks_used=0,
+        rag_tool=tool_name,
+        rag_route=route_name,
+        selected_tool=tool_name,
+        fallback_reason="Realtime web search returned no usable results.",
+    )
+
+
 def _detect_collection_source(message_lower: str, runtime: RetrievalRuntime) -> Optional[str]:
     all_sources = runtime.list_vector_sources()
     for source in all_sources:
@@ -461,9 +477,16 @@ def _build_general_fallback_result(
         web_result = runtime.build_planned_web_result(message, route_name, tool_name)
         if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
             return web_result
+        if flow_plan.source == RETRIEVAL_WEB_SEARCH:
+            return _build_empty_web_search_result(route_name=route_name, tool_name=tool_name)
 
+    document_supplier = (
+        (lambda: runtime.load_tool_corpus(tool_name))
+        if tool_name in runtime.rag_tool_order
+        else runtime.load_all_tool_documents
+    )
     fallback_documents = runtime.corpus_lexical_retriever_cls(
-        document_supplier=runtime.load_all_tool_documents,
+        document_supplier=document_supplier,
         search_fn=runtime.search_documents,
         snippet_fn=runtime.extract_relevant_snippet,
         tool_name=tool_name or runtime.fallback_rag_node,
@@ -533,26 +556,47 @@ def retrieve_tool_context(
         web_result = runtime.build_planned_web_result(scope_query, planned_route_name, tool_name)
         if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
             return web_result
+        if flow_plan.source == RETRIEVAL_WEB_SEARCH:
+            return _build_empty_web_search_result(
+                route_name=planned_route_name,
+                tool_name=tool_name,
+            )
 
-    lexical_documents = runtime.corpus_lexical_retriever_cls(
-        document_supplier=lambda: runtime.load_tool_corpus(tool_name),
-        search_fn=runtime.search_documents,
-        snippet_fn=runtime.extract_relevant_snippet,
-        tool_name=tool_name,
-        limit=TOOL_LEXICAL_RETRIEVAL_LIMIT,
-    ).invoke(message)
+    documents = []
+    if runtime.embedding_backend_ready():
+        try:
+            documents = runtime.vector_store_retriever_cls(
+                query_fn=runtime.search_vector_documents,
+                collection_getter=None,
+                source_lookup_fn=runtime.fetch_documents_by_source,
+                user_id=session_id,
+                n_results=25,
+                metadata_filter=runtime.get_tool_metadata_filter(tool_name),
+            ).invoke(scope_query)
+            if not any(document.metadata.get("source") != "BOT_RULE" for document in documents):
+                documents = []
+        except Exception as exc:
+            print(f"Tool vector retrieval unavailable for {tool_name}, using lexical fallback: {exc}")
 
-    if not lexical_documents:
+    if not documents:
+        documents = runtime.corpus_lexical_retriever_cls(
+            document_supplier=lambda: runtime.load_tool_corpus(tool_name),
+            search_fn=runtime.search_documents,
+            snippet_fn=runtime.extract_relevant_snippet,
+            tool_name=tool_name,
+            limit=TOOL_LEXICAL_RETRIEVAL_LIMIT,
+        ).invoke(message)
+
+    if not documents:
         if web_result is not None:
             return web_result
         if _plan_allows_web(flow_plan):
             web_result = runtime.build_planned_web_result(scope_query, planned_route_name, tool_name)
             if web_result is not None:
                 return web_result
-        return retrieve_general_context(
+        return _build_general_fallback_result(
             runtime,
             message=message,
-            session_id=session_id,
             route_name=planned_route_name,
             tool_name=tool_name,
             retrieval_plan=flow_plan,
@@ -560,7 +604,7 @@ def retrieve_tool_context(
 
     runtime.inject_bot_rule(force_full=True)
     result = runtime.build_result_from_documents(
-        documents=lexical_documents,
+        documents=documents,
         tool_name=tool_name,
         route_name=planned_route_name,
         mode=tool_name,
@@ -590,81 +634,14 @@ def retrieve_fallback_context(
     route_name: str = "router_fallback",
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
-    scope_query = build_retrieval_query(runtime, session_id, message)
-    if not query_is_in_ictu_scope(runtime, scope_query):
-        return runtime.build_scope_guard_result(route_name=route_name, tool_name=runtime.fallback_rag_node)
-
-    flow_plan = retrieval_plan or runtime.route_retrieval_flow(scope_query, runtime.fallback_rag_node)
-    planned_route_name = f"{route_name}|{flow_plan.route}"
-    web_result: Optional[RAGResult] = None
-
-    if _plan_allows_web(flow_plan) and _plan_is_web_first(flow_plan):
-        web_result = runtime.build_planned_web_result(scope_query, planned_route_name, runtime.fallback_rag_node)
-        if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
-            return web_result
-
-    def _fallback_search(_: tuple[CorpusDocument, ...], query: str, limit: int = 6) -> list[tuple[int, CorpusDocument]]:
-        all_matches: list[tuple[int, CorpusDocument]] = []
-        for tool in runtime.rag_tool_order:
-            documents = runtime.load_tool_corpus(tool)
-            all_matches.extend(runtime.search_documents(documents, query, limit=2))
-        all_matches.sort(key=lambda item: item[0], reverse=True)
-        return all_matches[:limit]
-
-    fallback_documents = runtime.corpus_lexical_retriever_cls(
-        document_supplier=runtime.load_all_tool_documents,
-        search_fn=_fallback_search,
-        snippet_fn=runtime.extract_relevant_snippet,
+    return retrieve_tool_context(
+        runtime,
+        message=message,
+        session_id=session_id,
         tool_name=runtime.fallback_rag_node,
-        limit=FALLBACK_LEXICAL_RETRIEVAL_LIMIT,
-    ).invoke(message)
-
-    if not fallback_documents:
-        if web_result is not None:
-            return web_result
-        if _plan_allows_web(flow_plan):
-            web_result = runtime.build_planned_web_result(scope_query, planned_route_name, runtime.fallback_rag_node)
-            if web_result is not None:
-                return web_result
-        return retrieve_general_context(
-            runtime,
-            message=message,
-            session_id=session_id,
-            route_name=planned_route_name,
-            tool_name=runtime.default_rag_tool,
-            retrieval_plan=flow_plan,
-        )
-
-    runtime.inject_bot_rule(force_full=True)
-    result = runtime.build_result_from_documents(
-        documents=fallback_documents,
-        tool_name=runtime.fallback_rag_node,
-        route_name=planned_route_name,
-        mode="multi_tool_fallback_rag",
-        query=message,
+        route_name=route_name,
+        retrieval_plan=retrieval_plan,
     )
-
-    if flow_plan.source == RETRIEVAL_WEB_SEARCH:
-        web_result = web_result or runtime.build_planned_web_result(
-            scope_query,
-            planned_route_name,
-            runtime.fallback_rag_node,
-        )
-        return web_result or result
-
-    if flow_plan.source == RETRIEVAL_HYBRID:
-        web_result = web_result or runtime.build_planned_web_result(
-            scope_query,
-            planned_route_name,
-            runtime.fallback_rag_node,
-        )
-        return runtime.merge_web_search_result(
-            result,
-            web_result,
-            web_first=_plan_is_web_first(flow_plan),
-        )
-
-    return result
 
 
 def retrieve_general_context(
@@ -680,7 +657,8 @@ def retrieve_general_context(
     if not query_is_in_ictu_scope(runtime, query_for_retrieval):
         return runtime.build_scope_guard_result(route_name=route_name, tool_name=tool_name)
 
-    flow_plan = retrieval_plan or runtime.route_retrieval_flow(query_for_retrieval, tool_name)
+    selected_tool = tool_name or runtime.default_rag_tool
+    flow_plan = retrieval_plan or runtime.route_retrieval_flow(query_for_retrieval, selected_tool)
     planned_route_name = route_name if f"|{flow_plan.route}" in route_name else f"{route_name}|{flow_plan.route}"
     web_result: Optional[RAGResult] = None
 
@@ -688,6 +666,11 @@ def retrieve_general_context(
         web_result = runtime.build_planned_web_result(query_for_retrieval, planned_route_name, tool_name)
         if web_result is not None and flow_plan.source == RETRIEVAL_WEB_SEARCH:
             return web_result
+        if flow_plan.source == RETRIEVAL_WEB_SEARCH:
+            return _build_empty_web_search_result(
+                route_name=planned_route_name,
+                tool_name=selected_tool,
+            )
 
     message_lower = message.lower()
     target_file = None
@@ -697,7 +680,7 @@ def retrieve_general_context(
             runtime,
             message=message,
             route_name=planned_route_name,
-            tool_name=tool_name,
+            tool_name=selected_tool,
             retrieval_plan=flow_plan,
         )
 
@@ -709,7 +692,7 @@ def retrieve_general_context(
             source_lookup_fn=runtime.fetch_documents_by_source,
             user_id=session_id,
             n_results=100,
-            alpha=0.7,
+            metadata_filter=runtime.get_tool_metadata_filter(selected_tool),
             target_source=target_file,
         ).invoke(query_for_retrieval)
         mode = "forced_file" if target_file else "hybrid_search"
@@ -726,7 +709,7 @@ def retrieve_general_context(
     runtime.inject_bot_rule(force_full=True)
     result = runtime.build_result_from_documents(
         documents=documents,
-        tool_name=tool_name,
+        tool_name=selected_tool,
         route_name=planned_route_name,
         mode=mode,
         query=query_for_retrieval,
@@ -736,11 +719,11 @@ def retrieve_general_context(
     unique_sources = result.sources
 
     if flow_plan.source == RETRIEVAL_WEB_SEARCH:
-        web_result = web_result or runtime.build_planned_web_result(query_for_retrieval, planned_route_name, tool_name)
+        web_result = web_result or runtime.build_planned_web_result(query_for_retrieval, planned_route_name, selected_tool)
         return web_result or result
 
     if flow_plan.source == RETRIEVAL_HYBRID or (not unique_sources and _plan_allows_web(flow_plan)):
-        web_result = web_result or runtime.build_planned_web_result(query_for_retrieval, planned_route_name, tool_name)
+        web_result = web_result or runtime.build_planned_web_result(query_for_retrieval, planned_route_name, selected_tool)
         return runtime.merge_web_search_result(
             result,
             web_result,

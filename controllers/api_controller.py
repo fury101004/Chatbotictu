@@ -3,7 +3,7 @@ from __future__ import annotations
 import hmac
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 
 from config.dependencies import create_partner_token, verify_token
 from config.limiter import limiter
@@ -18,7 +18,9 @@ from services.content.knowledge_base_service import get_knowledge_base_payload
 from services.evaluation_question_service import get_evaluation_test_questions
 from services.eval_tracker import get_eval_tracker
 from services.llm.rate_limit_monitor import reset_429_stats, snapshot_429_stats
+from services.ingestion_queue import get_ingestion_queue
 from services.user_feedback_service import get_feedback_summary
+from services.rag.citation_serializer import USER_AUDIENCE, serialize_chat_payload
 from views.api_view import (
     build_chat_response,
     build_deployment_status_response,
@@ -101,21 +103,33 @@ async def api_chat(
 ):
     del token
     result = await process_chat_message(body.message, body.session_id, llm_model=body.llm_model or "auto")
-    return build_chat_response(result, body.session_id)
+    return build_chat_response(serialize_chat_payload(result, audience=USER_AUDIENCE), body.session_id)
 
 
 @router_v1.post("/upload")
 @limiter.limit(settings.API_RATE_UPLOAD)
 async def api_upload(
     request: Request,
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     tool_name: str = Form(DEFAULT_RAG_TOOL),
     session_id: Optional[str] = Form(None),
     token=Depends(verify_token),
 ):
     del request, token
-    result = await upload_markdown_files(files=files, tool_name=tool_name)
+    result = await get_ingestion_queue().enqueue_upload(
+        files=files,
+        tool_name=tool_name,
+        processor=upload_markdown_files,
+        background_tasks=background_tasks,
+    )
     return build_upload_response(result, session_id)
+
+
+@router_v1.get("/upload/status/{job_id}")
+async def api_upload_status(job_id: str, token=Depends(verify_token)):
+    del token
+    return get_ingestion_queue().get_status(job_id)
 
 
 @router_v1.get("/knowledge-base")
@@ -143,17 +157,14 @@ async def deployment_status():
 
 
 @router_v1.get("/metrics/rate-limit-429")
-async def rate_limit_metrics(
-    token=Depends(verify_token),
-    limit_recent: int = 40,
-):
-    del token
+async def rate_limit_metrics(request: Request, limit_recent: int = 40):
+    _require_admin_session(request)
     return snapshot_429_stats(limit_recent=limit_recent)
 
 
 @router_v1.post("/metrics/rate-limit-429/reset")
-async def reset_rate_limit_metrics(token=Depends(verify_token)):
-    del token
+async def reset_rate_limit_metrics(request: Request):
+    _require_admin_session(request)
     reset_429_stats()
     return {"status": "ok"}
 

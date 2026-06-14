@@ -315,7 +315,7 @@ def build_general_diagram() -> Path:
     draw.text((930, 940), "AI Agent / Chat Orchestrator", font=font(34, True), fill=rgba(PALETTE["text"]))
     draw.text(
         (932, 990),
-        "Điều phối guardrail, router, tool calling, gọi RAG, gọi web search và trả đáp án về Web/API.",
+        "Điều phối guardrail, controlled router, gọi RAG, gọi web search và trả đáp án về Web/API.",
         font=font(20),
         fill=rgba(PALETTE["muted"]),
     )

@@ -26,7 +26,13 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
             chunks=[
                 RetrievedChunk(
                     document="Chương trình cử nhân tối thiểu 120 tín chỉ.",
-                    metadata={"source": "student_handbooks/8.md", "score": 157},
+                    metadata={
+                        "source": "student_handbooks/8.md",
+                        "score": 157,
+                        "fusion_method": "rrf",
+                        "pre_rerank_rank": 2,
+                        "post_rerank_rank": 1,
+                    },
                 )
             ],
             mode="student_handbook_rag",
@@ -77,6 +83,52 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(eval_tracker.log_response.call_args.kwargs["query"], rewritten)
         saved_memory = memory_store.save.call_args.args[1]
         self.assertEqual(saved_memory[-2], {"role": "user", "content": rewritten})
+        self.assertEqual(result["selected_tool"], "student_handbook_rag")
+        self.assertEqual(result["routing_reason"], "Controlled router selected student_handbook_rag.")
+        self.assertEqual(result["confidence"], 0.6)
+        self.assertEqual(result["fallback_reason"], "")
+        self.assertEqual(result["fusion_method"], "rrf")
+
+    async def test_process_chat_message_routes_year_only_graduation_follow_up_to_matching_handbook(self) -> None:
+        original = "năm 2022-2023"
+        rewritten = "Về năm 2022-2023, điều kiện tốt nghiệp là gì?"
+        memory_store = SimpleNamespace(
+            load=AsyncMock(
+                return_value=[
+                    {"role": "user", "content": "Điều kiện tốt nghiệp là gì?"},
+                    {
+                        "role": "model",
+                        "content": "Bạn muốn hỏi cho đợt hoặc năm học nào để mình trả lời chính xác?",
+                    },
+                ]
+            ),
+            save=AsyncMock(),
+        )
+        eval_tracker = SimpleNamespace(log_response=AsyncMock())
+
+        with (
+            patch("services.chat.chat_service.get_default_memory_store", return_value=memory_store),
+            patch("services.chat.chat_service.get_eval_tracker", return_value=eval_tracker),
+            patch("services.rag.rag_service._route_rag_tool_by_llm") as llm_router,
+            patch("services.rag.rag_service._route_retrieval_flow_by_llm", return_value=None),
+            patch("services.rag.rag_service.embedding_backend_ready", return_value=False),
+            patch(
+                "services.chat.chat_service.chat_multilingual",
+                return_value=("Sinh viên cần đáp ứng đủ các điều kiện xét tốt nghiệp.", "local:test"),
+            ) as chat_mock,
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
+            patch("services.chat.chat_service.append_retrieval_memory"),
+            patch("services.content.knowledge_base_service.mark_chat_entry_pending"),
+        ):
+            result = await process_chat_message(original, session_id="graduation-follow-up-2022")
+
+        self.assertEqual(result["selected_tool"], "student_handbook_rag")
+        self.assertFalse(result["needs_clarification"])
+        self.assertNotEqual(result["llm_model"], "local:knowledge_base_fallback")
+        self.assertTrue(result["sources"])
+        self.assertTrue(all("2022-2023" in source for source in result["sources"]))
+        self.assertEqual(chat_mock.call_args.kwargs["user_question"], rewritten)
+        llm_router.assert_not_called()
 
     async def test_process_chat_message_asks_for_clarification_when_question_lacks_required_scope(self) -> None:
         empty_result = RAGResult(
@@ -85,12 +137,12 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
             mode="lexical_fallback_empty",
             sources=[],
             chunks_used=0,
-            rag_tool="school_policy_rag",
+            rag_tool="academic_policy_rag",
             rag_route="router_policy",
         )
 
         with (
-            patch("services.chat.chat_service.route_rag_tool", return_value=("school_policy_rag", "router_policy")),
+            patch("services.chat.chat_service.route_rag_tool", return_value=("academic_policy_rag", "router_policy")),
             patch("services.chat.chat_service.retrieve_tool_context", return_value=empty_result),
             patch("services.chat.chat_service.save_message"),
         ):
@@ -121,6 +173,30 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["needs_clarification"])
         self.assertEqual(result["llm_model"], "local:knowledge_base_fallback")
         self.assertIn("Knowledge Base", result["response"])
+
+    async def test_process_chat_message_reports_web_search_unavailable_without_local_sources(self) -> None:
+        empty_web_result = RAGResult(
+            context_text="Thông tin đang được cập nhật.",
+            chunks=[],
+            mode="web_search_empty",
+            sources=[],
+            chunks_used=0,
+            rag_tool="general_ictu_rag",
+            rag_route="router_general|flow_realtime:web_search",
+        )
+
+        with (
+            patch("services.chat.chat_service.route_rag_tool", return_value=("general_ictu_rag", "router_general")),
+            patch("services.chat.chat_service.retrieve_general_context", return_value=empty_web_result),
+            patch("services.chat.chat_service.chat_multilingual") as chat_mock,
+            patch("services.chat.chat_service.save_message"),
+        ):
+            result = await process_chat_message("ICTU hôm nay có gì mới?", session_id="web-empty-1")
+
+        self.assertEqual(result["llm_model"], "local:web_search_empty")
+        self.assertEqual(result["sources"], [])
+        self.assertIn("nguồn web ICTU", result["response"])
+        chat_mock.assert_not_called()
 
     async def test_process_chat_message_returns_local_greeting_intent(self) -> None:
         with patch("services.chat.chat_service.save_message"):
@@ -190,6 +266,7 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("services.rag.rag_service._route_retrieval_flow_by_llm", return_value=None),
+            patch("services.rag.rag_service.embedding_backend_ready", return_value=False),
             patch(
                 "services.chat.chat_service.chat_multilingual",
                 return_value=("Có, sinh viên được học lại để cải thiện điểm C hoặc D.", "local:test"),
@@ -204,15 +281,9 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["needs_clarification"])
         self.assertEqual(result["rag_tool"], "student_handbook_rag")
         self.assertEqual(result["sources"], ["student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"])
-        self.assertEqual(
-            result["source_details"],
-            [
-                {
-                    "source": "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md",
-                    "label": "Sổ tay sinh viên 2025-2026 (hỏi đáp trích xuất)",
-                }
-            ],
-        )
+        self.assertEqual(result["source_details"][0]["document_name"], "Sổ tay sinh viên 2025-2026 (hỏi đáp trích xuất)")
+        self.assertEqual(result["source_details"][0]["year"], "2025-2026")
+        self.assertNotIn("source", result["source_details"][0])
         context_text = chat_mock.call_args.kwargs["context_text"]
         self.assertIn("được phép đăng ký học lại để cải thiện điểm", context_text)
         self.assertIn("điểm C hoặc D", context_text)
@@ -332,8 +403,8 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(payload["response"], "Thong tin hoc phi nam 2025-2026.")
         self.assertEqual(payload["session_id"], "api-chat-1")
         self.assertEqual(payload["response_time_ms"], 12)
-        self.assertEqual(payload["sources"], ["uploads/student_faq_rag/hoc_phi.md"])
-        self.assertIsNone(payload["source_details"])
+        self.assertIsNone(payload["sources"])
+        self.assertEqual(payload["source_details"], [])
 
 
 if __name__ == "__main__":

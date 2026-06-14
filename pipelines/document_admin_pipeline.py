@@ -19,7 +19,7 @@ def iter_importable_paths(root: Path, *, supported_suffixes: set[str]) -> list[P
 def iter_seed_source_records(
     root: Path,
     *,
-    default_tool: str,
+    default_tool: str | None,
     detect_tool_from_path: Callable[[Path], str | None],
     supported_suffixes: set[str],
 ) -> list[tuple[Path, str, str]]:
@@ -29,7 +29,11 @@ def iter_seed_source_records(
             source_name = path.relative_to(root).as_posix()
         except ValueError:
             source_name = path.name
-        tool_name = detect_tool_from_path(path) or default_tool
+        tool_name = detect_tool_from_path(path)
+        if tool_name is None:
+            if default_tool is None:
+                continue
+            tool_name = default_tool
         records.append((path, tool_name, source_name))
     return records
 
@@ -69,8 +73,9 @@ def build_vector_tool_groups(
     grouped_sources: dict[str, dict[str, list[dict[str, Any]]]] = {tool_name: {} for tool_name in rag_tool_order}
     theme_by_tool = {
         "student_handbook_rag": "orange",
-        "school_policy_rag": "purple",
+        "academic_policy_rag": "purple",
         "student_faq_rag": "teal",
+        "general_ictu_rag": "blue",
     }
 
     for source, chunks in chunks_by_file.items():

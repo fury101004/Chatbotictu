@@ -69,9 +69,28 @@ class Settings(BaseSettings):
 
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
+    RAG_FUSION_METHOD: str = Field(
+        default="rrf",
+        validation_alias=AliasChoices("RAG_FUSION_METHOD", "FUSION_METHOD"),
+    )
+    RRF_K: int = Field(default=60, ge=1, validation_alias=AliasChoices("RRF_K"))
+    HYBRID_ALPHA: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        validation_alias=AliasChoices("HYBRID_ALPHA"),
+    )
     AUTO_APPROVE_CHAT_QA: bool = Field(
         default=False,
         validation_alias=AliasChoices("AUTO_APPROVE_CHAT_QA"),
+    )
+    SEARXNG_URL: str = Field(
+        default="",
+        validation_alias=AliasChoices("SEARXNG_URL", "SEARXNG_API", "SEAXNG_API"),
+    )
+    TRAFILATURA_URL: str = Field(
+        default="",
+        validation_alias=AliasChoices("TRAFILATURA_URL", "TRAFILATURA_API"),
     )
 
     API_RATE_CHAT: str = "100/minute"

@@ -129,7 +129,7 @@ class RagRouterTests(unittest.TestCase):
         with patch("services.rag.rag_service.get_model", return_value=None):
             tool_name, route_name = route_rag_tool("quy che hoc phi")
 
-        self.assertEqual(tool_name, "school_policy_rag")
+        self.assertEqual(tool_name, "academic_policy_rag")
         self.assertTrue(route_name.startswith("router_keyword_score:"))
 
     def test_strong_handbook_keyword_route_skips_llm_router(self) -> None:
@@ -162,6 +162,22 @@ class RagRouterTests(unittest.TestCase):
         self.assertTrue(route_name.startswith("router_keyword_score:"))
         llm_router.assert_not_called()
 
+    def test_keyword_router_prefers_handbook_for_year_specific_graduation_conditions(self) -> None:
+        questions = (
+            "Về năm 2022-2023, điều kiện tốt nghiệp là gì?",
+            "Về năm 2025-2026, điều kiện tốt nghiệp là gì?",
+            "Sinh viên cần đáp ứng điều kiện nào để được công nhận tốt nghiệp?",
+        )
+
+        for question in questions:
+            with self.subTest(question=question):
+                with patch("services.rag.rag_service._route_rag_tool_by_llm") as llm_router:
+                    tool_name, route_name = route_rag_tool(question)
+
+                self.assertEqual(tool_name, "student_handbook_rag")
+                self.assertTrue(route_name.startswith("router_keyword_score:"))
+                llm_router.assert_not_called()
+
 
 class RetrievalFlowPlannerTests(unittest.TestCase):
     def test_retrieval_flow_prompt_with_json_example_formats_as_plain_text(self) -> None:
@@ -176,6 +192,7 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
         self.assertIn('"source": "local_data | web_search | hybrid"', formatted.messages[0].content)
 
     def test_llm_planner_can_choose_web_search_before_retrieval(self) -> None:
+        question = "ICTU có nội dung nào cần tra cứu trực tuyến?"
         with (
             patch("services.rag.rag_service.get_model", return_value=SimpleNamespace(label="planner-model")),
             patch("services.rag.rag_service._llm_router_network_available", return_value=True),
@@ -193,7 +210,7 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
                 ),
         ) as chain_mock,
         ):
-            plan = route_retrieval_flow("ICTU co thong bao moi nhat gi hom nay?", "student_faq_rag")
+            plan = route_retrieval_flow(question, "student_faq_rag")
 
         self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
         self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
@@ -205,6 +222,15 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
         self.assertIn("local_data", prompt_input["prompt"])
         self.assertIn("web_search", prompt_input["prompt"])
         self.assertIn("hybrid", prompt_input["prompt"])
+
+    def test_realtime_query_forces_web_search_without_llm_planner(self) -> None:
+        with patch("services.rag.rag_service._route_retrieval_flow_by_llm") as llm_planner:
+            plan = route_retrieval_flow("ICTU hôm nay có gì mới?", "general_ictu_rag")
+
+        self.assertEqual(plan.source, RETRIEVAL_WEB_SEARCH)
+        self.assertEqual(plan.priority, RETRIEVAL_WEB_FIRST)
+        self.assertTrue(plan.route.startswith("flow_realtime:web_search"))
+        llm_planner.assert_not_called()
 
     def test_flow_falls_back_to_web_search_for_realtime_question_without_llm(self) -> None:
         with patch("services.rag.rag_service.get_model", return_value=None):
@@ -258,6 +284,35 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
             )
 
         self.assertIs(result, web_result)
+        load_corpus_mock.assert_not_called()
+
+    def test_web_search_plan_does_not_fall_back_to_unrelated_local_documents(self) -> None:
+        plan = RetrievalFlowPlan(
+            source=RETRIEVAL_WEB_SEARCH,
+            priority=RETRIEVAL_WEB_FIRST,
+            reason="Thong tin moi",
+            confidence=0.9,
+            route="flow_test:web",
+        )
+
+        with (
+            patch("services.rag.rag_service.is_ictu_related_query", return_value=True),
+            patch("services.rag.rag_service._build_planned_web_result", return_value=None),
+            patch("services.rag.rag_service.embedding_backend_ready") as embedding_ready,
+            patch("services.rag.rag_service._load_tool_corpus") as load_corpus_mock,
+        ):
+            result = retrieve_tool_context(
+                "ICTU hôm nay có gì mới?",
+                "test-web-empty",
+                "general_ictu_rag",
+                "router_test",
+                retrieval_plan=plan,
+            )
+
+        self.assertEqual(result.mode, "web_search_empty")
+        self.assertEqual(result.sources, [])
+        self.assertEqual(result.chunks, [])
+        embedding_ready.assert_not_called()
         load_corpus_mock.assert_not_called()
 
 
@@ -397,6 +452,21 @@ class RagLexicalQaTests(unittest.TestCase):
         snippet = _extract_relevant_snippet(matches[0][1], question, _tokenize(question))
         self.assertIn("120 tín chỉ", snippet)
         self.assertIn("Chương trình đào tạo đại học (cử nhân)", snippet)
+
+    def test_year_specific_graduation_conditions_use_matching_handbook(self) -> None:
+        question = "Về năm 2022-2023, điều kiện tốt nghiệp là gì?"
+        documents = _load_tool_corpus("student_handbook_rag")
+
+        matches = _search_documents(documents, question, limit=3)
+
+        self.assertTrue(matches)
+        self.assertEqual(
+            matches[0][1].source,
+            "student_handbooks/5. SO TAY SINH VIEN 2022-2023.questions.md",
+        )
+        snippet = _extract_relevant_snippet(matches[0][1], question, _tokenize(question))
+        self.assertIn("Điều kiện xét và công nhận tốt nghiệp", snippet)
+        self.assertIn("điểm trung bình tích lũy toàn khóa từ 2,00 trở lên", snippet)
 
     def test_question_files_are_ranked_ahead_of_raw_context_for_exact_qa(self) -> None:
         question = "Dieu kien dat danh hieu sinh vien Kha, Gioi, Xuat sac la gi?"

@@ -75,7 +75,7 @@ def detect_tool(path: Path) -> str:
         return "student_handbook_rag"
     if any(token in normalized for token in ("faq", "congvanvieclam", "congvanxettn")):
         return "student_faq_rag"
-    return "school_policy_rag"
+    return "academic_policy_rag"
 
 
 def analyze_corpus() -> dict[str, Any]:
@@ -233,7 +233,7 @@ def build_markdown(payload: dict[str, Any]) -> str:
         "- Người dùng gửi câu hỏi qua Web/API.",
         "- Input Normalizer chuẩn hóa message, session_id, ngôn ngữ và model được chọn.",
         "- Guardrail kiểm tra nội dung không phù hợp và trả lời nhanh các lời chào/input đơn giản.",
-        "- Router chọn tool tri thức: student_handbook_rag, school_policy_rag, student_faq_rag hoặc fallback_rag.",
+        "- Router chọn tool tri thức: student_handbook_rag, academic_policy_rag, student_faq_rag hoặc general_ictu_rag.",
         "- Retrieval lấy nguồn/chunk liên quan từ corpus, upload hoặc vector store.",
         "- Response Composer ghép ngữ cảnh vào prompt và gọi LLM để sinh câu trả lời cuối.",
         "- Finalize lưu response, nguồn truy hồi, session memory và log phục vụ đánh giá sau này.",

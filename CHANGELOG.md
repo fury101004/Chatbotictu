@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-14
+
+### RRF và bốn RAG tool
+
+- Dùng Reciprocal Rank Fusion mặc định để hợp nhất ranking độc lập từ Vector Search và BM25.
+- Cho phép cấu hình `RRF_K`; giữ weighted fusion qua `RAG_FUSION_METHOD=weighted`.
+- Chạy Cross-Encoder sau fusion và ghi `pre_rerank_rank`, `post_rerank_rank`, `fusion_method`.
+- Chuẩn hóa bốn tool: `student_handbook_rag`, `academic_policy_rag`, `student_faq_rag`, `general_ictu_rag`.
+- Mỗi tool có corpus, metadata filter, hàm retrieval và LangGraph node riêng.
+- Bổ sung telemetry `selected_tool`, `routing_reason`, `confidence`, `fallback_reason`.
+
 ## 2026-05-05
 
 ### Môi trường và cấu hình

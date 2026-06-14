@@ -68,11 +68,6 @@ _NORMALIZED_POLICY_TIMEFRAME_MARKERS = tuple(normalize_scope_text(marker) for ma
 _NORMALIZED_PROGRAM_SCOPE_MARKERS = tuple(normalize_scope_text(marker) for marker in _PROGRAM_SCOPE_MARKERS)
 _NORMALIZED_GRADUATION_ROUND_MARKERS = tuple(normalize_scope_text(marker) for marker in _GRADUATION_ROUND_MARKERS)
 _NORMALIZED_SCHEDULE_MARKERS = tuple(normalize_scope_text(marker) for marker in _SCHEDULE_MARKERS)
-_TOOL_SCOPED_RAG_HANDLERS = {
-    "student_handbook_rag": "student_handbook_rag",
-    "school_policy_rag": "school_policy_rag",
-    "student_faq_rag": "student_faq_rag",
-}
 _FALLBACK_PRIMARY_REPLY = {
     "en": (
         "I could not find relevant information in the current Knowledge Base. "
@@ -86,6 +81,10 @@ _FALLBACK_PRIMARY_REPLY = {
 _STUDENT_HANDBOOK_NO_INFO_REPLY = {
     "en": "I could not find this information in the student handbook.",
     "vi": "Không tìm thấy thông tin này trong sổ tay sinh viên.",
+}
+_WEB_SEARCH_NO_INFO_REPLY = {
+    "en": "I could not retrieve current information from ICTU web sources right now. Please try again later.",
+    "vi": "Mình chưa lấy được thông tin mới từ các nguồn web ICTU lúc này. Bạn vui lòng thử lại sau.",
 }
 
 
@@ -113,7 +112,7 @@ def retrieve_fallback_context(*, message: str, session_id: str, route_name: str)
         message=message,
         session_id=session_id,
         route_name=route_name,
-        rag_tool="fallback_rag",
+        rag_tool="general_ictu_rag",
     )
 
 
@@ -255,8 +254,42 @@ def _route_rag_tool_step(state: ChatGraphState) -> ChatGraphState:
     rag_tool, rag_route = route_rag_tool(state["message"])
     state["rag_tool"] = rag_tool
     state["rag_route"] = rag_route
-    _log_step("route_rag_tool", state, rag_tool=rag_tool, rag_route=rag_route)
+    state["selected_tool"] = rag_tool
+    state["routing_reason"], state["confidence"], state["fallback_reason"] = _route_telemetry(
+        rag_tool,
+        rag_route,
+    )
+    _log_step(
+        "route_rag_tool",
+        state,
+        selected_tool=rag_tool,
+        routing_reason=state["routing_reason"],
+        confidence=state["confidence"],
+        fallback_reason=state["fallback_reason"],
+    )
     return state
+
+
+def _route_telemetry(tool_name: str, route_name: str) -> tuple[str, float, str]:
+    keyword_match = re.search(r"router_keyword_score:(\d+)", route_name)
+    llm_match = re.search(r"([01](?:\.\d+)?)$", route_name)
+    if keyword_match:
+        score = int(keyword_match.group(1))
+        reason = f"Keyword router matched {tool_name} with score {score}."
+        confidence = min(0.95, 0.5 + score * 0.05)
+    elif llm_match and "router_llm" in route_name:
+        confidence = max(0.0, min(float(llm_match.group(1)), 1.0))
+        reason = f"LLM router selected {tool_name}."
+    else:
+        confidence = 0.5 if tool_name == "general_ictu_rag" else 0.6
+        reason = f"Controlled router selected {tool_name}."
+
+    fallback_reason = ""
+    if tool_name == "general_ictu_rag" and (
+        "fallback" in route_name or "low_conf" in route_name
+    ):
+        fallback_reason = "No specialized RAG tool matched the question with sufficient confidence."
+    return reason, confidence, fallback_reason
 
 
 def _apply_rag_result(state: ChatGraphState, rag_result: RAGResult) -> ChatGraphState:
@@ -270,6 +303,21 @@ def _apply_rag_result(state: ChatGraphState, rag_result: RAGResult) -> ChatGraph
         state["rag_tool"] = rag_result.rag_tool
     if rag_result.rag_route:
         state["rag_route"] = rag_result.rag_route
+    state["selected_tool"] = rag_result.selected_tool or state.get("selected_tool") or state.get("rag_tool", "")
+    if rag_result.routing_reason:
+        state["routing_reason"] = rag_result.routing_reason
+    if rag_result.confidence is not None:
+        state["confidence"] = rag_result.confidence
+    if rag_result.fallback_reason:
+        state["fallback_reason"] = rag_result.fallback_reason
+    if "fallback" in rag_result.mode and not state.get("fallback_reason"):
+        state["fallback_reason"] = f"Primary retrieval for {state.get('selected_tool')} returned no usable chunks."
+    fusion_methods = {
+        str(chunk.metadata.get("fusion_method") or "")
+        for chunk in rag_result.chunks
+        if chunk.metadata.get("fusion_method")
+    }
+    state["fusion_method"] = rag_result.fusion_method or (sorted(fusion_methods)[0] if fusion_methods else "")
     state["scope_result"] = "blocked" if rag_result.mode == "ictu_scope_guard" else "allowed"
     return state
 
@@ -285,7 +333,7 @@ def _top_retrieval_debug(state: ChatGraphState, limit: int = 5) -> tuple[list[st
         score = next(
             (
                 metadata.get(key)
-                for key in ("score", "hybrid_score", "vector_score", "bm25_score")
+                for key in ("fusion_score", "score", "hybrid_score", "vector_score", "bm25_score")
                 if metadata.get(key) is not None
             ),
             None,
@@ -328,31 +376,24 @@ def _build_clarification_question(message: str) -> str | None:
     return None
 
 
-def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
+def _retrieve_context_for_tool(state: ChatGraphState, tool_name: str) -> ChatGraphState:
     if state.get("handled"):
         return state
 
     route_name = state.get("rag_route", "general_rag")
-    rag_tool = state.get("rag_tool") or DEFAULT_RAG_TOOL
-    if rag_tool in _TOOL_SCOPED_RAG_HANDLERS:
-        result = retrieve_tool_context(
-            message=state["message"],
-            session_id=state["session_id"],
-            tool_name=_TOOL_SCOPED_RAG_HANDLERS[rag_tool],
-            route_name=route_name,
-        )
-    elif rag_tool == "fallback_rag":
-        result = retrieve_fallback_context(
-            message=state["message"],
-            session_id=state["session_id"],
-            route_name=route_name,
-        )
-    else:
+    if tool_name == "general_ictu_rag":
         result = retrieve_general_context(
             message=state["message"],
             session_id=state["session_id"],
             route_name=route_name,
-            tool_name=rag_tool,
+            tool_name=tool_name,
+        )
+    else:
+        result = retrieve_tool_context(
+            message=state["message"],
+            session_id=state["session_id"],
+            tool_name=tool_name,
+            route_name=route_name,
         )
 
     state = _apply_rag_result(state, result)
@@ -374,6 +415,22 @@ def _retrieve_context(state: ChatGraphState) -> ChatGraphState:
         top_scores=top_scores,
     )
     return state
+
+
+def _retrieve_student_handbook_node(state: ChatGraphState) -> ChatGraphState:
+    return _retrieve_context_for_tool(state, "student_handbook_rag")
+
+
+def _retrieve_academic_policy_node(state: ChatGraphState) -> ChatGraphState:
+    return _retrieve_context_for_tool(state, "academic_policy_rag")
+
+
+def _retrieve_student_faq_node(state: ChatGraphState) -> ChatGraphState:
+    return _retrieve_context_for_tool(state, "student_faq_rag")
+
+
+def _retrieve_general_ictu_node(state: ChatGraphState) -> ChatGraphState:
+    return _retrieve_context_for_tool(state, "general_ictu_rag")
 
 
 def _fallback_kb_reply(state: ChatGraphState) -> str:
@@ -423,6 +480,17 @@ def _generate_answer(state: ChatGraphState) -> ChatGraphState:
         state["llm_model"] = "local:clarification"
         state["language"] = get_current_language(state["session_id"])
         _log_step("generate_answer", state, mode="clarification")
+        return state
+
+    if state.get("mode") == "web_search_empty":
+        current_language = get_current_language(state["session_id"])
+        state["response"] = _WEB_SEARCH_NO_INFO_REPLY.get(
+            current_language,
+            _WEB_SEARCH_NO_INFO_REPLY["vi"],
+        )
+        state["llm_model"] = "local:web_search_empty"
+        state["language"] = current_language
+        _log_step("generate_answer", state, mode="web_search_empty")
         return state
 
     if _context_is_missing(state):
@@ -579,10 +647,10 @@ def _pass_through_step(state: ChatGraphState) -> ChatGraphState:
 @lru_cache(maxsize=1)
 def _build_chat_graph() -> RAGChatGraph:
     tool_nodes = {
-        "student_handbook_rag": _retrieve_context,
-        "school_policy_rag": _retrieve_context,
-        "student_faq_rag": _retrieve_context,
-        "fallback_rag": _retrieve_context,
+        "student_handbook_rag": _retrieve_student_handbook_node,
+        "academic_policy_rag": _retrieve_academic_policy_node,
+        "student_faq_rag": _retrieve_student_faq_node,
+        "general_ictu_rag": _retrieve_general_ictu_node,
     }
     return RAGChatGraph(
         normalize=_normalize_input,

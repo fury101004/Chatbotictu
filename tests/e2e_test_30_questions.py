@@ -88,13 +88,13 @@ TEST_CASES: list[TestCase] = [
 
     # ── Nhóm 2: Học phí, học bổng (5 câu) ──
     TestCase("HP01", "hoc_phi_hoc_bong", "Mức học phí đại học chính quy tại ICTU là bao nhiêu?",
-             ["học phí", "mức"], "school_policy_rag"),
+             ["học phí", "mức"], "academic_policy_rag"),
     TestCase("HP02", "hoc_phi_hoc_bong", "Sinh viên nào được miễn giảm học phí?",
-             ["miễn giảm", "học phí"], "school_policy_rag"),
+             ["miễn giảm", "học phí"], "academic_policy_rag"),
     TestCase("HP03", "hoc_phi_hoc_bong", "Điều kiện để nhận học bổng khuyến khích học tập là gì?",
-             ["học bổng", "khuyến khích", "điều kiện"], "school_policy_rag"),
+             ["học bổng", "khuyến khích", "điều kiện"], "academic_policy_rag"),
     TestCase("HP04", "hoc_phi_hoc_bong", "Quy định về trợ cấp xã hội cho sinh viên như thế nào?",
-             ["trợ cấp", "xã hội"], "school_policy_rag"),
+             ["trợ cấp", "xã hội"], "academic_policy_rag"),
     TestCase("HP05", "hoc_phi_hoc_bong", "Sinh viên đóng bảo hiểm y tế ở đâu và khi nào?",
              ["bảo hiểm", "y tế", "bhyt"], "student_faq_rag"),
 
@@ -116,9 +116,9 @@ TEST_CASES: list[TestCase] = [
     TestCase("CS02", "chinh_sach_sv", "Người học không được làm những hành vi nào?",
              ["hành vi", "không được"], "student_handbook_rag"),
     TestCase("CS03", "chinh_sach_sv", "Quy định về kỷ luật sinh viên tại ICTU như thế nào?",
-             ["kỷ luật", "sinh viên"], "school_policy_rag"),
+             ["kỷ luật", "sinh viên"], "academic_policy_rag"),
     TestCase("CS04", "chinh_sach_sv", "Điểm rèn luyện của sinh viên được đánh giá như thế nào?",
-             ["điểm rèn luyện", "đánh giá"], "school_policy_rag"),
+             ["điểm rèn luyện", "đánh giá"], "academic_policy_rag"),
     TestCase("CS05", "chinh_sach_sv", "Giá trị cốt lõi của Trường ICTU là gì?",
              ["giá trị", "cốt lõi"], "student_handbook_rag"),
 

@@ -130,7 +130,10 @@ class VectorStoreRetriever(BaseRetriever):
     source_lookup_fn: Any = Field(default=None, exclude=True)
     user_id: str = "default"
     n_results: int = 100
-    alpha: float = 0.7
+    alpha: Optional[float] = None
+    fusion_method: Optional[str] = None
+    rrf_k: Optional[int] = None
+    metadata_filter: Optional[dict[str, Any]] = None
     target_source: Optional[str] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -157,11 +160,19 @@ class VectorStoreRetriever(BaseRetriever):
                 user_id=self.user_id,
                 n_results=self.n_results,
                 alpha=self.alpha,
+                fusion_method=self.fusion_method,
+                rrf_k=self.rrf_k,
+                metadata_filter=self.metadata_filter,
             )
 
         pairs = [
             (str(document or ""), dict(metadata or {}))
             for document, metadata in zip(documents, metadatas)
+            if (
+                not self.metadata_filter
+                or all(dict(metadata or {}).get(key) == value for key, value in self.metadata_filter.items())
+                or dict(metadata or {}).get("source") == "BOT_RULE"
+            )
         ]
         pairs = _filter_by_query_years(query, pairs)
 

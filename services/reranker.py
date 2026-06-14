@@ -82,12 +82,29 @@ def rerank_langchain_documents(
     if not documents:
         return []
 
+    rule_documents = [
+        document
+        for document in documents
+        if str(document.metadata.get("source", "")) == "BOT_RULE"
+    ]
+    candidate_documents = [
+        document
+        for document in documents
+        if str(document.metadata.get("source", "")) != "BOT_RULE"
+    ]
+    for pre_rank, document in enumerate(candidate_documents, start=1):
+        document.metadata.setdefault("pre_rerank_rank", pre_rank)
+
     selected_reranker = reranker or get_default_reranker()
     original_top_k = selected_reranker.top_k
     if top_k is not None:
         selected_reranker.top_k = max(1, int(top_k))
     try:
-        indexes = selected_reranker.rank(query, [document.page_content for document in documents])
+        indexes = selected_reranker.rank(query, [document.page_content for document in candidate_documents])
     finally:
         selected_reranker.top_k = original_top_k
-    return [documents[index] for index in indexes]
+
+    reranked = [candidate_documents[index] for index in indexes]
+    for post_rank, document in enumerate(reranked, start=1):
+        document.metadata["post_rerank_rank"] = post_rank
+    return [*rule_documents, *reranked]

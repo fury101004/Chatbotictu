@@ -4,7 +4,7 @@ import time
 from typing import Any, Callable
 
 from models.chat import ChatGraphState
-from services.rag.source_display_service import build_source_details
+from services.rag.citation_serializer import ADMIN_AUDIENCE, serialize_citations
 
 
 StepHandler = Callable[[ChatGraphState], ChatGraphState]
@@ -44,7 +44,9 @@ def build_chat_response_payload(state: ChatGraphState, *, response_time_ms: int)
         "response_time_ms": response_time_ms,
     }
     if sources:
-        result["source_details"] = build_source_details(sources)
+        chunks = state.get("chunks") or []
+        result["source_details"] = serialize_citations(chunks, sources)
+        result["_admin_source_details"] = serialize_citations(chunks, sources, audience=ADMIN_AUDIENCE)
 
     for key in (
         "sources",
@@ -52,6 +54,11 @@ def build_chat_response_payload(state: ChatGraphState, *, response_time_ms: int)
         "chunks_used",
         "rag_tool",
         "rag_route",
+        "selected_tool",
+        "routing_reason",
+        "confidence",
+        "fallback_reason",
+        "fusion_method",
         "llm_model",
         "web_kb_status",
         "auto_approved_kb",

@@ -39,6 +39,7 @@ from services.content.knowledge_base_service import approve_chat_entry, get_know
 from services.ingestion_queue import get_ingestion_queue
 from services.llm.llm_service import get_chat_model_options
 from services.rag.source_display_service import format_source_label
+from services.rag.citation_serializer import ADMIN_AUDIENCE, USER_AUDIENCE, serialize_chat_payload
 from services.user_feedback_service import save_user_feedback
 from services.vector.vector_admin_service import delete_chunk_by_id
 from repositories.vector_repository import fetch_documents_by_source
@@ -72,6 +73,15 @@ def _admin_required(request: Request):
     if is_admin_authenticated(request):
         return None
     return RedirectResponse("/chat", status_code=303)
+
+
+def _evaluation_dashboard_required(request: Request):
+    login_response = _login_required(request)
+    if login_response is not None:
+        return login_response
+    if not is_admin_authenticated(request):
+        return HTMLResponse("Admin role required", status_code=403)
+    return None
 
 
 def _admin_required_json(request: Request):
@@ -151,12 +161,8 @@ def _chat_payload_error(message: str, session_id: str, llm_model: str):
 
 
 def _filter_chat_sources_for_role(result: dict, role: str) -> dict:
-    if role == "admin":
-        return result
-    filtered = dict(result)
-    filtered.pop("sources", None)
-    filtered.pop("source_details", None)
-    return filtered
+    audience = ADMIN_AUDIENCE if role == "admin" else USER_AUDIENCE
+    return serialize_chat_payload(result, audience=audience)
 
 
 async def _submit_login(
@@ -879,7 +885,7 @@ async def history_page(request: Request, page: int = 1):
 
 @router.get("/evaluation-dashboard")
 async def evaluation_dashboard_page(request: Request):
-    admin_response = _admin_required(request)
+    admin_response = _evaluation_dashboard_required(request)
     if admin_response is not None:
         return admin_response
     return FileResponse(EVALUATION_DASHBOARD_HTML)

@@ -3,7 +3,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from services.reranker import CrossEncoderReranker
+from langchain_core.documents import Document
+
+from services.reranker import CrossEncoderReranker, rerank_langchain_documents
 
 
 class RerankerTests(unittest.TestCase):
@@ -40,7 +42,25 @@ class RerankerTests(unittest.TestCase):
 
         self.assertEqual(result, ["doc-a", "doc-b"])
 
+    def test_langchain_rerank_persists_pre_and_post_rerank_rank(self) -> None:
+        class FakeReranker:
+            top_k = 2
+
+            def rank(self, query, documents):
+                return [1, 0]
+
+        documents = [
+            Document(page_content="doc-a", metadata={"fusion_method": "rrf", "pre_rerank_rank": 1}),
+            Document(page_content="doc-b", metadata={"fusion_method": "rrf", "pre_rerank_rank": 2}),
+        ]
+
+        result = rerank_langchain_documents("hoc phi", documents, reranker=FakeReranker())
+
+        self.assertEqual([document.page_content for document in result], ["doc-b", "doc-a"])
+        self.assertEqual(result[0].metadata["pre_rerank_rank"], 2)
+        self.assertEqual(result[0].metadata["post_rerank_rank"], 1)
+        self.assertEqual(result[0].metadata["fusion_method"], "rrf")
+
 
 if __name__ == "__main__":
     unittest.main()
-

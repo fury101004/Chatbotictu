@@ -18,7 +18,7 @@ class PromptBuilderTests(unittest.TestCase):
             current_lang="vi",
             safe_context="Thong tin hoc phi nam 2025.",
             user_question="Hoc phi ap dung the nao?",
-            rag_tool="school_policy_rag",
+            rag_tool="academic_policy_rag",
         )
         prompt_ascii = _ascii(prompt)
 

@@ -762,7 +762,7 @@
                     <tbody id="logTableBody"></tbody>
                 </table>
             </div>
-            <div id="emptyState" class="empty-state" hidden>Không có log phù hợp với bộ lọc hiện tại.</div>
+            <div id="emptyState" class="empty-state" hidden>Chưa có dữ liệu đánh giá.</div>
             <div class="pagination">
                 <span id="pageInfo" class="muted">0-0 / 0</span>
                 <div class="page-controls">
@@ -807,515 +807,10 @@
     <div id="toast" class="toast" role="status" aria-live="polite">Đã xuất CSV thành công</div>
 
     <script>
-        const mockLogs = [
-            {
-                id: 1,
-                timestamp: "2026-05-21T08:12:00+07:00",
-                question: "Điểm chuẩn ngành CNTT năm 2024 là bao nhiêu?",
-                answer: "Điểm chuẩn ngành Công nghệ thông tin năm 2024 được công bố trong quy chế tuyển sinh.",
-                retrievedChunks: ["Điểm chuẩn theo ngành năm 2024", "Mã ngành Công nghệ thông tin"],
-                latencyMs: 642,
-                relevanceScore: 0.91,
-                sourceDocument: "QuyCheTuyenSinh2024.pdf"
-            },
-            {
-                id: 2,
-                timestamp: "2026-05-21T08:38:00+07:00",
-                question: "Học phí học kỳ 2 năm học 2024-2025 là bao nhiêu?",
-                answer: "Học phí phụ thuộc số tín chỉ đăng ký và đơn giá tín chỉ của chương trình đào tạo.",
-                retrievedChunks: ["Bảng học phí theo tín chỉ", "Hướng dẫn nộp học phí HK2"],
-                latencyMs: 724,
-                relevanceScore: 0.86,
-                sourceDocument: "BieuMauHocPhi.xlsx"
-            },
-            {
-                id: 3,
-                timestamp: "2026-05-21T09:05:00+07:00",
-                question: "Thời khóa biểu tuần này ở đâu?",
-                answer: "Sinh viên xem thời khóa biểu trên cổng đào tạo hoặc thông báo của phòng đào tạo.",
-                retrievedChunks: ["Tra cứu thời khóa biểu", "Hướng dẫn dùng cổng đào tạo"],
-                latencyMs: 512,
-                relevanceScore: 0.82,
-                sourceDocument: "HuongDanCongDaoTao.pdf"
-            },
-            {
-                id: 4,
-                timestamp: "2026-05-21T09:24:00+07:00",
-                question: "Quy định về điểm rèn luyện như thế nào?",
-                answer: "Điểm rèn luyện được đánh giá theo các tiêu chí tham gia học tập, chấp hành nội quy và hoạt động phong trào.",
-                retrievedChunks: ["Thang điểm rèn luyện", "Các mức xếp loại DRL"],
-                latencyMs: 938,
-                relevanceScore: 0.79,
-                sourceDocument: "QuyDinhDRL.docx"
-            },
-            {
-                id: 5,
-                timestamp: "2026-05-21T10:11:00+07:00",
-                question: "Làm thế nào để đăng ký học lại?",
-                answer: "Sinh viên đăng ký học lại trên hệ thống quản lý đào tạo theo lịch mở đăng ký của nhà trường.",
-                retrievedChunks: ["Quy trình đăng ký học lại", "Mẫu đơn học lại"],
-                latencyMs: 681,
-                relevanceScore: 0.88,
-                sourceDocument: "HuongDanDangKyHocLai.pdf"
-            },
-            {
-                id: 6,
-                timestamp: "2026-05-21T10:46:00+07:00",
-                question: "Lịch thi cuối kỳ xem ở đâu?",
-                answer: "Lịch thi cuối kỳ được cập nhật trên website phòng đào tạo và cổng thông tin sinh viên.",
-                retrievedChunks: ["Thông báo lịch thi", "Tra cứu lịch thi cá nhân"],
-                latencyMs: 477,
-                relevanceScore: 0.84,
-                sourceDocument: "ThongBaoLichThiHK2.pdf"
-            },
-            {
-                id: 7,
-                timestamp: "2026-05-21T11:20:00+07:00",
-                question: "Em muốn xin giấy xác nhận sinh viên thì làm thế nào?",
-                answer: "Sinh viên nộp yêu cầu tại phòng công tác sinh viên hoặc theo biểu mẫu trực tuyến nếu có thông báo.",
-                retrievedChunks: ["Quy trình cấp giấy xác nhận", "Biểu mẫu xác nhận sinh viên"],
-                latencyMs: 860,
-                relevanceScore: 0.72,
-                sourceDocument: "QuyTrinhCongTacSinhVien.docx"
-            },
-            {
-                id: 8,
-                timestamp: "2026-05-21T13:17:00+07:00",
-                question: "Điều kiện xét học bổng khuyến khích học tập là gì?",
-                answer: "Điều kiện xét học bổng gồm kết quả học tập, rèn luyện và không vi phạm kỷ luật trong kỳ xét.",
-                retrievedChunks: ["Tiêu chí học bổng", "Mức học bổng theo loại"],
-                latencyMs: 591,
-                relevanceScore: 0.9,
-                sourceDocument: "QuyDinhHocBong.pdf"
-            },
-            {
-                id: 9,
-                timestamp: "2026-05-21T14:08:00+07:00",
-                question: "Mã ngành Khoa học dữ liệu của ICTU là gì?",
-                answer: "Thông tin mã ngành được liệt kê trong đề án tuyển sinh của trường.",
-                retrievedChunks: ["Danh mục ngành tuyển sinh", "Mã ngành năm 2025"],
-                latencyMs: 533,
-                relevanceScore: 0.81,
-                sourceDocument: "DeAnTuyenSinh2025.pdf"
-            },
-            {
-                id: 10,
-                timestamp: "2026-05-21T14:42:00+07:00",
-                question: "Có được rút bớt học phần sau khi đăng ký không?",
-                answer: "Sinh viên được điều chỉnh đăng ký học phần trong thời gian cho phép theo kế hoạch đào tạo.",
-                retrievedChunks: ["Quy định điều chỉnh học phần", "Thời hạn rút học phần"],
-                latencyMs: 791,
-                relevanceScore: 0.76,
-                sourceDocument: "QuyCheDaoTaoTinChi.pdf"
-            },
-            {
-                id: 11,
-                timestamp: "2026-05-20T09:15:00+07:00",
-                question: "Chuẩn đầu ra tiếng Anh của sinh viên là gì?",
-                answer: "Chuẩn đầu ra ngoại ngữ tùy theo chương trình đào tạo và khóa tuyển sinh.",
-                retrievedChunks: ["Chuẩn đầu ra ngoại ngữ", "Điều kiện xét tốt nghiệp"],
-                latencyMs: 1024,
-                relevanceScore: 0.69,
-                sourceDocument: "ChuanDauRaNgoaiNgu.pdf"
-            },
-            {
-                id: 12,
-                timestamp: "2026-05-20T15:05:00+07:00",
-                question: "Hồ sơ nhập học cần những giấy tờ gì?",
-                answer: "Hồ sơ nhập học gồm giấy báo trúng tuyển, học bạ, giấy tờ cá nhân và các biểu mẫu theo thông báo.",
-                retrievedChunks: ["Danh mục hồ sơ nhập học", "Lưu ý nộp hồ sơ"],
-                latencyMs: 458,
-                relevanceScore: 0.93,
-                sourceDocument: "HuongDanNhapHoc2025.pdf"
-            },
-            {
-                id: 13,
-                timestamp: "2026-05-19T16:30:00+07:00",
-                question: "Quên mật khẩu cổng đào tạo thì liên hệ ai?",
-                answer: "Sinh viên liên hệ bộ phận hỗ trợ cổng đào tạo hoặc phòng đào tạo để được cấp lại mật khẩu.",
-                retrievedChunks: ["Hỗ trợ tài khoản sinh viên", "Thông tin liên hệ phòng đào tạo"],
-                latencyMs: 697,
-                relevanceScore: 0.77,
-                sourceDocument: "HuongDanTaiKhoanSinhVien.pdf"
-            },
-            {
-                id: 14,
-                timestamp: "2026-05-18T10:50:00+07:00",
-                question: "Khi nào bắt đầu đăng ký học phần kỳ tới?",
-                answer: "Lịch đăng ký học phần được công bố theo kế hoạch đào tạo từng học kỳ.",
-                retrievedChunks: ["Kế hoạch học kỳ", "Mốc thời gian đăng ký học phần"],
-                latencyMs: 833,
-                relevanceScore: 0.74,
-                sourceDocument: "KeHoachDaoTao2025.xlsx"
-            },
-            {
-                id: 15,
-                timestamp: "2026-05-17T08:22:00+07:00",
-                question: "Sinh viên bị cảnh báo học vụ khi nào?",
-                answer: "Cảnh báo học vụ căn cứ vào điểm trung bình học kỳ, số tín chỉ nợ và quy định đào tạo hiện hành.",
-                retrievedChunks: ["Điều kiện cảnh báo học vụ", "Xử lý kết quả học tập"],
-                latencyMs: 612,
-                relevanceScore: 0.87,
-                sourceDocument: "QuyCheDaoTaoTinChi.pdf"
-            },
-            {
-                id: 16,
-                timestamp: "2026-05-15T13:40:00+07:00",
-                question: "ICTU có xét tuyển học bạ ngành An toàn thông tin không?",
-                answer: "Thông tin phương thức xét tuyển theo từng ngành nằm trong đề án tuyển sinh năm tương ứng.",
-                retrievedChunks: ["Phương thức xét tuyển học bạ", "Ngành An toàn thông tin"],
-                latencyMs: 550,
-                relevanceScore: 0.89,
-                sourceDocument: "DeAnTuyenSinh2025.pdf"
-            },
-            {
-                id: 17,
-                timestamp: "2026-05-12T11:08:00+07:00",
-                question: "Nộp học phí qua ngân hàng nào?",
-                answer: "Sinh viên nộp học phí theo hướng dẫn thanh toán của phòng kế hoạch tài chính.",
-                retrievedChunks: ["Tài khoản ngân hàng thu học phí", "Nội dung chuyển khoản"],
-                latencyMs: 765,
-                relevanceScore: 0.8,
-                sourceDocument: "HuongDanNopHocPhi.pdf"
-            },
-            {
-                id: 18,
-                timestamp: "2026-05-08T17:25:00+07:00",
-                question: "Trường có xe buýt nội trú không?",
-                answer: "",
-                retrievedChunks: [],
-                latencyMs: 389,
-                relevanceScore: 0.18,
-                sourceDocument: ""
-            },
-            {
-                id: 19,
-                timestamp: "2026-04-30T09:44:00+07:00",
-                question: "Điều kiện làm khóa luận tốt nghiệp là gì?",
-                answer: "Điều kiện làm khóa luận tốt nghiệp phụ thuộc số tín chỉ tích lũy và kết quả học tập theo quy định khoa.",
-                retrievedChunks: ["Điều kiện nhận khóa luận", "Quy trình xét tốt nghiệp"],
-                latencyMs: 946,
-                relevanceScore: 0.67,
-                sourceDocument: "QuyDinhTotNghiep.docx"
-            },
-            {
-                id: 20,
-                timestamp: "2026-04-22T14:12:00+07:00",
-                question: "Học quân sự của sinh viên năm nhất tổ chức ở đâu?",
-                answer: "Thông tin học giáo dục quốc phòng được công bố theo kế hoạch sinh viên từng khóa.",
-                retrievedChunks: [],
-                latencyMs: 703,
-                relevanceScore: 0.41,
-                sourceDocument: ""
-            }
-        ];
 
-        const ictuThirtyQuestionLogs = [
-            {
-                id: 101,
-                timestamp: "2026-05-21T15:00:00+07:00",
-                question: "Sổ tay sinh viên 2025-2026 áp dụng cho đối tượng nào?",
-                answer: "Sổ tay sinh viên 2025-2026 là tài liệu lưu hành nội bộ dành cho sinh viên khóa 24 của ICTU.",
-                retrievedChunks: ["Đối tượng áp dụng sổ tay sinh viên 2025-2026", "Thông tin sinh viên khóa 24"],
-                latencyMs: 436,
-                relevanceScore: 0.95,
-                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
-            },
-            {
-                id: 102,
-                timestamp: "2026-05-21T15:05:00+07:00",
-                question: "Sinh viên khóa 24 dùng sổ tay sinh viên năm học nào?",
-                answer: "Sinh viên khóa 24 dùng Sổ tay sinh viên 2025-2026.",
-                retrievedChunks: ["Sinh viên khóa 24", "Sổ tay sinh viên 2025-2026"],
-                latencyMs: 389,
-                relevanceScore: 0.94,
-                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
-            },
-            {
-                id: 103,
-                timestamp: "2026-05-21T15:10:00+07:00",
-                question: "Trong sổ tay 2025-2026, giá trị cốt lõi của Trường là gì?",
-                answer: "Giá trị cốt lõi của Trường là Đoàn kết - Tận tâm - Sáng tạo - Thực tiễn.",
-                retrievedChunks: ["Giá trị cốt lõi", "Văn hóa nhà trường"],
-                latencyMs: 511,
-                relevanceScore: 0.92,
-                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
-            },
-            {
-                id: 104,
-                timestamp: "2026-05-21T15:15:00+07:00",
-                question: "Trong sổ tay 2025-2026, triết lý giáo dục của Trường được nêu như thế nào?",
-                answer: "Triết lý giáo dục lấy người học làm trung tâm, đào tạo công dân số và nuôi dưỡng lòng nhân ái.",
-                retrievedChunks: ["Triết lý giáo dục", "Người học làm trung tâm"],
-                latencyMs: 584,
-                relevanceScore: 0.9,
-                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
-            },
-            {
-                id: 105,
-                timestamp: "2026-05-21T15:20:00+07:00",
-                question: "Sổ tay 2025-2026 nêu địa chỉ và thông tin liên hệ của Trường là gì?",
-                answer: "Sổ tay nêu địa chỉ ICTU tại phường Quyết Thắng, tỉnh Thái Nguyên cùng điện thoại, email và website liên hệ.",
-                retrievedChunks: ["Địa chỉ ICTU", "Thông tin liên hệ ICTU"],
-                latencyMs: 622,
-                relevanceScore: 0.88,
-                sourceDocument: "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
-            },
-            {
-                id: 106,
-                timestamp: "2026-05-21T15:25:00+07:00",
-                question: "Quy định về công tác người học áp dụng cho ai?",
-                answer: "Quy định áp dụng cho người học đang học tập, nghiên cứu và rèn luyện tại ICTU.",
-                retrievedChunks: ["Công tác người học", "Đối tượng áp dụng"],
-                latencyMs: 472,
-                relevanceScore: 0.86,
-                sourceDocument: "student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md"
-            },
-            {
-                id: 107,
-                timestamp: "2026-05-21T15:30:00+07:00",
-                question: "Mục đích của công tác người học là gì?",
-                answer: "Công tác người học nhằm bảo đảm mục tiêu giáo dục và quyền, nhiệm vụ của người học trong nhà trường.",
-                retrievedChunks: ["Mục đích công tác người học", "Quyền và nhiệm vụ người học"],
-                latencyMs: 531,
-                relevanceScore: 0.84,
-                sourceDocument: "student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md"
-            },
-            {
-                id: 108,
-                timestamp: "2026-05-21T15:35:00+07:00",
-                question: "Người học tại ICTU có nhiệm vụ gì?",
-                answer: "Người học phải chấp hành quy định, học tập và rèn luyện theo kế hoạch, tôn trọng nhà giáo và thực hiện nghĩa vụ học phí, bảo hiểm.",
-                retrievedChunks: ["Nhiệm vụ của sinh viên", "Chấp hành quy chế nhà trường"],
-                latencyMs: 719,
-                relevanceScore: 0.82,
-                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
-            },
-            {
-                id: 109,
-                timestamp: "2026-05-21T15:40:00+07:00",
-                question: "Người học được hưởng những quyền gì?",
-                answer: "Sinh viên được học đúng ngành, được cung cấp thông tin, sử dụng thư viện, tham gia nghiên cứu khoa học và hưởng chính sách nếu đủ điều kiện.",
-                retrievedChunks: ["Quyền của sinh viên", "Chính sách hỗ trợ người học"],
-                latencyMs: 756,
-                relevanceScore: 0.81,
-                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
-            },
-            {
-                id: 110,
-                timestamp: "2026-05-21T15:45:00+07:00",
-                question: "Người học không được làm những hành vi nào?",
-                answer: "Người học không được thực hiện hành vi pháp luật cấm, gian lận học tập, xúc phạm người khác hoặc phá hoại tài sản.",
-                retrievedChunks: ["Các hành vi người học không được làm", "Vi phạm quy định nhà trường"],
-                latencyMs: 603,
-                relevanceScore: 0.83,
-                sourceDocument: "student_handbooks/6. SO TAY SINH VIEN 2023-2024.questions.md"
-            },
-            {
-                id: 111,
-                timestamp: "2026-05-21T15:50:00+07:00",
-                question: "Điều kiện đạt danh hiệu sinh viên Khá, Giỏi, Xuất sắc là gì?",
-                answer: "Danh hiệu sinh viên căn cứ vào kết quả học tập theo thang điểm 4 và kết quả rèn luyện tương ứng.",
-                retrievedChunks: ["Danh hiệu sinh viên Khá", "Danh hiệu sinh viên Giỏi và Xuất sắc"],
-                latencyMs: 684,
-                relevanceScore: 0.87,
-                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
-            },
-            {
-                id: 112,
-                timestamp: "2026-05-21T15:55:00+07:00",
-                question: "Sinh viên học lực bình thường phải đăng ký tối thiểu bao nhiêu tín chỉ mỗi học kỳ chính?",
-                answer: "Sinh viên học lực bình thường phải đăng ký tối thiểu 14 tín chỉ mỗi học kỳ chính, trừ học kỳ cuối khóa.",
-                retrievedChunks: ["Khối lượng học tập tối thiểu", "Đăng ký tín chỉ học kỳ chính"],
-                latencyMs: 421,
-                relevanceScore: 0.93,
-                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
-            },
-            {
-                id: 113,
-                timestamp: "2026-05-21T16:00:00+07:00",
-                question: "Sinh viên học lực yếu được đăng ký bao nhiêu tín chỉ?",
-                answer: "Sinh viên học lực yếu phải đăng ký tối thiểu 10 tín chỉ và tối đa 14 tín chỉ mỗi học kỳ chính, trừ học kỳ cuối khóa.",
-                retrievedChunks: ["Sinh viên học lực yếu", "Giới hạn đăng ký tín chỉ"],
-                latencyMs: 493,
-                relevanceScore: 0.91,
-                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
-            },
-            {
-                id: 114,
-                timestamp: "2026-05-21T16:05:00+07:00",
-                question: "Học kỳ phụ được đăng ký tối đa bao nhiêu tín chỉ?",
-                answer: "Khối lượng học tập tối đa ở học kỳ phụ là 10 tín chỉ.",
-                retrievedChunks: ["Học kỳ phụ", "Tối đa 10 tín chỉ"],
-                latencyMs: 455,
-                relevanceScore: 0.92,
-                sourceDocument: "student_handbooks/1. SO TAY SINH VIEN 2018-2019.questions.md"
-            },
-            {
-                id: 115,
-                timestamp: "2026-05-21T16:10:00+07:00",
-                question: "Sinh viên cần nộp chứng chỉ trước đợt xét tốt nghiệp bao lâu?",
-                answer: "Sinh viên cần nộp các chứng chỉ bắt buộc chậm nhất trước 10 ngày trong các đợt xét tốt nghiệp.",
-                retrievedChunks: ["Chứng chỉ xét tốt nghiệp", "Thời hạn nộp trước 10 ngày"],
-                latencyMs: 537,
-                relevanceScore: 0.89,
-                sourceDocument: "student_handbooks/3. SO TAY SINH VIEN 2020-2021.questions.md"
-            },
-            {
-                id: 116,
-                timestamp: "2026-05-20T08:00:00+07:00",
-                question: "ICTU hôm nay có thông báo mới nhất gì cho sinh viên?",
-                answer: "Câu hỏi realtime cần kiểm tra luồng web search để lấy thông báo mới nhất từ nguồn ICTU chính thức.",
-                retrievedChunks: ["Tin mới ICTU", "Thông báo sinh viên"],
-                latencyMs: 1046,
-                relevanceScore: 0.71,
-                sourceDocument: "ictu.edu.vn/thong-bao"
-            },
-            {
-                id: 117,
-                timestamp: "2026-05-20T08:10:00+07:00",
-                question: "ICTU tuyển sinh năm nay có thông tin mới nhất nào?",
-                answer: "Cần tra cứu trang tuyển sinh ICTU để lấy thông tin mới nhất theo thời điểm hỏi.",
-                retrievedChunks: ["Tuyển sinh ICTU", "Tin tuyển sinh mới nhất"],
-                latencyMs: 982,
-                relevanceScore: 0.76,
-                sourceDocument: "tuyensinh.ictu.edu.vn"
-            },
-            {
-                id: 118,
-                timestamp: "2026-05-20T08:20:00+07:00",
-                question: "ICTU có lịch tuyển sinh mới nhất không?",
-                answer: "Cần dùng web search để kiểm tra lịch tuyển sinh mới nhất trên kênh tuyển sinh chính thức.",
-                retrievedChunks: ["Lịch tuyển sinh", "Kế hoạch tuyển sinh"],
-                latencyMs: 917,
-                relevanceScore: 0.74,
-                sourceDocument: "tuyensinh.ictu.edu.vn/lich-tuyen-sinh"
-            },
-            {
-                id: 119,
-                timestamp: "2026-05-20T08:30:00+07:00",
-                question: "ICTU có tin tức mới nhất về học phí không?",
-                answer: "Cần kiểm tra thông báo học phí mới nhất; nếu chưa có thông báo thì nêu rõ chưa tìm thấy cập nhật chính thức.",
-                retrievedChunks: ["Thông báo học phí", "Tin tài chính sinh viên"],
-                latencyMs: 1128,
-                relevanceScore: 0.68,
-                sourceDocument: "ictu.edu.vn/thong-bao-hoc-phi"
-            },
-            {
-                id: 120,
-                timestamp: "2026-05-20T08:40:00+07:00",
-                question: "ICTU có thông báo mới về bảo hiểm y tế sinh viên không?",
-                answer: "Cần dùng web search vì thông báo BHYT thay đổi theo từng năm hoặc từng đợt.",
-                retrievedChunks: ["BHYT sinh viên", "Thông báo bảo hiểm y tế"],
-                latencyMs: 895,
-                relevanceScore: 0.7,
-                sourceDocument: "ictu.edu.vn/bhyt-sinh-vien"
-            },
-            {
-                id: 121,
-                timestamp: "2026-05-20T08:50:00+07:00",
-                question: "ICTU cập nhật lịch học mới nhất ở đâu?",
-                answer: "Câu trả lời nên ưu tiên nguồn chính thức của ICTU và nêu đường dẫn nếu web search tìm được.",
-                retrievedChunks: ["Lịch học mới nhất", "Cổng thông tin sinh viên ICTU"],
-                latencyMs: 811,
-                relevanceScore: 0.73,
-                sourceDocument: "ictu.edu.vn/lich-hoc"
-            },
-            {
-                id: 122,
-                timestamp: "2026-05-20T09:00:00+07:00",
-                question: "ICTU cập nhật lịch thi mới nhất cho sinh viên ở đâu?",
-                answer: "Cần tra cứu thông báo lịch thi mới nhất trên nguồn chính thức và kèm ngày thông báo nếu có.",
-                retrievedChunks: ["Lịch thi sinh viên", "Thông báo lịch thi"],
-                latencyMs: 867,
-                relevanceScore: 0.75,
-                sourceDocument: "ictu.edu.vn/lich-thi"
-            },
-            {
-                id: 123,
-                timestamp: "2026-05-20T09:10:00+07:00",
-                question: "ICTU gần đây có thông báo xét tốt nghiệp nào?",
-                answer: "Cần dùng web search để tìm thông báo xét tốt nghiệp gần đây; corpus nội bộ chỉ hỗ trợ quy định chung.",
-                retrievedChunks: ["Xét tốt nghiệp", "Thông báo tốt nghiệp ICTU"],
-                latencyMs: 974,
-                relevanceScore: 0.72,
-                sourceDocument: "ictu.edu.vn/xet-tot-nghiep"
-            },
-            {
-                id: 124,
-                timestamp: "2026-05-20T09:20:00+07:00",
-                question: "ICTU có tin mới về việc làm hoặc tuyển dụng sinh viên không?",
-                answer: "Cần kiểm tra các tin việc làm, tuyển dụng hoặc hướng nghiệp mới nhất liên quan đến sinh viên ICTU.",
-                retrievedChunks: ["Việc làm sinh viên", "Tin tuyển dụng ICTU"],
-                latencyMs: 786,
-                relevanceScore: 0.78,
-                sourceDocument: "ictu.edu.vn/viec-lam"
-            },
-            {
-                id: 125,
-                timestamp: "2026-05-20T09:30:00+07:00",
-                question: "ICTU năm nay có thông báo học bổng mới nhất không?",
-                answer: "Cần tra cứu thông báo học bổng mới nhất trong năm; nếu không thấy nguồn chính thức thì nêu rõ đang cập nhật.",
-                retrievedChunks: ["Học bổng ICTU", "Thông báo học bổng"],
-                latencyMs: 923,
-                relevanceScore: 0.69,
-                sourceDocument: "ictu.edu.vn/hoc-bong"
-            },
-            {
-                id: 126,
-                timestamp: "2026-05-20T09:40:00+07:00",
-                question: "ICTU có cập nhật mới nhất về email sinh viên không?",
-                answer: "Cần kiểm tra thông báo hoặc hướng dẫn mới nhất về email sinh viên; FAQ nội bộ chỉ làm thông tin nền.",
-                retrievedChunks: [],
-                latencyMs: 654,
-                relevanceScore: 0.35,
-                sourceDocument: ""
-            },
-            {
-                id: 127,
-                timestamp: "2026-05-20T09:50:00+07:00",
-                question: "ICTU có thông báo mới về nhập học cho tân sinh viên không?",
-                answer: "Cần kiểm tra thông báo nhập học mới nhất cho tân sinh viên trên kênh ICTU chính thức.",
-                retrievedChunks: ["Nhập học tân sinh viên", "Hồ sơ nhập học"],
-                latencyMs: 842,
-                relevanceScore: 0.77,
-                sourceDocument: "tuyensinh.ictu.edu.vn/nhap-hoc"
-            },
-            {
-                id: 128,
-                timestamp: "2026-05-20T10:00:00+07:00",
-                question: "ICTU có tin tức mới nhất về cổng thông tin sinh viên không?",
-                answer: "Cần dùng web search để tìm thông báo mới nhất về cổng thông tin sinh viên hoặc hệ thống phục vụ sinh viên.",
-                retrievedChunks: [],
-                latencyMs: 701,
-                relevanceScore: 0.42,
-                sourceDocument: ""
-            },
-            {
-                id: 129,
-                timestamp: "2026-05-20T10:10:00+07:00",
-                question: "ICTU có thông báo mới nhất về ký túc xá không?",
-                answer: "Cần kiểm tra thông báo mới nhất về ký túc xá, nội trú hoặc dịch vụ sinh viên.",
-                retrievedChunks: ["Ký túc xá ICTU", "Thông báo nội trú"],
-                latencyMs: 914,
-                relevanceScore: 0.66,
-                sourceDocument: "ictu.edu.vn/ky-tuc-xa"
-            },
-            {
-                id: 130,
-                timestamp: "2026-05-20T10:20:00+07:00",
-                question: "ICTU có lịch sự kiện sinh viên mới nhất hôm nay không?",
-                answer: "Cần tra cứu lịch sự kiện hoặc tin sinh viên mới nhất trong ngày, kèm nguồn và thời điểm truy cập.",
-                retrievedChunks: [],
-                latencyMs: 593,
-                relevanceScore: 0.31,
-                sourceDocument: ""
-            }
-        ];
 
-        const dashboardMockLogs = [...mockLogs, ...ictuThirtyQuestionLogs];
-
-        let allLogs = [...dashboardMockLogs];
+        let allLogs = [];
+        let dashboardErrorMessage = '';
         let testQuestions = [];
         let activeTestQuestionGroup = "all";
         let currentRange = "today";
@@ -1355,45 +850,43 @@
             toast: document.getElementById("toast")
         };
 
-        async function fetchLogs() {
-            // TODO: replace mock fallback once the production evaluation API records full RAG fields.
-            try {
-                const response = await fetch("/api/logs");
-                if (!response.ok) return [...dashboardMockLogs];
-                const logs = await response.json();
-                return Array.isArray(logs) && logs.length ? logs : [...dashboardMockLogs];
-            } catch {
-                return [...dashboardMockLogs];
+        async function fetchJson(url) {
+            const response = await fetch(url);
+            if (!response.ok) {
+                let detail = "";
+                try {
+                    const payload = await response.json();
+                    detail = payload.detail || payload.msg || payload.error || "";
+                } catch {
+                    detail = await response.text();
+                }
+                throw new Error(`${url}: HTTP ${response.status}${detail ? ` - ${detail}` : ""}`);
             }
+            return response.json();
+        }
+
+        async function fetchLogs() {
+            const logs = await fetchJson("/api/logs");
+            if (!Array.isArray(logs)) throw new Error("/api/logs: phản hồi không phải danh sách log.");
+            return logs;
         }
 
         async function fetchMetrics() {
-            // TODO: replace mock-derived cards with this response when backend metrics include all dashboard fields.
-            try {
-                const response = await fetch("/api/metrics");
-                return response.ok ? response.json() : null;
-            } catch {
-                return null;
-            }
+            return fetchJson("/api/metrics");
         }
 
         async function fetchTestQuestions() {
-            try {
-                const response = await fetch("/api/test-questions");
-                if (!response.ok) return [];
-                const questions = await response.json();
-                return Array.isArray(questions) ? questions : [];
-            } catch {
-                return [];
-            }
+            const questions = await fetchJson("/api/test-questions");
+            if (!Array.isArray(questions)) throw new Error("/api/test-questions: phản hồi không phải danh sách.");
+            return questions;
         }
 
         function isHit(log) {
-            return Boolean(log.sourceDocument && log.retrievedChunks && log.retrievedChunks.length > 0);
+            return Boolean(log.hasSources || (log.sourceDocument && log.retrievedChunks && log.retrievedChunks.length > 0));
         }
 
         function isFailed(log) {
-            return !log.answer || !isHit(log);
+            return !isHit(log);
         }
 
         function getStatus(log) {
@@ -1712,7 +1205,7 @@
                 const hit = isHit(log);
                 const status = getStatus(log);
                 const statusClass = status.toLowerCase();
-                const source = log.sourceDocument || "Không tìm thấy nguồn";
+                const source = log.sourceDocument || (log.sourcesReturned ? `${log.sourcesReturned} nguồn` : "Không tìm thấy nguồn");
                 const relevanceClass = relevanceColor(log.relevanceScore);
                 const relevancePercent = Math.round(log.relevanceScore * 100);
 
@@ -1737,7 +1230,8 @@
                 `;
             }).join("");
 
-            els.emptyState.hidden = filtered.length > 0;
+            els.emptyState.textContent = dashboardErrorMessage || "Chưa có dữ liệu đánh giá.";
+            els.emptyState.hidden = filtered.length > 0 && !dashboardErrorMessage;
             const shownStart = filtered.length ? start + 1 : 0;
             const shownEnd = Math.min(start + rowsPerPage, filtered.length);
             els.pageInfo.textContent = `${shownStart}-${shownEnd} / ${filtered.length}`;
@@ -1877,10 +1371,15 @@
         });
 
         async function init() {
-            allLogs = await fetchLogs();
-            testQuestions = await fetchTestQuestions();
-            // TODO: replace with real API by using returned metrics if backend pre-aggregates values.
-            await fetchMetrics();
+            try {
+                allLogs = await fetchLogs();
+                testQuestions = await fetchTestQuestions();
+                await fetchMetrics();
+            } catch (error) {
+                allLogs = [];
+                testQuestions = [];
+                dashboardErrorMessage = error instanceof Error ? error.message : String(error);
+            }
             const savedTheme = localStorage.getItem("ictu-eval-theme") || "light";
             setTheme(savedTheme === "dark" ? "dark" : "light");
             renderDashboard();

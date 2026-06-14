@@ -64,20 +64,27 @@ class RateLimitMetricsApiTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_429_stats()
 
-    def _get_token(self, client: TestClient) -> str:
-        response = client.post("/api/v1/auth/token", data={"partner_key": settings.PARTNER_API_KEY})
-        self.assertEqual(response.status_code, 200)
-        return response.json()["access_token"]
+    def _login_admin(self, client: TestClient) -> None:
+        login_page = client.get("/login")
+        csrf_token = login_page.text.split('name="csrf_token" value="', 1)[1].split('"', 1)[0]
+        response = client.post(
+            "/login",
+            data={
+                "username": settings.ADMIN_USERNAME,
+                "password": settings.ADMIN_PASSWORD,
+                "next_path": "/",
+                "csrf_token": csrf_token,
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
 
     def test_metrics_endpoint_returns_recorded_429_events(self) -> None:
         record_429("api_rate_limiter", detail="burst traffic")
         client = TestClient(main.app)
-        token = self._get_token(client)
+        self._login_admin(client)
 
-        response = client.get(
-            "/api/v1/metrics/rate-limit-429?limit_recent=5",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        response = client.get("/api/v1/metrics/rate-limit-429?limit_recent=5")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -88,18 +95,12 @@ class RateLimitMetricsApiTests(unittest.TestCase):
     def test_metrics_reset_endpoint_clears_counters(self) -> None:
         record_429("llm_provider", detail="model-limited")
         client = TestClient(main.app)
-        token = self._get_token(client)
+        self._login_admin(client)
 
-        reset_response = client.post(
-            "/api/v1/metrics/rate-limit-429/reset",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        reset_response = client.post("/api/v1/metrics/rate-limit-429/reset")
         self.assertEqual(reset_response.status_code, 200)
 
-        stats_response = client.get(
-            "/api/v1/metrics/rate-limit-429",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        stats_response = client.get("/api/v1/metrics/rate-limit-429")
         self.assertEqual(stats_response.status_code, 200)
         self.assertEqual(stats_response.json()["totals"], {})
 

@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-06-14T01:57:00+07:00",
+  "collect_only": {
+    "total": 195,
+    "command": ".\\venv\\Scripts\\python.exe -m pytest --collect-only -q"
+  },
+  "full_suite": {
+    "total": 195,
+    "passed": 194,
+    "failed": 0,
+    "skipped": 1,
+    "warnings": 4,
+    "command": ".\\venv\\Scripts\\python.exe -m pytest -q"
+  },
+  "graduation_acceptance": {
+    "selected": 29,
+    "passed": 29,
+    "failed": 0,
+    "skipped": 0,
+    "deselected": 166,
+    "command": ".\\venv\\Scripts\\python.exe -m pytest -m graduation_acceptance -q"
+  }
+}

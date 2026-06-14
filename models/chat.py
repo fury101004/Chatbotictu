@@ -36,12 +36,17 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     sources: Optional[list[str]] = None
-    source_details: Optional[list[dict[str, str]]] = None
+    source_details: Optional[list[dict[str, Any]]] = None
     mode: Optional[str] = None
     chunks_used: Optional[int] = None
     language: Optional[str] = None
     rag_tool: Optional[str] = None
     rag_route: Optional[str] = None
+    selected_tool: Optional[str] = None
+    routing_reason: Optional[str] = None
+    confidence: Optional[float] = None
+    fallback_reason: Optional[str] = None
+    fusion_method: Optional[str] = None
     llm_model: Optional[str] = None
     intent: Optional[str] = None
     needs_clarification: Optional[bool] = None
@@ -69,6 +74,11 @@ class RAGResult:
     chunks_used: int = 0
     rag_tool: Optional[str] = None
     rag_route: Optional[str] = None
+    selected_tool: Optional[str] = None
+    routing_reason: Optional[str] = None
+    confidence: Optional[float] = None
+    fallback_reason: Optional[str] = None
+    fusion_method: Optional[str] = None
 
 
 class ChatGraphState(TypedDict, total=False):
@@ -91,11 +101,16 @@ class ChatGraphState(TypedDict, total=False):
     target_file: Optional[str]
     context_text: str
     sources: list[str]
-    source_details: list[dict[str, str]]
+    source_details: list[dict[str, Any]]
     chunks_used: int
     chunks: list[RetrievedChunk]
     rag_tool: str
     rag_route: str
+    selected_tool: str
+    routing_reason: str
+    confidence: float
+    fallback_reason: str
+    fusion_method: str
     llm_model: str
     selected_llm_model: str
     persistent_memory: list[dict[str, str]]

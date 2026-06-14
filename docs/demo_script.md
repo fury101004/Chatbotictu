@@ -63,7 +63,7 @@ Câu hỏi gợi ý:
 
 Điểm cần nói:
 
-- bot route sang nhóm `school_policy_rag`;
+- bot route sang nhóm `academic_policy_rag`;
 - câu trả lời ưu tiên dữ liệu nội bộ, không tự bịa;
 - nếu câu hỏi thiếu năm học/đợt áp dụng, bot có thể hỏi lại để tránh trả lời sai.
 

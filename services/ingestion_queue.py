@@ -11,21 +11,23 @@ from typing import Any, Awaitable, Callable
 from fastapi import BackgroundTasks
 
 from config.settings import settings
+from repositories.ingestion_repository import IngestionJobRepository, TERMINAL_INGESTION_STATUSES
 
 
 @dataclass(slots=True)
 class QueuedUploadFile:
     filename: str
     content: bytes
+    content_type: str = ""
 
     async def read(self) -> bytes:
         return self.content
 
 
 class IngestionQueue:
-    def __init__(self, *, ttl_seconds: int = 3600) -> None:
+    def __init__(self, *, ttl_seconds: int = 3600, db_path: str | None = None) -> None:
         self.ttl_seconds = ttl_seconds
-        self._jobs: dict[str, dict[str, Any]] = {}
+        self._repository = IngestionJobRepository(db_path)
 
     async def enqueue_upload(
         self,
@@ -49,11 +51,12 @@ class IngestionQueue:
                 QueuedUploadFile(
                     filename=str(getattr(upload, "filename", "") or "upload.txt"),
                     content=content,
+                    content_type=str(getattr(upload, "content_type", "") or ""),
                 )
             )
 
         now = time.time()
-        self._jobs[job_id] = {
+        job = {
             "job_id": job_id,
             "status": "queued",
             "progress": 0,
@@ -65,6 +68,7 @@ class IngestionQueue:
             "created_at": now,
             "updated_at": now,
         }
+        self._repository.create(job)
         background_tasks.add_task(
             self._run_upload_job,
             job_id,
@@ -85,23 +89,31 @@ class IngestionQueue:
         client_start_time: float | None,
         client_total_size: int | None,
     ) -> None:
-        self._update(job_id, status="running", progress=10)
+        self._update(job_id, status="validating", progress=10)
+
+        def progress_callback(status: str, progress: int) -> None:
+            self._update(job_id, status=status, progress=progress)
+
         try:
             result = await processor(
                 files=files,
                 tool_name=tool_name,
                 client_start_time=client_start_time,
                 client_total_size=client_total_size,
+                progress_callback=progress_callback,
             )
             status = "completed" if result.get("status") in {"success", "partial"} else "failed"
             error = None if status == "completed" else str(result.get("msg") or "Ingestion failed")
             self._update(job_id, status=status, progress=100, result=result, error=error)
+        except asyncio.CancelledError:
+            self._update(job_id, status="interrupted", error="Ingestion task was interrupted.")
+            raise
         except Exception as exc:
             self._update(job_id, status="failed", progress=100, error=str(exc))
 
     def get_status(self, job_id: str) -> dict[str, Any]:
         self.cleanup()
-        job = self._jobs.get(job_id)
+        job = self._repository.get(job_id)
         if job is None:
             return {"job_id": job_id, "status": "not_found", "progress": 0, "error": "Job not found"}
         return dict(job)
@@ -110,25 +122,18 @@ class IngestionQueue:
         while True:
             status = self.get_status(job_id)
             yield f"event: progress\ndata: {json.dumps(status, ensure_ascii=False)}\n\n"
-            if status.get("status") in {"completed", "failed", "not_found"}:
+            if status.get("status") in {*TERMINAL_INGESTION_STATUSES, "not_found"}:
                 break
             await asyncio.sleep(interval_seconds)
 
     def cleanup(self) -> None:
         cutoff = time.time() - self.ttl_seconds
-        stale = [job_id for job_id, job in self._jobs.items() if float(job.get("created_at", 0)) < cutoff]
-        for job_id in stale:
-            self._jobs.pop(job_id, None)
+        self._repository.delete_stale_terminal(cutoff)
 
     def _update(self, job_id: str, **changes: Any) -> None:
-        job = self._jobs.get(job_id)
-        if job is None:
-            return
-        job.update(changes)
-        job["updated_at"] = time.time()
+        self._repository.update(job_id, updated_at=time.time(), **changes)
 
 
 @lru_cache(maxsize=1)
 def get_ingestion_queue() -> IngestionQueue:
     return IngestionQueue(ttl_seconds=3600)
-

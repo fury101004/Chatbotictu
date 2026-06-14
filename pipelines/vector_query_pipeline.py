@@ -9,6 +9,11 @@ from typing import Any, Callable, Optional
 from rank_bm25 import BM25Okapi
 
 
+FUSION_RRF = "rrf"
+FUSION_WEIGHTED = "weighted"
+SUPPORTED_FUSION_METHODS = frozenset({FUSION_RRF, FUSION_WEIGHTED})
+
+
 def normalize_bm25_text(text: str) -> str:
     normalized = unicodedata.normalize("NFKD", str(text or "").casefold())
     normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
@@ -65,6 +70,7 @@ def top_bm25_candidates(
     all_ids: list[str],
     limit: int,
     tokenize_text_fn: Callable[[str], list[str]],
+    allowed_ids: Optional[set[str]] = None,
 ) -> tuple[dict[str, float], list[str]]:
     if bm25_index is None or not all_ids:
         return {}, []
@@ -74,13 +80,64 @@ def top_bm25_candidates(
         return {}, []
 
     bm25_raw = bm25_index.get_scores(query_tokens)
-    raw_scores = {doc_id: float(bm25_raw[index]) for index, doc_id in enumerate(all_ids)}
+    raw_scores = {
+        doc_id: float(bm25_raw[index])
+        for index, doc_id in enumerate(all_ids)
+        if allowed_ids is None or doc_id in allowed_ids
+    }
     ranked_ids = [
         doc_id
         for doc_id, score in sorted(raw_scores.items(), key=lambda item: item[1], reverse=True)
         if score > 0
     ][:limit]
     return normalize_scores(raw_scores), ranked_ids
+
+
+def reciprocal_rank_fusion(
+    rankings: list[list[str]],
+    *,
+    k: int = 60,
+) -> tuple[dict[str, float], list[str]]:
+    if k < 1:
+        raise ValueError("RRF k must be at least 1")
+
+    scores: dict[str, float] = {}
+    first_seen: dict[str, int] = {}
+    next_index = 0
+    for ranking in rankings:
+        for rank, doc_id in enumerate(ranking, start=1):
+            if doc_id not in first_seen:
+                first_seen[doc_id] = next_index
+                next_index += 1
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+
+    ranked_ids = sorted(scores, key=lambda doc_id: (-scores[doc_id], first_seen[doc_id]))
+    return scores, ranked_ids
+
+
+def weighted_score_fusion(
+    candidate_ids: list[str],
+    *,
+    vector_scores: dict[str, float],
+    bm25_scores: dict[str, float],
+    alpha: float,
+) -> tuple[dict[str, float], list[str]]:
+    bounded_alpha = max(0.0, min(float(alpha), 1.0))
+    scores = {
+        doc_id: (
+            bounded_alpha * vector_scores.get(doc_id, 0.0)
+            + (1.0 - bounded_alpha) * bm25_scores.get(doc_id, 0.0)
+        )
+        for doc_id in candidate_ids
+    }
+    first_seen = {doc_id: index for index, doc_id in enumerate(candidate_ids)}
+    ranked_ids = sorted(scores, key=lambda doc_id: (-scores[doc_id], first_seen[doc_id]))
+    return scores, ranked_ids
+
+
+def normalize_fusion_method(value: str) -> str:
+    normalized = str(value or "").strip().casefold()
+    return normalized if normalized in SUPPORTED_FUSION_METHODS else FUSION_RRF
 
 
 def run_hybrid_query(
@@ -90,6 +147,9 @@ def run_hybrid_query(
     user_id: str,
     n_results: int,
     alpha: float,
+    fusion_method: str,
+    rrf_k: int,
+    metadata_filter: Optional[dict[str, Any]],
     bm25_index: Optional[BM25Okapi],
     all_ids: list[str],
     tokenize_text_fn: Callable[[str], list[str]],
@@ -105,38 +165,49 @@ def run_hybrid_query(
 
     vector_candidate_limit = max(n_results + 15, n_results * 3)
     bm25_candidate_limit = max(n_results + 10, n_results * 2)
-    vector_results = collection.query(
-        query_texts=[query],
-        n_results=vector_candidate_limit,
-        include=["documents", "metadatas", "distances"],
-    )
+    vector_query_kwargs: dict[str, Any] = {
+        "query_texts": [query],
+        "n_results": vector_candidate_limit,
+        "include": ["documents", "metadatas", "distances"],
+    }
+    if metadata_filter:
+        vector_query_kwargs["where"] = metadata_filter
+    vector_results = collection.query(**vector_query_kwargs)
 
     vector_ids = vector_results["ids"][0]
     vector_distances = vector_results["distances"][0]
     cosine_raw = {doc_id: 1.0 - distance for doc_id, distance in zip(vector_ids, vector_distances)}
     normalized_cosine = normalize_scores(cosine_raw)
+    allowed_ids: Optional[set[str]] = None
+    if metadata_filter:
+        filtered_payload = collection.get(where=metadata_filter, include=["metadatas"])
+        allowed_ids = {str(doc_id) for doc_id in filtered_payload.get("ids", [])}
+
     normalized_bm25, bm25_ids = top_bm25_candidates(
         query,
         bm25_index=bm25_index,
         all_ids=all_ids,
         limit=bm25_candidate_limit,
         tokenize_text_fn=tokenize_text_fn,
+        allowed_ids=allowed_ids,
     )
 
     candidate_ids = list(dict.fromkeys([*vector_ids, *bm25_ids]))
-    if bot_rule_id not in candidate_ids:
-        candidate_ids.append(bot_rule_id)
+    selected_fusion_method = normalize_fusion_method(fusion_method)
+    if selected_fusion_method == FUSION_WEIGHTED:
+        fusion_scores, ranked_ids = weighted_score_fusion(
+            candidate_ids,
+            vector_scores=normalized_cosine,
+            bm25_scores=normalized_bm25,
+            alpha=alpha,
+        )
+    else:
+        fusion_scores, ranked_ids = reciprocal_rank_fusion(
+            [list(vector_ids), list(bm25_ids)],
+            k=rrf_k,
+        )
 
-    hybrid_scores: dict[str, float] = {}
-    for doc_id in candidate_ids:
-        cosine_score = normalized_cosine.get(doc_id, 0.0)
-        bm25_score = normalized_bm25.get(doc_id, 0.0)
-        hybrid_scores[doc_id] = alpha * cosine_score + (1 - alpha) * bm25_score
-        if doc_id == bot_rule_id:
-            hybrid_scores[doc_id] = 2.0
-
-    ranked_ids = [doc_id for doc_id, _score in sorted(hybrid_scores.items(), key=lambda item: item[1], reverse=True)]
-    top_ids = ranked_ids[: n_results + 5]
+    top_ids = list(dict.fromkeys([bot_rule_id, *ranked_ids[: n_results + 5]]))
     payload = collection.get(ids=top_ids, include=["documents", "metadatas"])
     documents = payload["documents"]
     metadatas = payload["metadatas"]
@@ -162,9 +233,12 @@ def run_hybrid_query(
             rule_meta = metadata
             continue
 
-        metadata["hybrid_score"] = round(hybrid_scores.get(doc_id, 0.0), 6)
+        metadata["fusion_method"] = selected_fusion_method
+        metadata["fusion_score"] = round(fusion_scores.get(doc_id, 0.0), 8)
+        metadata["hybrid_score"] = metadata["fusion_score"]
         metadata["vector_score"] = round(normalized_cosine.get(doc_id, 0.0), 6)
         metadata["bm25_score"] = round(normalized_bm25.get(doc_id, 0.0), 6)
+        metadata["pre_rerank_rank"] = ranked_ids.index(doc_id) + 1
         normal_docs.append(document)
         normal_metas.append(metadata)
 
@@ -189,6 +263,7 @@ def run_hybrid_query(
             "timestamp": datetime.now().isoformat(),
             "sources": [meta.get("source", "") for meta in final_metas if meta.get("source") != "BOT_RULE"],
             "retrieved_ids": ranked_ids[:n_results],
+            "fusion_method": selected_fusion_method,
         }
     )
 
@@ -198,9 +273,14 @@ def run_hybrid_query(
         if metadata.get("source") not in ["BOT_RULE", None]:
             stats["popular_files"][metadata["source"]] += 1
 
-    print(f"QUERY OK | {elapsed:.3f}s | alpha={alpha} | {len(final_docs)} results | User: {user_id[-8:]}")
+    print(
+        f"QUERY OK | {elapsed:.3f}s | fusion={selected_fusion_method} | "
+        f"rrf_k={rrf_k} | alpha={alpha} | {len(final_docs)} results | User: {user_id[-8:]}"
+    )
     return final_docs, final_metas, {
         "session_history": list(session_memory[user_id]),
         "stats": stats.copy(),
         "sources": list({meta.get("source") for meta in final_metas if meta.get("source") != "BOT_RULE"}),
+        "fusion_method": selected_fusion_method,
+        "rrf_k": rrf_k,
     }

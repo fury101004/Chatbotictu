@@ -51,12 +51,15 @@ Workflow mới được tách rõ thành các bước:
 ### route_rag_tool
 
 - route theo keyword và heuristic;
-- giữ `fallback_rag` cho câu mơ hồ hoặc giao thoa nhiều nhóm.
+- chọn một trong bốn tool kiểm soát: handbook, academic policy, FAQ hoặc general ICTU;
+- ghi `selected_tool`, `routing_reason`, `confidence`, `fallback_reason`.
 
 ### retrieve_context
 
 - gọi retriever đúng theo nhóm tri thức;
-- kết hợp vector + BM25;
+- lọc corpus và metadata độc lập theo từng tool;
+- kết hợp ranking vector + BM25 bằng RRF mặc định;
+- Cross-Encoder rerank sau fusion;
 - đánh dấu trường hợp thiếu context;
 - phát hiện câu hỏi thiếu năm học / khóa / học kỳ / đợt để hỏi lại.
 
@@ -102,15 +105,16 @@ Mỗi chunk lưu:
 - document type;
 - tool name;
 - metadata phục vụ ranking và hiển thị.
+- `fusion_method`, `pre_rerank_rank`, `post_rerank_rank` trong kết quả retrieval.
 
 ## 5. Hybrid Retrieval
 
 Điểm nâng cấp chính:
 
-- trước đây BM25 chỉ hỗ trợ chấm trên candidate lấy từ vector search;
-- hiện tại candidate pool được lấy từ cả vector search và BM25;
-- điểm vector và BM25 được chuẩn hóa rồi trộn lại;
-- bot rule vẫn được giữ top priority.
+- Vector Search và BM25 tạo hai ranking độc lập.
+- RRF mặc định tính `RRF(d) = Σ 1 / (k + rank_i(d))`, với `k=60` và cấu hình được.
+- Kết quả được gộp theo chunk ID ổn định; weighted fusion cũ vẫn có thể bật bằng cấu hình.
+- Cross-Encoder rerank chạy sau RRF; bot rule vẫn được giữ riêng ở top priority.
 
 Lợi ích:
 
@@ -136,7 +140,7 @@ Lợi ích:
 
 ## 8. Hướng phát triển
 
-- Bổ sung reranker chuyên dụng cho top-k retrieval.
+- Theo dõi chất lượng Cross-Encoder rerank và điều chỉnh candidate limit theo benchmark thực.
 - Thêm dashboard thống kê query, source hit rate và latency.
 - Tách prompt/routing rule thành cấu hình dễ chỉnh cho admin.
 - Thêm đánh giá tự động theo bộ câu hỏi vàng.

@@ -39,7 +39,7 @@ class LangChainRetrieverTests(unittest.TestCase):
 
     def test_vector_store_retriever_queries_hybrid_search(self) -> None:
         retriever = VectorStoreRetriever(
-            query_fn=lambda query, user_id, n_results, alpha: (
+            query_fn=lambda query, user_id, n_results, **kwargs: (
                 ["Chunk A"],
                 [{"source": "policy.md", "title": "Hoc phi"}],
                 {},
@@ -58,7 +58,7 @@ class LangChainRetrieverTests(unittest.TestCase):
 
     def test_vector_store_retriever_filters_exact_academic_year(self) -> None:
         retriever = VectorStoreRetriever(
-            query_fn=lambda query, user_id, n_results, alpha: (
+            query_fn=lambda query, user_id, n_results, **kwargs: (
                 ["Rule", "Chunk 2024", "Chunk 2025", "Other"],
                 [
                     {"source": "BOT_RULE"},

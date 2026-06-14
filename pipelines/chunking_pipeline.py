@@ -123,10 +123,12 @@ def infer_document_type(source_name: str, filename: str, tool_name: Optional[str
         return "qa_pair"
     if tool_name == "student_handbook_rag":
         return "student_handbook"
-    if tool_name == "school_policy_rag":
-        return "school_policy"
+    if tool_name == "academic_policy_rag":
+        return "academic_policy"
     if tool_name == "student_faq_rag":
         return "student_faq"
+    if tool_name == "general_ictu_rag":
+        return "general_ictu"
 
     if any(keyword in haystack for keyword in ["quyet dinh", "quy dinh", "quy che", "thong tu", "nghi dinh", "luat"]):
         return "policy_document"

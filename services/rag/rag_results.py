@@ -65,6 +65,11 @@ def _build_result_from_documents(
 
     context_text = build_context_text(context_parts)
     chunks_used = len(limited_chunks)
+    fusion_methods = {
+        str(chunk.metadata.get("fusion_method") or "")
+        for chunk in chunks
+        if chunk.metadata.get("fusion_method")
+    }
 
     return RAGResult(
         context_text=context_text,
@@ -75,6 +80,8 @@ def _build_result_from_documents(
         chunks_used=chunks_used,
         rag_tool=tool_name,
         rag_route=route_name,
+        selected_tool=tool_name,
+        fusion_method=sorted(fusion_methods)[0] if fusion_methods else None,
     )
 
 
@@ -118,6 +125,7 @@ def _build_result_from_matches(
         chunks_used=len(chunks),
         rag_tool=tool_name,
         rag_route=route_name,
+        selected_tool=tool_name,
     )
 
 
@@ -163,6 +171,11 @@ def _merge_web_search_result(local_result: RAGResult, web_result: Optional[RAGRe
         chunks_used=local_result.chunks_used + web_result.chunks_used,
         rag_tool=local_result.rag_tool,
         rag_route=local_result.rag_route,
+        selected_tool=local_result.selected_tool or local_result.rag_tool,
+        routing_reason=local_result.routing_reason,
+        confidence=local_result.confidence,
+        fallback_reason=local_result.fallback_reason,
+        fusion_method=local_result.fusion_method,
     )
 
 
@@ -193,6 +206,7 @@ def _build_scope_guard_result(route_name: str, tool_name: Optional[str]) -> RAGR
         chunks_used=0,
         rag_tool=tool_name,
         rag_route=route_name,
+        selected_tool=tool_name,
     )
 
 

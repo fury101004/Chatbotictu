@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from config.rag_tools import DEFAULT_RAG_TOOL, FALLBACK_RAG_NODE, RAG_TOOL_ORDER, RAG_TOOL_PROFILES
+from config.rag_tools import (
+    DEFAULT_RAG_TOOL,
+    FALLBACK_RAG_NODE,
+    RAG_TOOL_ORDER,
+    RAG_TOOL_PROFILES,
+    get_tool_metadata_filter,
+)
 from models.chat import RAGResult
 from pipelines.retrieval_pipeline import (
     RetrievalRuntime,
@@ -12,7 +18,6 @@ from pipelines.retrieval_pipeline import (
     keyword_route_score as _keyword_route_score_impl,
     normalize_retrieval_priority as _normalize_retrieval_priority_impl,
     normalize_retrieval_source as _normalize_retrieval_source_impl,
-    retrieve_fallback_context as _retrieve_fallback_context_impl,
     retrieve_general_context as _retrieve_general_context_impl,
     retrieve_tool_context as _retrieve_tool_context_impl,
     route_rag_tool_by_keyword as _route_rag_tool_by_keyword_impl,
@@ -74,8 +79,13 @@ _STUDENT_HANDBOOK_ROUTE_CUES = (
     "hoc cai thien",
     "cai thien diem",
     "diem hoc phan",
+    "dieu kien tot nghiep",
+    "dieu kien xet tot nghiep",
+    "dieu kien cong nhan tot nghiep",
+    "duoc xet tot nghiep",
+    "duoc cong nhan tot nghiep",
 )
-_SCHOOL_POLICY_ROUTE_CUES = (
+_ACADEMIC_POLICY_ROUTE_CUES = (
     "bao hiem y te",
     "bhyt",
     "chinh sach",
@@ -85,11 +95,12 @@ _SCHOOL_POLICY_ROUTE_CUES = (
 )
 _NORMALIZED_STUDENT_FAQ_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _STUDENT_FAQ_ROUTE_CUES)
 _NORMALIZED_STUDENT_HANDBOOK_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _STUDENT_HANDBOOK_ROUTE_CUES)
-_NORMALIZED_SCHOOL_POLICY_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _SCHOOL_POLICY_ROUTE_CUES)
+_NORMALIZED_ACADEMIC_POLICY_ROUTE_CUES = tuple(_normalize_for_match(cue) for cue in _ACADEMIC_POLICY_ROUTE_CUES)
 _ROUTE_CUE_BOOSTS = {
     "student_faq_rag": (_NORMALIZED_STUDENT_FAQ_ROUTE_CUES, 2),
     "student_handbook_rag": (_NORMALIZED_STUDENT_HANDBOOK_ROUTE_CUES, 4),
-    "school_policy_rag": (_NORMALIZED_SCHOOL_POLICY_ROUTE_CUES, 4),
+    "academic_policy_rag": (_NORMALIZED_ACADEMIC_POLICY_ROUTE_CUES, 4),
+    "general_ictu_rag": ((), 0),
 }
 
 
@@ -168,6 +179,9 @@ def _route_retrieval_flow_by_llm(message: str, rag_tool: Optional[str]) -> Optio
 
 
 def route_retrieval_flow(message: str, rag_tool: Optional[str] = None) -> RetrievalFlowPlan:
+    if should_use_web_search(message):
+        return _fallback_retrieval_flow(message, route="flow_realtime")
+
     llm_result = _route_retrieval_flow_by_llm(message, rag_tool)
     if llm_result is not None:
         return llm_result
@@ -175,6 +189,12 @@ def route_retrieval_flow(message: str, rag_tool: Optional[str] = None) -> Retrie
 
 
 def _build_planned_web_result(message: str, route_name: str, tool_name: Optional[str]) -> Optional[RAGResult]:
+    if should_use_web_search(message):
+        return _build_web_search_result(
+            message,
+            route_name=route_name,
+            tool_name=tool_name,
+        )
     return _build_web_knowledge_result(message, route_name=route_name, tool_name=tool_name) or _build_web_search_result(
         message,
         route_name=route_name,
@@ -203,6 +223,7 @@ def _build_retrieval_runtime() -> RetrievalRuntime:
         list_vector_sources=list_vector_sources,
         fetch_documents_by_source=fetch_documents_by_source,
         search_vector_documents=search_vector_documents,
+        get_tool_metadata_filter=get_tool_metadata_filter,
         default_rag_tool=DEFAULT_RAG_TOOL,
         fallback_rag_node=FALLBACK_RAG_NODE,
         rag_tool_order=tuple(RAG_TOOL_ORDER),
@@ -230,19 +251,49 @@ def retrieve_tool_context(
     )
 
 
+def retrieve_student_handbook_context(
+    message: str,
+    session_id: str,
+    route_name: str,
+    retrieval_plan: Optional[RetrievalFlowPlan] = None,
+) -> RAGResult:
+    return retrieve_tool_context(message, session_id, "student_handbook_rag", route_name, retrieval_plan)
+
+
+def retrieve_academic_policy_context(
+    message: str,
+    session_id: str,
+    route_name: str,
+    retrieval_plan: Optional[RetrievalFlowPlan] = None,
+) -> RAGResult:
+    return retrieve_tool_context(message, session_id, "academic_policy_rag", route_name, retrieval_plan)
+
+
+def retrieve_student_faq_context(
+    message: str,
+    session_id: str,
+    route_name: str,
+    retrieval_plan: Optional[RetrievalFlowPlan] = None,
+) -> RAGResult:
+    return retrieve_tool_context(message, session_id, "student_faq_rag", route_name, retrieval_plan)
+
+
+def retrieve_general_ictu_context(
+    message: str,
+    session_id: str,
+    route_name: str = "router_general_ictu",
+    retrieval_plan: Optional[RetrievalFlowPlan] = None,
+) -> RAGResult:
+    return retrieve_tool_context(message, session_id, "general_ictu_rag", route_name, retrieval_plan)
+
+
 def retrieve_fallback_context(
     message: str,
     session_id: str,
     route_name: str = "router_fallback",
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
-    return _retrieve_fallback_context_impl(
-        _build_retrieval_runtime(),
-        message=message,
-        session_id=session_id,
-        route_name=route_name,
-        retrieval_plan=retrieval_plan,
-    )
+    return retrieve_general_ictu_context(message, session_id, route_name, retrieval_plan)
 
 
 def retrieve_general_context(
@@ -263,5 +314,5 @@ def retrieve_general_context(
 
 
 def retrieve_context(message: str, session_id: str) -> RAGResult:
-    return retrieve_general_context(message, session_id)
+    return retrieve_general_ictu_context(message, session_id)
 

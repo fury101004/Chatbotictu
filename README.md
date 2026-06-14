@@ -18,8 +18,9 @@ Kiến trúc mã nguồn đi theo hướng Controller - Service - Repository - P
 
 - Chat hỏi đáp bằng tiếng Việt qua giao diện web tại `/chat`.
 - Truy xuất thông tin từ Sổ tay sinh viên và tài liệu học vụ trong `data/primary_corpus`.
-- RAG theo nhóm tri thức: `student_handbook_rag`, `school_policy_rag`, `student_faq_rag` và fallback RAG.
-- Hybrid retrieval kết hợp ChromaDB vector search và BM25 keyword search.
+- Bốn RAG tool độc lập: `student_handbook_rag`, `academic_policy_rag`, `student_faq_rag`, `general_ictu_rag`.
+- Hybrid retrieval dùng Reciprocal Rank Fusion (RRF) mặc định để kết hợp ranking độc lập từ ChromaDB vector search và BM25; weighted fusion vẫn là tùy chọn.
+- Cross-Encoder rerank sau fusion, kèm metadata `pre_rerank_rank`, `post_rerank_rank`, `fusion_method`.
 - Chunking tài liệu Markdown/TXT theo cấu trúc heading, kèm metadata như source, tool, document type, academic year.
 - Quản lý tài liệu học vụ: upload file `.md`, `.markdown`, `.txt`, import seed corpus, reset/re-ingest vector store.
 - Lưu lịch sử hội thoại theo `session_id` trong SQLite.
@@ -94,7 +95,10 @@ project/
 │   ├── systemprompt.md
 │   ├── intents/
 │   └── primary_corpus/
-│       └── student_handbooks/
+│       ├── student_handbooks/
+│       ├── academic_policies/
+│       ├── student_faqs/
+│       └── general_ictu/
 ├── tests/
 ├── tools/
 ├── scripts/
@@ -137,6 +141,7 @@ Các nhóm biến quan trọng:
 | App/security | `APP_NAME`, `ENVIRONMENT`, `PARTNER_API_KEY`, `JWT_SECRET`, `SESSION_SECRET` |
 | Web auth | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_ROLE`, `USER_USERNAME`, `USER_PASSWORD`, `USER_ROLE` |
 | Runtime chunking | `CHUNK_SIZE`, `CHUNK_OVERLAP` |
+| Retrieval fusion | `RAG_FUSION_METHOD`, `RRF_K`, `HYBRID_ALPHA` |
 | Rate limit | `API_RATE_CHAT`, `API_RATE_UPLOAD`, `API_RATE_ADMIN` |
 | Path | `DATA_DIR`, `LOG_DIR`, `DB_PATH`, `QA_CORPUS_ROOT`, `RAG_UPLOAD_ROOT`, `VECTORSTORE_DIR`, `SYSTEM_PROMPT_PATH`, `BOT_RULE_PATH` |
 | LLM | `GROQ_API_KEY`, `GROQ_API_BASE_URL`, `OLLAMA_BASE_URL`, `LLM_PROVIDER_ORDER`, `LLM_MODEL_ROTATION`, `GROQ_MODEL_ORDER`, `OLLAMA_MODEL_ORDER` |
@@ -203,6 +208,9 @@ Các URL chính:
 Dữ liệu gốc hiện có:
 
 - `data/primary_corpus/student_handbooks/`: Sổ tay sinh viên các năm `2018-2019` đến `2025-2026`.
+- `data/primary_corpus/academic_policies/`: nguồn seed riêng cho quy định và chính sách học vụ.
+- `data/primary_corpus/student_faqs/`: nguồn seed riêng cho FAQ sinh viên.
+- `data/primary_corpus/general_ictu/`: nguồn seed riêng cho thông tin tổng quan ICTU.
 - Mỗi năm có file `.md` nội dung dài và file `.questions.md` chứa bộ Q&A được dùng để tăng chất lượng retrieval.
 - `data/systemprompt.md`: system prompt.
 - `data/bot-rule.md`: quy tắc/giọng điệu bot được inject vào vector store.
@@ -214,7 +222,7 @@ Nạp dữ liệu:
 - Qua endpoint web admin: `POST /import-qa-corpus`.
 - Qua API token: `POST /api/v1/upload`.
 
-Các file upload được lưu theo tool RAG trong `data/rag_uploads/<tool_name>/`. Khi embedding backend sẵn sàng, file được chunk và index vào ChromaDB. Nếu embedding backend chưa sẵn sàng, file vẫn được lưu và trả warning để có thể re-ingest sau.
+Mỗi tool RAG chỉ đọc thư mục seed riêng ở trên, metadata `tool_name` riêng và thư mục upload tương ứng trong `data/rag_uploads/<tool_name>/`; file seed nằm ngoài bốn thư mục được sở hữu sẽ không được import. Khi embedding backend sẵn sàng, file được chunk và index vào ChromaDB. Nếu embedding backend chưa sẵn sàng, file vẫn được lưu và trả warning để có thể re-ingest sau.
 
 Knowledge Base page `/knowledge-base` tổng hợp:
 

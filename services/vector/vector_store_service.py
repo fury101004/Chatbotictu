@@ -325,7 +325,10 @@ def query_documents(
     query: str,
     user_id: str = "default",
     n_results: int = 8,
-    alpha: float = 0.75  # 0.0 = chỉ BM25, 1.0 = chỉ vector. 0.75 thường ngon nhất
+    alpha: Optional[float] = None,
+    fusion_method: Optional[str] = None,
+    rrf_k: Optional[int] = None,
+    metadata_filter: Optional[dict[str, Any]] = None,
 ) -> Tuple[List[str], List[dict], Dict]:
     """
     Hybrid search + ép bot-rule lên đầu + lưu session
@@ -339,7 +342,10 @@ def query_documents(
         query=query,
         user_id=user_id,
         n_results=n_results,
-        alpha=alpha,
+        alpha=settings.HYBRID_ALPHA if alpha is None else alpha,
+        fusion_method=fusion_method or settings.RAG_FUSION_METHOD,
+        rrf_k=settings.RRF_K if rrf_k is None else rrf_k,
+        metadata_filter=metadata_filter,
         bm25_index=_bm25,
         all_ids=_all_ids,
         tokenize_text_fn=_tokenize_bm25_text,

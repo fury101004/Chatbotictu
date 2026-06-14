@@ -5,9 +5,10 @@ from typing import Optional
 from models.chat import RAGResult
 from services.rag.rag_types import RetrievalFlowPlan
 from services.rag.rag_service import (
-    retrieve_fallback_context,
-    retrieve_general_context,
-    retrieve_tool_context,
+    retrieve_academic_policy_context,
+    retrieve_general_ictu_context,
+    retrieve_student_faq_context,
+    retrieve_student_handbook_context,
     route_rag_tool,
     route_retrieval_flow,
 )
@@ -30,41 +31,30 @@ def retrieve_context(
     retrieval_plan: Optional[RetrievalFlowPlan] = None,
 ) -> RAGResult:
     if rag_tool == "student_handbook_rag":
-        return retrieve_tool_context(
+        return retrieve_student_handbook_context(
             message=message,
             session_id=session_id,
-            tool_name="student_handbook_rag",
             route_name=route_name,
             retrieval_plan=retrieval_plan,
         )
-    if rag_tool == "school_policy_rag":
-        return retrieve_tool_context(
+    if rag_tool == "academic_policy_rag":
+        return retrieve_academic_policy_context(
             message=message,
             session_id=session_id,
-            tool_name="school_policy_rag",
             route_name=route_name,
             retrieval_plan=retrieval_plan,
         )
     if rag_tool == "student_faq_rag":
-        return retrieve_tool_context(
-            message=message,
-            session_id=session_id,
-            tool_name="student_faq_rag",
-            route_name=route_name,
-            retrieval_plan=retrieval_plan,
-        )
-    if rag_tool == "fallback_rag":
-        return retrieve_fallback_context(
+        return retrieve_student_faq_context(
             message=message,
             session_id=session_id,
             route_name=route_name,
             retrieval_plan=retrieval_plan,
         )
-    return retrieve_general_context(
+    return retrieve_general_ictu_context(
         message=message,
         session_id=session_id,
         route_name=route_name,
-        tool_name=rag_tool,
         retrieval_plan=retrieval_plan,
     )
 

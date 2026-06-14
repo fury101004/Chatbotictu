@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -8,6 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from config.settings import settings
 from services.rag.ictu_scope_service import is_ictu_related_query, normalize_scope_text
 
 
@@ -66,15 +66,11 @@ def _clean_base_url(value: str) -> str:
 
 
 def _search_base_url() -> str:
-    return _clean_base_url(
-        os.getenv("SEARXNG_URL", "")
-        or os.getenv("SEARXNG_API", "")
-        or os.getenv("SEAXNG_API", "")
-    )
+    return _clean_base_url(settings.SEARXNG_URL)
 
 
 def _extract_base_url() -> str:
-    return _clean_base_url(os.getenv("TRAFILATURA_URL", "") or os.getenv("TRAFILATURA_API", ""))
+    return _clean_base_url(settings.TRAFILATURA_URL)
 
 
 def web_search_configured() -> bool:
@@ -89,6 +85,11 @@ def should_use_web_search(query: str) -> bool:
     if "thong bao" in normalized and _DATED_THONG_BAO_RE.search(normalized):
         return True
     return False
+
+
+def _web_search_time_range(query: str) -> str:
+    normalized = normalize_scope_text(query or "")
+    return "day" if normalize_scope_text("hôm nay") in normalized else ""
 
 
 def _with_search_path(base_url: str) -> str:
@@ -222,7 +223,7 @@ def search_web_ictu(query: str, *, limit: int = WEB_SEARCH_RESULT_LIMIT) -> list
     if not is_ictu_related_query(query) or not web_search_configured():
         return []
 
-    time_range = "day" if should_use_web_search(query) else ""
+    time_range = _web_search_time_range(query)
     seen_urls: set[str] = set()
 
     official_docs = _documents_from_raw_results(

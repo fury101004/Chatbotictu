@@ -7,7 +7,8 @@ Goal:
 
 Available tools:
 {tool_descriptions}
-- fallback_rag: use this when the question is ambiguous, spans multiple groups, or no specific tool is reliable.
+
+Use general_ictu_rag when the question is broad, ambiguous, or no specialized tool is reliable.
 
 Required JSON:
 {{
