@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from services.content.document_service import get_vector_manager_payload
+from services.content.document_service import clear_vector_manager_cache, get_vector_manager_payload
 
 
 class _FakeCollection:
@@ -55,6 +55,9 @@ class _FakeCollection:
 
 
 class VectorManagerPayloadTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        clear_vector_manager_cache()
+
     def test_payload_is_grouped_into_four_rag_tools(self) -> None:
         with patch("services.content.document_service.get_vector_collection_readonly", return_value=_FakeCollection()):
             payload = get_vector_manager_payload(limit_per_file=10)
@@ -88,6 +91,17 @@ class VectorManagerPayloadTests(unittest.TestCase):
         self.assertEqual(general_group["total_files"], 0)
 
         self.assertNotIn("BOT_RULE", payload["chunks_by_file"])
+
+    def test_payload_is_cached_for_repeated_requests(self) -> None:
+        collection = MagicMock()
+        collection.get.return_value = _FakeCollection().get()
+
+        with patch("services.content.document_service.get_vector_collection_readonly", return_value=collection):
+            payload_1 = get_vector_manager_payload(limit_per_file=10)
+            payload_2 = get_vector_manager_payload(limit_per_file=10)
+
+        self.assertIs(payload_1, payload_2)
+        collection.get.assert_called_once_with(include=["metadatas", "documents"])
 
 
 if __name__ == "__main__":

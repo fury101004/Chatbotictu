@@ -341,6 +341,18 @@ def add_documents(
         rebuild_bm25_fn=_rebuild_bm25,
         inject_bot_rule_fn=inject_bot_rule,
     )
+    try:
+        from services.content.document_service import clear_vector_manager_cache
+
+        clear_vector_manager_cache()
+    except Exception as exc:
+        print(f"[CACHE WARNING] Failed to clear vector manager cache after add_documents: {exc}")
+    try:
+        from services.content.knowledge_base_service import clear_knowledge_base_cache
+
+        clear_knowledge_base_cache()
+    except Exception as exc:
+        print(f"[CACHE WARNING] Failed to clear knowledge base cache after add_documents: {exc}")
 
 
 # b5. INJECT BOT RULE dựa vào file bot-rule.md để Đảm bảo khi LLM lấy context, rule luôn được ưu tiên 
@@ -418,6 +430,18 @@ def reset_vectorstore():
     STATS["total_queries"] = 0
     print("Da reset toan bo vector store!")
     inject_bot_rule()          # rule vẫn sống sau reset
+    try:
+        from services.content.document_service import clear_vector_manager_cache
+
+        clear_vector_manager_cache()
+    except Exception as exc:
+        print(f"[CACHE WARNING] Failed to clear vector manager cache after reset: {exc}")
+    try:
+        from services.content.knowledge_base_service import clear_knowledge_base_cache
+
+        clear_knowledge_base_cache()
+    except Exception as exc:
+        print(f"[CACHE WARNING] Failed to clear knowledge base cache after reset: {exc}")
 # 8. LẤY THỐNG KÊ
 def get_stats():
     """Lấy thống kê để hiển thị dashboard"""

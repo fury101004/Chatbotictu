@@ -34,6 +34,7 @@ from repositories.knowledge_base_repository import (
 from repositories.vector_repository import list_vector_chunks
 from shared.text_utils import normalize_search_text, tokenize_search_text
 from shared.vector_utils import display_vector_source, infer_vector_tool_name
+from services.content.document_service import clear_vector_manager_cache
 from services.rag.ictu_scope_service import ICTU_SCOPE_REPLY_VI, is_ictu_related_query
 from services.rag.rag_corpus import clear_rag_corpus_cache
 from services.vector.vector_store_service import add_documents, embedding_backend_ready
@@ -46,6 +47,8 @@ APPROVED_CHAT_SUBDIR = "_knowledge_base_chat"
 get_approved_chat_entry_ids = list_approved_chat_entry_ids
 get_approved_chat_qas = list_approved_chat_qas
 upsert_approved_chat_qa = save_approved_chat_qa
+
+_KNOWLEDGE_BASE_PAYLOAD_CACHE: dict[tuple[str, int], dict] = {}
 
 
 @dataclass(slots=True)
@@ -207,6 +210,10 @@ def _build_approved_chat_markdown(entry: ChatKnowledgeEntry, tool_name: str) -> 
     return build_approved_chat_markdown_from_pipeline(entry, tool_name)
 
 
+def clear_knowledge_base_cache() -> None:
+    _KNOWLEDGE_BASE_PAYLOAD_CACHE.clear()
+
+
 def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict:
     entry = get_chat_entry_by_id(entry_id)
     if entry is None:
@@ -257,6 +264,8 @@ def approve_chat_entry(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL) -> dict
         warning = "Saved approved Q&A, but embedding backend is not ready for indexing."
 
     clear_rag_corpus_cache()
+    clear_knowledge_base_cache()
+    clear_vector_manager_cache()
     return {
         "entry_id": entry.entry_id,
         "tool_name": selected_tool,
@@ -282,6 +291,7 @@ def mark_chat_entry_pending(entry_id: str, tool_name: str = DEFAULT_RAG_TOOL, re
         reason=reason,
         reviewer="system",
     )
+    clear_knowledge_base_cache()
 
 
 def reject_chat_entry(entry_id: str, reason: str = "", reviewer: str = "admin") -> dict:
@@ -297,6 +307,7 @@ def reject_chat_entry(entry_id: str, reason: str = "", reviewer: str = "admin") 
         reviewer=reviewer,
     )
     clear_rag_corpus_cache()
+    clear_knowledge_base_cache()
     return {
         "entry_id": entry.entry_id,
         "status": "rejected",
@@ -352,7 +363,7 @@ def _search_chat_entries(entries: list[ChatKnowledgeEntry], query: str, limit: i
     )
 
 
-def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
+def _build_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
     vector_warning = ""
     chat_warning = ""
     search_scope_warning = ""
@@ -430,3 +441,19 @@ def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
         "chat_results": chat_results,
         "search_results": merged_results,
     }
+
+
+def get_knowledge_base_payload(query: str = "", limit: int = 18) -> dict:
+    cleaned_query = str(query or "").strip()
+    normalized_query = _normalize_search_text(cleaned_query)
+    normalized_limit = max(1, int(limit or 0))
+    cache_key = (normalized_query, normalized_limit)
+
+    cached_payload = _KNOWLEDGE_BASE_PAYLOAD_CACHE.get(cache_key)
+    if cached_payload is not None:
+        return cached_payload
+
+    payload = _build_knowledge_base_payload(query=cleaned_query, limit=normalized_limit)
+    if not any(str(warning or "").strip() for warning in payload.get("warnings", [])):
+        _KNOWLEDGE_BASE_PAYLOAD_CACHE[cache_key] = payload
+    return payload

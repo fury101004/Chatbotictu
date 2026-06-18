@@ -51,6 +51,7 @@ get_uploaded_files = list_uploaded_files
 add_uploaded_file = record_uploaded_file
 
 SEED_CORPUS_SIGNATURE_KEY = "seed_corpus_signature"
+_VECTOR_MANAGER_PAYLOAD_CACHE: dict[int, dict] = {}
 
 
 def _normalize_tool_name(tool_name: Optional[str]) -> str:
@@ -62,6 +63,19 @@ def _normalize_tool_name(tool_name: Optional[str]) -> str:
 def _sanitize_filename(filename: Optional[str]) -> str:
     cleaned = Path(filename or "").name.strip()
     return cleaned
+
+
+def clear_vector_manager_cache() -> None:
+    _VECTOR_MANAGER_PAYLOAD_CACHE.clear()
+
+
+def _clear_knowledge_base_cache() -> None:
+    try:
+        from services.content.knowledge_base_service import clear_knowledge_base_cache
+
+        clear_knowledge_base_cache()
+    except Exception as exc:
+        print(f"[CACHE WARNING] Failed to clear knowledge base cache: {exc}")
 
 
 def _existing_uploaded_sources() -> set[str]:
@@ -216,6 +230,8 @@ async def upload_markdown_files(
             failed_files.append(f"{display_filename} -> error: {exc}")
 
     clear_rag_corpus_cache()
+    clear_vector_manager_cache()
+    _clear_knowledge_base_cache()
 
     total_time = time.time() - t0
     avg_speed = total_upload_size / max(total_time, 1e-6) / 1024 / 1024
@@ -302,6 +318,8 @@ def import_seed_corpus(reset_first: bool = False) -> dict:
             failed_sources.append(source_name)
 
     clear_rag_corpus_cache()
+    clear_vector_manager_cache()
+    _clear_knowledge_base_cache()
     total_chunks = get_collection().count()
     status = "success" if imported_files > 0 and not failed_sources else "partial" if imported_files > 0 else "error"
     action = "Reset + import" if reset_first else "Import"
@@ -391,6 +409,8 @@ def delete_uploaded_document(source_name: str) -> None:
         except Exception as exc:
             print(f"Skip vector delete for {candidate}: {exc}")
     clear_rag_corpus_cache()
+    clear_vector_manager_cache()
+    _clear_knowledge_base_cache()
 
 
 def reset_document_store() -> None:
@@ -403,9 +423,16 @@ def reset_document_store() -> None:
     settings.RAG_UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
     clear_uploaded_file_records()
     clear_rag_corpus_cache()
+    clear_vector_manager_cache()
+    _clear_knowledge_base_cache()
 
 
 def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
+    normalized_limit = max(1, int(limit_per_file or 0))
+    cached_payload = _VECTOR_MANAGER_PAYLOAD_CACHE.get(normalized_limit)
+    if cached_payload is not None:
+        return cached_payload
+
     data = get_vector_collection_readonly().get(include=["metadatas", "documents"])
     summary = build_vector_manager_summary(
         data,
@@ -423,7 +450,9 @@ def get_vector_manager_payload(limit_per_file: int = 50) -> dict:
         total_files=summary["total_files"],
         tool_groups=summary["tool_groups"],
     )
-    return payload.to_dict()
+    result = payload.to_dict()
+    _VECTOR_MANAGER_PAYLOAD_CACHE[normalized_limit] = result
+    return result
 
 
 def _iter_seed_source_records() -> list[tuple[Path, str, str]]:
@@ -457,13 +486,16 @@ def reingest_uploaded_documents() -> tuple[int, int]:
             continue
         seen_sources.add(normalized_source)
         source_records.append((path, tool_name, normalized_source))
-    return reingest_source_records(
+    result = reingest_source_records(
         source_records,
         reset_vectorstore=reset_vectorstore,
         get_collection=get_collection,
         add_documents=add_documents,
         clear_rag_corpus_cache=clear_rag_corpus_cache,
     )
+    clear_vector_manager_cache()
+    _clear_knowledge_base_cache()
+    return result
 
 
 def get_history_page_data(

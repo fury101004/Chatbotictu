@@ -19,6 +19,7 @@ from services.chat.memory_service import append_retrieval_memory, get_last_retri
 from services.chat.moderation_service import contains_swear, get_swear_response
 from services.chat.multilingual_service import chat_multilingual, get_current_language
 from services.chat.quick_reply_service import get_quick_response
+from services.content.knowledge_base_service import clear_knowledge_base_cache
 from services.content.web_knowledge_service import save_web_search_answer
 from services.eval_tracker import get_eval_tracker
 from services.llm.graph_service import RAGChatGraph
@@ -415,7 +416,7 @@ def _retrieve_context_for_tool(state: ChatGraphState, tool_name: str) -> ChatGra
     state = _apply_rag_result(state, result)
     state["retrieval_query"] = state["message"]
     clarification_question = _build_clarification_question(state["message"])
-    if clarification_question and (_context_is_missing(state) or len(state.get("sources", [])) > 1):
+    if clarification_question and _context_is_missing(state):
         state["needs_clarification"] = True
         state["clarification_question"] = clarification_question
 
@@ -650,6 +651,7 @@ def _save_history(state: ChatGraphState) -> ChatGraphState:
                 state["qa_review_status"] = "untracked"
                 logger.warning("[chat_agent] queue_review failed: %s", exc)
 
+    clear_knowledge_base_cache()
     state["language"] = get_current_language(session_id)
     _log_step("save_history", state, saved_response=bool(response))
     return state

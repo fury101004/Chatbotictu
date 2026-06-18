@@ -8,6 +8,7 @@ from unittest.mock import patch
 from services.content.knowledge_base_service import (
     ChatKnowledgeEntry,
     VectorKnowledgeEntry,
+    clear_knowledge_base_cache,
     _pair_chat_rows,
     approve_chat_entry,
     get_knowledge_base_payload,
@@ -57,6 +58,9 @@ class ChatKnowledgePairingTests(unittest.TestCase):
 
 
 class KnowledgeBasePayloadTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        clear_knowledge_base_cache()
+
     def test_payload_merges_vector_and_chat_sources_in_search_results(self) -> None:
         vector_entries = [
             VectorKnowledgeEntry(
@@ -122,7 +126,43 @@ class KnowledgeBasePayloadTests(unittest.TestCase):
         self.assertTrue(any("ngoài phạm vi ICTU" in warning for warning in payload["warnings"]))
 
 
+    def test_payload_is_cached_for_repeated_requests(self) -> None:
+        vector_entries = [
+            VectorKnowledgeEntry(
+                source="congvanquyetdinh/hoc_phi.md",
+                display_name="hoc_phi.md",
+                tool_name="academic_policy_rag",
+                tool_label="Quy dinh va chinh sach",
+                chunk_count=3,
+                titles=["Hoc phi"],
+                preview="Thong tin hoc phi va mien giam hoc phi.",
+                content="Thong tin hoc phi va mien giam hoc phi cho sinh vien nam 2024.",
+            )
+        ]
+        chat_rows = [
+            {"id": 1, "role": "user", "content": "Hoc phi dong khi nao?", "timestamp": "2026-04-09 09:00:00", "session_id": "s1"},
+            {"id": 2, "role": "bot", "content": "Hoc phi duoc thong bao theo tung dot trong nam hoc.", "timestamp": "2026-04-09 09:00:08", "session_id": "s1"},
+        ]
+
+        with (
+            patch("services.content.knowledge_base_service._load_vector_entries", return_value=(vector_entries, 3)) as vector_mock,
+            patch("services.content.knowledge_base_service._fetch_chat_rows", return_value=chat_rows) as chat_mock,
+            patch("services.content.knowledge_base_service.get_approved_chat_entry_ids", return_value=set()),
+            patch("services.content.knowledge_base_service.get_approved_chat_qas", return_value=[]),
+            patch("services.content.knowledge_base_service.list_chat_qa_review_states", return_value={}),
+        ):
+            payload_1 = get_knowledge_base_payload(query="hoc phi", limit=10)
+            payload_2 = get_knowledge_base_payload(query="hoc phi", limit=10)
+
+        self.assertIs(payload_1, payload_2)
+        vector_mock.assert_called_once()
+        chat_mock.assert_called_once()
+
+
 class ApproveChatEntryTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        clear_knowledge_base_cache()
+
     def test_approve_chat_entry_writes_markdown_and_indexes_vector(self) -> None:
         entry = ChatKnowledgeEntry(
             entry_id="chat::s1::2",
