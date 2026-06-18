@@ -145,9 +145,18 @@ async def api_knowledge_base(
 
 @router_v1.get("/health")
 @router_api.get("/health")
-@router_root.get("/health")
 async def health():
     return build_health_response()
+
+
+@router_root.get("/health")
+async def health_simple():
+    """Lightweight health check for Azure App Service probes.
+
+    Always returns 200 with {"status": "ok"} so the container is never
+    flagged as unhealthy during model/embedding initialization.
+    """
+    return {"status": "ok"}
 
 
 @router_v1.get("/deployment/status")

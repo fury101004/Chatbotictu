@@ -655,17 +655,28 @@ async def import_qa_corpus(request: Request, csrf_token: str = Form(...), reset_
     if admin_response is not None:
         return admin_response
 
-    result = import_seed_corpus(reset_first=reset_first)
-    next_csrf_token = rotate_csrf_token(request)
+    try:
+        result = import_seed_corpus(reset_first=reset_first)
+        next_csrf_token = rotate_csrf_token(request)
 
-    status_code = 200 if result.get("status") in {"success", "partial"} else 500
-    return JSONResponse(
-        {
-            **result,
-            "csrf_token": next_csrf_token,
-        },
-        status_code=status_code,
-    )
+        status_code = 200 if result.get("status") in {"success", "partial"} else 500
+        return JSONResponse(
+            {
+                **result,
+                "csrf_token": next_csrf_token,
+            },
+            status_code=status_code,
+        )
+    except Exception as exc:
+        next_csrf_token = rotate_csrf_token(request)
+        return JSONResponse(
+            {
+                "status": "error",
+                "msg": f"Hệ thống gặp lỗi khi import corpus: {exc}",
+                "csrf_token": next_csrf_token,
+            },
+            status_code=500,
+        )
 
 
 @router.post("/reset-vectorstore")

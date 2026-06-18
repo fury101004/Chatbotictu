@@ -104,10 +104,24 @@ def get_bot_rule_text() -> str:
     return BOT_RULE_FULL
 
 
+def _resolve_chroma_path() -> str:
+    """Return the ChromaDB persistence path.
+
+    On Azure App Service (detected via WEBSITE_SITE_NAME env var) use
+    /home/data/chroma so data survives container restarts.
+    Locally, fall back to the configured VECTORSTORE_DIR.
+    """
+    if os.getenv("WEBSITE_SITE_NAME"):
+        azure_chroma_dir = Path("/home/data/chroma")
+        azure_chroma_dir.mkdir(parents=True, exist_ok=True)
+        return str(azure_chroma_dir)
+    return str(settings.VECTORSTORE_DIR)
+
+
 def get_client():
     global client
     if client is None:
-        client = chromadb.PersistentClient(path=str(settings.VECTORSTORE_DIR))
+        client = chromadb.PersistentClient(path=_resolve_chroma_path())
     return client
 
 
