@@ -236,26 +236,28 @@ def _bootstrap_azure_cache_dirs() -> None:
     if not _is_azure_app_service():
         return
 
+    print("[CACHE] Bootstrapping Azure App Service paths (before embedding model load)...")
+
     # Cố gắng dùng thư mục persistent (/home/data) trước, nếu không được thì fallback sang /tmp
     cache_roots = [
         Path(os.getenv("AZURE_CACHE_ROOT", "/home/data")),
-        Path("/tmp/azure_cache")
+        Path("/tmp/azure_cache"),
     ]
 
     selected_root = None
     for root in cache_roots:
         try:
             root.mkdir(parents=True, exist_ok=True)
-            # Kiểm tra quyền ghi thực tế
             test_file = root / ".test_write"
             test_file.touch()
             test_file.unlink()
             selected_root = root
+            print(f"[CACHE] Using writable root: {selected_root}")
             break
         except OSError as exc:
             print(f"[CACHE] Cannot prepare cache root {root}: {exc}")
             continue
-            
+
     if not selected_root:
         print("[CACHE] CRITICAL: No writable cache root found!")
         return
@@ -276,13 +278,38 @@ def _bootstrap_azure_cache_dirs() -> None:
         if current_path is not None:
             should_override = _is_under_home_site(current_path) or not _is_path_writable(current_path)
         if not should_override:
+            print(f"[CACHE] Keeping {env_name}={current_path}")
             continue
 
         try:
             fallback_path.mkdir(parents=True, exist_ok=True)
             os.environ[env_name] = str(fallback_path)
+            print(f"[CACHE] {env_name} -> {fallback_path}")
         except OSError as exc:
             print(f"[CACHE] Cannot prepare {env_name} at {fallback_path}: {exc}")
+
+    vectorstore_target = selected_root / "vectorstore"
+    current_vectorstore = settings.VECTORSTORE_DIR
+    should_override_vectorstore = (
+        _is_under_home_site(current_vectorstore)
+        or not _is_path_writable(current_vectorstore)
+        or current_vectorstore.as_posix().startswith("/app/")
+    )
+    if should_override_vectorstore:
+        try:
+            vectorstore_target.mkdir(parents=True, exist_ok=True)
+            settings.VECTORSTORE_DIR = vectorstore_target.resolve()
+            os.environ["VECTORSTORE_DIR"] = str(settings.VECTORSTORE_DIR)
+            print(f"[CACHE] VECTORSTORE_DIR -> {settings.VECTORSTORE_DIR}")
+        except OSError as exc:
+            print(f"[CACHE] Cannot prepare VECTORSTORE_DIR at {vectorstore_target}: {exc}")
+    else:
+        print(f"[CACHE] Keeping VECTORSTORE_DIR={current_vectorstore}")
+
+    print("[CACHE] Azure bootstrap complete. Final cache paths:")
+    for env_name in cache_targets:
+        print(f"[CACHE]   {env_name}={os.getenv(env_name, '(unset)')}")
+    print(f"[CACHE]   VECTORSTORE_DIR={settings.VECTORSTORE_DIR}")
 
 
 settings = Settings()

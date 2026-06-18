@@ -1,0 +1,75 @@
+---
+title: "CV 377, 12-9-2022 xet diem ren luyen HK 1.2021-2022 đ2 và HKII 21-22pdf"
+source_pdf: "E:\\new-test\\datapdf\\xetdiemrenluyen\\NĂM HỌC 2021 - 2022-20260309T080413Z-1-001\\NĂM HỌC 2021 - 2022\\CV 377, 12-9-2022 xet diem ren luyen HK 1.2021-2022 đ2 và HKII 21-22pdf.pdf"
+source_relative_path: "xetdiemrenluyen/NĂM HỌC 2021 - 2022-20260309T080413Z-1-001/NĂM HỌC 2021 - 2022/CV 377, 12-9-2022 xet diem ren luyen HK 1.2021-2022 đ2 và HKII 21-22pdf.pdf"
+converted_at: "2026-04-04T14:02:27+07:00"
+page_count: 1
+converter: "convert_datapdf_to_md.py"
+extractors_available: ["PyPDF2"]
+ocr_mode: "auto"
+ocr_engine: ""
+ocr_used: false
+ocr_required: true
+document_status: "ocr_pending"
+body_source: "metadata_inferred_plus_extracted_text"
+inferred_group: "Xét điểm rèn luyện"
+inferred_topic: "Công văn/kế hoạch xet diem ren luyen"
+inferred_document_type: "Công văn"
+inferred_years: ["2021", "2022"]
+inferred_school_years: ["2021-2022"]
+inferred_keywords: ["Xét điểm rèn luyện", "Công văn/kế hoạch xet diem ren luyen", "Công văn", "CV 377, 12-9-2022 xet diem ren luyen HK 1.2021-2022 đ2 và HKII 21-22pdf", "xetdiemrenluyen", "NĂM HỌC 2021 - 2022", "2021", "2022", "2021-2022"]
+usable_text_pages: []
+missing_text_pages: [1]
+usable_text_ratio: 0.0
+page_methods: [{"page": 1, "kind": "scan_page", "method": "PyPDF2", "score": 0, "image_count": 1, "largest_image_ratio": 1.0, "ocr_attempted": false, "ocr_used": false}]
+---
+
+# CV 377, 12-9-2022 xet diem ren luyen HK 1.2021-2022 đ2 và HKII 21-22pdf
+
+> Source PDF: `xetdiemrenluyen/NĂM HỌC 2021 - 2022-20260309T080413Z-1-001/NĂM HỌC 2021 - 2022/CV 377, 12-9-2022 xet diem ren luyen HK 1.2021-2022 đ2 và HKII 21-22pdf.pdf`
+> Extractors available: `PyPDF2`
+> OCR mode: `auto`
+> Document status: `ocr_pending`
+> OCR required: this file still needs OCR support or stronger OCR output.
+
+## Document Profile
+
+- Group: Xét điểm rèn luyện
+- Topic: Công văn/kế hoạch xet diem ren luyen
+- Document type: Công văn
+- Years detected: 2021, 2022
+- School years detected: 2021-2022
+
+## Inferred Summary
+
+Tài liệu này được xếp vào nhóm 'Xét điểm rèn luyện'. Dựa trên tên file và cấu trúc thư mục, nó có khả năng là công văn thuộc chủ đề 'công văn/kế hoạch xet diem ren luyen'. Phần body hiện tại được tạo từ metadata và tên file, chưa phải nội dung OCR đầy đủ.
+
+## Search Keywords
+
+- Xét điểm rèn luyện
+- Công văn/kế hoạch xet diem ren luyen
+- Công văn
+- CV 377, 12-9-2022 xet diem ren luyen HK 1.2021-2022 đ2 và HKII 21-22pdf
+- xetdiemrenluyen
+- NĂM HỌC 2021 - 2022
+- 2021
+- 2022
+- 2021-2022
+
+## Suggested Questions
+
+- Tài liệu này thuộc nhóm nào và liên quan đến vấn đề gì?
+- Công văn nay áp dụng cho năm học hoặc giai đoạn nào?
+- Cần OCR thêm những trang nào để có đủ nội dung cho tài liệu này?
+- Văn bản này liên quan đến năm 2021 như thế nào?
+
+## Extraction Status
+
+- Total pages: 1
+- Usable text pages: 0/1
+- Pages still missing text: 1
+- Current result is metadata-only. This file should not be treated as clean text data yet.
+
+## Missing Pages
+
+- Page 1: kind=scan_page, method=PyPDF2, score=0, images=1

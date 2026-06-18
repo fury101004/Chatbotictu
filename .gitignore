@@ -29,7 +29,7 @@ htmlcov/
 logs/
 *.log
 
-# Local app data
+# Local app data (runtime-only; bundled deploy artifacts are whitelisted below)
 .cache/
 cache/
 sessions/
@@ -37,10 +37,8 @@ data/cache/
 data/sessions/
 uploads/
 data/uploads/
-data/rag_uploads/
 data/all_questions.md
 data/api.log
-data/bot_config.db
 data/chunks.jsonl
 *.jsonl
 data/chroma_db/
@@ -51,15 +49,27 @@ faiss/
 data/_tmp_*/
 data/qa_generated/
 data/qa_generated_fixed/
-clean_data/
-datapdf/
 /evaluation/
 /reports/
-vectorstore/
+
+# Bundled knowledge artifacts — MUST be tracked for Azure Docker deploy
+!vectorstore/
+!vectorstore/**
+!clean_data/
+!clean_data/**
+!datapdf/
+!datapdf/**
+!data/rag_uploads/
+!data/rag_uploads/**
+
+# SQLite: ignore by default, allow vectorstore Chroma DB and seed SQLite in git
 *.db
 *.sqlite3
 *.sqlite
 *.sqlite-journal
+!vectorstore/chroma.sqlite3
+!vectorstore/**/*.sqlite3
+!data/bot_config.db
 
 # Local models and generated artifacts
 all-MiniLM-L6-v2.onnx

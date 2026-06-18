@@ -36,6 +36,7 @@ from datetime import datetime
 from collections import defaultdict
 
 from config.settings import settings
+from services.vector.vectorstore_boot import get_bundled_vectorstore_dir, get_vectorstore_dir, log_vectorstore_boot_status
 from pipelines.chunking_pipeline import (
     extract_academic_year as extract_academic_year_from_content,
     infer_document_type as infer_document_type_from_content,
@@ -105,33 +106,26 @@ def get_bot_rule_text() -> str:
 
 
 def _resolve_chroma_path() -> str:
-    """Return the ChromaDB persistence path.
-
-    On Azure App Service (detected via WEBSITE_SITE_NAME env var) use
-    /home/data/chroma so data survives container restarts.
-    Locally, fall back to the configured VECTORSTORE_DIR.
-    """
+    """Return the ChromaDB persistence path via centralized vectorstore_boot."""
+    chroma_path = str(get_vectorstore_dir())
+    env_label = "Azure" if os.getenv("WEBSITE_SITE_NAME") else "Local"
     if os.getenv("WEBSITE_SITE_NAME"):
-        azure_chroma_dir = Path("/home/data/chroma")
         try:
-            azure_chroma_dir.mkdir(parents=True, exist_ok=True)
-            sqlite_file = azure_chroma_dir / "chroma.sqlite3"
-            if sqlite_file.exists():
-                size_mb = sqlite_file.stat().st_size / (1024 * 1024)
-                print(f"[CHROMA] Azure: Tìm thấy DB có sẵn tại {azure_chroma_dir} ({size_mb:.1f} MB)")
-            else:
-                print(f"[CHROMA] Azure: CẢNH BÁO - Không tìm thấy chroma.sqlite3 tại {azure_chroma_dir}")
-                print(f"[CHROMA] Azure: Sẽ tạo DB mới (trống). Cần ingest dữ liệu hoặc upload vectorstore.")
-            return str(azure_chroma_dir)
+            Path(chroma_path).mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            print(f"[CHROMA] Không thể tạo {azure_chroma_dir}: {exc}, fallback về local path")
-    chroma_path = str(settings.VECTORSTORE_DIR)
+            print(f"[CHROMA] {env_label}: Không thể tạo {chroma_path}: {exc}")
     sqlite_file = Path(chroma_path) / "chroma.sqlite3"
     if sqlite_file.exists():
         size_mb = sqlite_file.stat().st_size / (1024 * 1024)
-        print(f"[CHROMA] Local: Dùng DB tại {chroma_path} ({size_mb:.1f} MB)")
+        print(f"[CHROMA] {env_label}: Dùng DB tại {chroma_path} ({size_mb:.1f} MB)")
     else:
-        print(f"[CHROMA] Local: Chưa có DB tại {chroma_path}, sẽ tạo mới.")
+        print(f"[CHROMA] {env_label}: Chưa có DB tại {chroma_path}, sẽ tạo mới.")
+        if env_label == "Azure":
+            bundled = get_bundled_vectorstore_dir() / "chroma.sqlite3"
+            if bundled.exists():
+                print(f"[CHROMA] Azure: Có bundled DB tại {bundled} — startup.sh nên copy sang {chroma_path}")
+            else:
+                print("[CHROMA] Azure: Chờ bootstrap từ /app/vectorstore hoặc sync_seed_corpus_index().")
     return chroma_path
 
 
@@ -439,6 +433,7 @@ def initialize_vectorstore():
     is_azure = bool(os.getenv("WEBSITE_SITE_NAME"))
     env_label = "Azure" if is_azure else "Local"
     print(f"[VECTORSTORE] Đang khởi tạo trên môi trường: {env_label}")
+    boot_status = log_vectorstore_boot_status()
     print(f"[VECTORSTORE] Chroma path: {_resolve_chroma_path()}")
 
     # Log các đường dẫn cache embedding để dễ debug
@@ -449,7 +444,7 @@ def initialize_vectorstore():
     # Đảm bảo load bot rule
     inject_bot_rule()
     print("Bot-rule đã được inject - luôn dùng top 1")
-    chunk_count = coll.count()
+    chunk_count = boot_status.get("chunks") or coll.count()
     if chunk_count > 0:
         _rebuild_bm25()
         print(f"Warm-up BM25 thành công với {chunk_count} chunks")
@@ -458,8 +453,8 @@ def initialize_vectorstore():
         print("CẢNH BÁO: Vector store hiện đang TRỐNG (0 chunks)!")
         if is_azure:
             print("Trên Azure, điều này có thể do:")
-            print("  1. vectorstore/ bị .gitignore loại → chưa được deploy")
-            print("  2. Cần upload vectorstore lên /home/data/chroma")
+            print("  1. vectorstore/ chưa có trong Docker image → kiểm tra .dockerignore")
+            print("  2. /home/data/vectorstore trống → startup.sh chưa bootstrap từ /app/vectorstore")
             print("  3. Hoặc chờ sync_seed_corpus_index() tự ingest từ data/primary_corpus/")
         else:
             print("Chờ add tài liệu đầu tiên.")

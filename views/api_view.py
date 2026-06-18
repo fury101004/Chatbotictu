@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from config.settings import settings
+from services.vector.vectorstore_boot import get_vectorstore_dir
 from models.chat import ChatResponse
 from services.llm.llm_service import PRIMARY_MODEL_NAME, get_model
 from services.vector.vector_store_service import embedding_backend_ready
@@ -78,7 +79,7 @@ def _directory_writable(path: Path) -> bool:
 
 def build_deployment_status_response() -> dict:
     data_dir = Path(settings.DATA_DIR)
-    vectorstore_dir = Path(settings.VECTORSTORE_DIR)
+    vectorstore_dir = get_vectorstore_dir()
     log_dir = Path(settings.LOG_DIR)
     configured_model = get_model()
 

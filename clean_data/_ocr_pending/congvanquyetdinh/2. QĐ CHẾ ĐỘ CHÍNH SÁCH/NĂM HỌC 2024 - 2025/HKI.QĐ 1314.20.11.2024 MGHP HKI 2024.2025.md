@@ -1,0 +1,109 @@
+---
+title: "HKI.QĐ 1314.20.11.2024 MGHP HKI 2024.2025"
+source_pdf: "E:\\new-test\\datapdf\\congvanquyetdinh\\2. QĐ CHẾ ĐỘ CHÍNH SÁCH\\NĂM HỌC 2024 - 2025\\HKI.QĐ 1314.20.11.2024 MGHP HKI 2024.2025.pdf"
+source_relative_path: "congvanquyetdinh/2. QĐ CHẾ ĐỘ CHÍNH SÁCH/NĂM HỌC 2024 - 2025/HKI.QĐ 1314.20.11.2024 MGHP HKI 2024.2025.pdf"
+converted_at: "2026-04-04T14:00:37+07:00"
+page_count: 34
+converter: "convert_datapdf_to_md.py"
+extractors_available: ["PyPDF2"]
+ocr_mode: "auto"
+ocr_engine: ""
+ocr_used: false
+ocr_required: true
+document_status: "ocr_pending"
+body_source: "metadata_inferred_plus_extracted_text"
+inferred_group: "Công văn quyết định"
+inferred_topic: "Quyết định và văn bản hành chính"
+inferred_document_type: "Văn bản"
+inferred_years: ["2024", "2025"]
+inferred_school_years: ["2024-2025"]
+inferred_keywords: ["Công văn quyết định", "Quyết định và văn bản hành chính", "Văn bản", "HKI.QĐ 1314.20.11.2024 MGHP HKI 2024.2025", "congvanquyetdinh", "2. QĐ CHẾ ĐỘ CHÍNH SÁCH", "NĂM HỌC 2024 - 2025", "2024", "2025", "2024-2025"]
+usable_text_pages: []
+missing_text_pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34]
+usable_text_ratio: 0.0
+page_methods: [{"page": 1, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 2, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 3, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 4, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 5, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 6, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 7, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 8, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 9, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 10, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 11, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 12, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 13, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 14, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 15, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 16, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 17, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 18, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 19, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 20, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 21, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 22, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 23, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 24, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 25, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 26, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 27, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 28, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 29, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 30, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 31, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 32, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 33, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}, {"page": 34, "kind": "weak_text_page", "method": "PyPDF2", "score": 0, "image_count": 0, "largest_image_ratio": 0.0, "ocr_attempted": false, "ocr_used": false}]
+---
+
+# HKI.QĐ 1314.20.11.2024 MGHP HKI 2024.2025
+
+> Source PDF: `congvanquyetdinh/2. QĐ CHẾ ĐỘ CHÍNH SÁCH/NĂM HỌC 2024 - 2025/HKI.QĐ 1314.20.11.2024 MGHP HKI 2024.2025.pdf`
+> Extractors available: `PyPDF2`
+> OCR mode: `auto`
+> Document status: `ocr_pending`
+> OCR required: this file still needs OCR support or stronger OCR output.
+
+## Document Profile
+
+- Group: Công văn quyết định
+- Topic: Quyết định và văn bản hành chính
+- Document type: Văn bản
+- Years detected: 2024, 2025
+- School years detected: 2024-2025
+
+## Inferred Summary
+
+Tài liệu này được xếp vào nhóm 'Công văn quyết định'. Dựa trên tên file và cấu trúc thư mục, nó có khả năng là văn bản thuộc chủ đề 'quyết định và văn bản hành chính'. Phần body hiện tại được tạo từ metadata và tên file, chưa phải nội dung OCR đầy đủ.
+
+## Search Keywords
+
+- Công văn quyết định
+- Quyết định và văn bản hành chính
+- Văn bản
+- HKI.QĐ 1314.20.11.2024 MGHP HKI 2024.2025
+- congvanquyetdinh
+- 2. QĐ CHẾ ĐỘ CHÍNH SÁCH
+- NĂM HỌC 2024 - 2025
+- 2024
+- 2025
+- 2024-2025
+
+## Suggested Questions
+
+- Tài liệu này thuộc nhóm nào và liên quan đến vấn đề gì?
+- Văn bản này áp dụng cho năm học hoặc giai đoạn nào?
+- Cần OCR thêm những trang nào để có đủ nội dung cho tài liệu này?
+- Văn bản này liên quan đến năm 2024 như thế nào?
+
+## Extraction Status
+
+- Total pages: 34
+- Usable text pages: 0/34
+- Pages still missing text: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34
+- Current result is metadata-only. This file should not be treated as clean text data yet.
+
+## Missing Pages
+
+- Page 1: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 2: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 3: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 4: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 5: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 6: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 7: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 8: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 9: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 10: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 11: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 12: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 13: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 14: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 15: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 16: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 17: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 18: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 19: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 20: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 21: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 22: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 23: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 24: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 25: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 26: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 27: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 28: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 29: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 30: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 31: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 32: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 33: kind=weak_text_page, method=PyPDF2, score=0, images=0
+- Page 34: kind=weak_text_page, method=PyPDF2, score=0, images=0

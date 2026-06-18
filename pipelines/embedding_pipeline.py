@@ -2,8 +2,53 @@ from __future__ import annotations
 
 import os
 import socket
+import traceback
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+_CACHE_ENV_VARS = (
+    "HF_HOME",
+    "HUGGINGFACE_HUB_CACHE",
+    "TRANSFORMERS_CACHE",
+    "SENTENCE_TRANSFORMERS_HOME",
+    "TORCH_HOME",
+    "XDG_CACHE_HOME",
+)
+
+
+def _cache_path_status(path_value: str) -> str:
+    if not path_value:
+        return "unset"
+    try:
+        path = Path(path_value)
+        path.mkdir(parents=True, exist_ok=True)
+        if os.access(path, os.W_OK):
+            return "writable"
+        return "NOT WRITABLE"
+    except OSError as exc:
+        return f"error: {exc}"
+
+
+def _log_embedding_cache_state(stage: str) -> None:
+    print(f"[EMBEDDING] Cache state ({stage}):")
+    for env_name in _CACHE_ENV_VARS:
+        value = os.getenv(env_name, "").strip()
+        print(f"[EMBEDDING]   {env_name}={value or '(unset)'} [{_cache_path_status(value)}]")
+
+
+def _raise_embedding_load_error(exc: BaseException, *, model_name: str, stage: str) -> None:
+    _log_embedding_cache_state(stage)
+    message = (
+        f"Failed to load embedding model '{model_name}' ({stage}): {exc}. "
+        "On Azure App Service, /home/site is read-only. "
+        "Set HF_HOME, HUGGINGFACE_HUB_CACHE, TRANSFORMERS_CACHE, "
+        "SENTENCE_TRANSFORMERS_HOME, TORCH_HOME, and XDG_CACHE_HOME to /home/data/... "
+        "or rely on startup.sh + config.settings bootstrap. "
+        "If a previous download was interrupted, remove *.lock files under the HF cache hub directory."
+    )
+    print(f"[EMBEDDING] ERROR: {message}")
+    print(f"[EMBEDDING] Traceback:\n{traceback.format_exc()}")
+    raise RuntimeError(message) from exc
 
 
 def _ensure_cache_dirs_writable() -> None:
@@ -57,36 +102,49 @@ def build_embedding_function(
 
     # Đảm bảo thư mục cache có quyền ghi trước khi tải model
     _ensure_cache_dirs_writable()
+    _log_embedding_cache_state("before_load")
 
     local_model_path = resolve_local_model_path()
     use_local_model = local_model_path is not None
     if use_local_model:
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        print(f"[EMBEDDING] Using local model cache: {local_model_path}")
+    else:
+        print(f"[EMBEDDING] Local model cache not found; will download if network is available")
 
     selected_model_name = str(local_model_path) if use_local_model else model_name
-    print(f"Loading embedding model: {selected_model_name}")
+    print(f"[EMBEDDING] Loading embedding model: {selected_model_name}")
     try:
         return embedding_factory(
             model_name=selected_model_name,
             local_files_only=use_local_model,
         )
-    except PermissionError as exc:
-        print(f"[EMBEDDING] PermissionError khi tải model: {exc}")
-        print(f"[EMBEDDING] Thử fallback cache sang /tmp/huggingface...")
-        # Force tất cả cache về /tmp và thử lại
+    except OSError as exc:
+        print(f"[EMBEDDING] OSError on first load attempt: {exc}")
+        print("[EMBEDDING] Retrying with /tmp/huggingface cache fallback...")
         os.environ["HF_HOME"] = "/tmp/huggingface/hf-cache"
         os.environ["HUGGINGFACE_HUB_CACHE"] = "/tmp/huggingface/hf-cache/hub"
         os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface/transformers"
         os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/tmp/huggingface/sentence-transformers"
         os.environ["TORCH_HOME"] = "/tmp/huggingface/.cache/torch"
-        for d in ("/tmp/huggingface/hf-cache/hub", "/tmp/huggingface/transformers",
-                   "/tmp/huggingface/sentence-transformers", "/tmp/huggingface/.cache/torch"):
+        os.environ["XDG_CACHE_HOME"] = "/tmp/huggingface/.cache"
+        for d in (
+            "/tmp/huggingface/hf-cache/hub",
+            "/tmp/huggingface/transformers",
+            "/tmp/huggingface/sentence-transformers",
+            "/tmp/huggingface/.cache/torch",
+            "/tmp/huggingface/.cache",
+        ):
             Path(d).mkdir(parents=True, exist_ok=True)
-        return embedding_factory(
-            model_name=model_name,
-            local_files_only=False,
-        )
+        _log_embedding_cache_state("retry_tmp")
+        try:
+            return embedding_factory(
+                model_name=model_name,
+                local_files_only=False,
+            )
+        except OSError as retry_exc:
+            _raise_embedding_load_error(retry_exc, model_name=model_name, stage="retry_tmp")
 
 
 def embedding_backend_ready(

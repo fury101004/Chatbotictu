@@ -13,11 +13,12 @@ WORKDIR /app
 RUN chown appuser:appuser /app
 
 # Tao thu muc persistent data truoc khi switch user
-RUN mkdir -p /home/data/chroma /home/data/hf-cache /home/data/transformers /home/data/sentence-transformers /home/data/.cache && chown -R appuser:appuser /home/data
+RUN mkdir -p /home/data/vectorstore /home/data/hf-cache /home/data/transformers /home/data/sentence-transformers /home/data/.cache && chown -R appuser:appuser /home/data
 
 USER appuser
 
 ENV PATH="/home/appuser/.local/bin:${PATH}"
+ENV VECTORSTORE_DIR=/home/data/vectorstore
 ENV HF_HOME=/home/data/hf-cache
 ENV HUGGINGFACE_HUB_CACHE=/home/data/hf-cache/hub
 ENV TRANSFORMERS_CACHE=/home/data/transformers
@@ -34,7 +35,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /tmp/requirements-no-torch.txt && \
     rm -f /tmp/requirements-no-torch.txt
 
-# Copy toan bo code vao container
+# Pre-download embedding model at build time so Azure runtime does not write to /home/site
+ARG EMBEDDING_MODEL_NAME=paraphrase-multilingual-MiniLM-L12-v2
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL_NAME}')"
+
+# Copy toan bo code vao container (includes vectorstore/, clean_data/, datapdf/, data/rag_uploads/)
 COPY --chown=appuser:appuser . .
 
 EXPOSE 8000

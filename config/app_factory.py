@@ -28,6 +28,13 @@ def _sync_seed_corpus_on_startup() -> None:
         return
 
     try:
+        from services.vector.vectorstore_boot import log_vectorstore_boot_status
+
+        log_vectorstore_boot_status()
+    except Exception:
+        logger.exception("Vector store boot logging failed during app startup")
+
+    try:
         from services.content.document_service import sync_seed_corpus_index
 
         result = sync_seed_corpus_index()

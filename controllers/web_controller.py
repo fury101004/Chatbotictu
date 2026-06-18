@@ -552,6 +552,31 @@ async def admin_index(request: Request):
     return RedirectResponse("/", status_code=303)
 
 
+@router.get("/admin/vectorstore-status")
+async def admin_vectorstore_status(request: Request):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+
+    from services.vector.vectorstore_boot import get_vectorstore_status
+
+    status = get_vectorstore_status()
+    return JSONResponse(
+        {
+            "vectorstore_path": status["vectorstore_path"],
+            "exists": status["exists"],
+            "collections": status["collections"],
+            "chunks": status["chunks"],
+            "sqlite_exists": status["sqlite_exists"],
+            "file_count": status["file_count"],
+            "collection_names": status.get("collection_names", []),
+            "bundled_vectorstore_path": status.get("bundled_vectorstore_path"),
+            "bundled_sqlite_exists": status.get("bundled_sqlite_exists"),
+            "azure": status.get("azure", False),
+        }
+    )
+
+
 @router.post("/delete-file")
 async def delete_file(request: Request, filename: str = Form(...), csrf_token: str = Form(...)):
     if not validate_csrf_token(request, csrf_token):
