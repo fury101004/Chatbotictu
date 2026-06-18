@@ -180,7 +180,7 @@ if [ -n "${WEBSITE_SITE_NAME:-}" ]; then
 fi
 
 PYTHON_BIN=""
-for candidate in /home/appuser/.local/bin/python python3 python; do
+for candidate in /usr/local/bin/python python3 python /home/appuser/.local/bin/python; do
   if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -m uvicorn --version >/dev/null 2>&1; then
     PYTHON_BIN="$candidate"
     break
