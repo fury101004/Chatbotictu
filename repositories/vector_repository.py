@@ -14,7 +14,7 @@ def get_vector_collection_readonly():
 
 
 def count_vector_chunks() -> int:
-    return get_vector_collection().count()
+    return get_vector_collection_readonly().count()
 
 
 def count_vector_chunks_readonly() -> int:
@@ -25,11 +25,11 @@ def list_vector_chunks(*, include_documents: bool = True) -> dict[str, list[Any]
     include_fields = ["metadatas"]
     if include_documents:
         include_fields.append("documents")
-    return get_vector_collection().get(include=include_fields)
+    return get_vector_collection_readonly().get(include=include_fields)
 
 
 def list_vector_sources() -> set[str]:
-    data = get_vector_collection().get(include=["metadatas"])
+    data = get_vector_collection_readonly().get(include=["metadatas"])
     return {
         str(metadata.get("source", "") or "")
         for metadata in data.get("metadatas", [])
@@ -38,7 +38,7 @@ def list_vector_sources() -> set[str]:
 
 
 def fetch_documents_by_source(source: str) -> tuple[list[str], list[dict[str, Any]]]:
-    data = get_vector_collection().get(
+    data = get_vector_collection_readonly().get(
         where={"source": str(source or "")},
         include=["documents", "metadatas"],
     )

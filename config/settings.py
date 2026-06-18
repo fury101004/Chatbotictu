@@ -236,20 +236,37 @@ def _bootstrap_azure_cache_dirs() -> None:
     if not _is_azure_app_service():
         return
 
-    cache_root = Path(os.getenv("AZURE_CACHE_ROOT", "/home/data"))
-    try:
-        cache_root.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        print(f"[CACHE] Cannot prepare Azure cache root {cache_root}: {exc}")
+    # Cố gắng dùng thư mục persistent (/home/data) trước, nếu không được thì fallback sang /tmp
+    cache_roots = [
+        Path(os.getenv("AZURE_CACHE_ROOT", "/home/data")),
+        Path("/tmp/azure_cache")
+    ]
+
+    selected_root = None
+    for root in cache_roots:
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            # Kiểm tra quyền ghi thực tế
+            test_file = root / ".test_write"
+            test_file.touch()
+            test_file.unlink()
+            selected_root = root
+            break
+        except OSError as exc:
+            print(f"[CACHE] Cannot prepare cache root {root}: {exc}")
+            continue
+            
+    if not selected_root:
+        print("[CACHE] CRITICAL: No writable cache root found!")
         return
 
     cache_targets = {
-        "HF_HOME": cache_root / "hf-cache",
-        "HUGGINGFACE_HUB_CACHE": cache_root / "hf-cache" / "hub",
-        "TRANSFORMERS_CACHE": cache_root / "transformers",
-        "SENTENCE_TRANSFORMERS_HOME": cache_root / "sentence-transformers",
-        "TORCH_HOME": cache_root / ".cache" / "torch",
-        "XDG_CACHE_HOME": cache_root / ".cache",
+        "HF_HOME": selected_root / "hf-cache",
+        "HUGGINGFACE_HUB_CACHE": selected_root / "hf-cache" / "hub",
+        "TRANSFORMERS_CACHE": selected_root / "transformers",
+        "SENTENCE_TRANSFORMERS_HOME": selected_root / "sentence-transformers",
+        "TORCH_HOME": selected_root / ".cache" / "torch",
+        "XDG_CACHE_HOME": selected_root / ".cache",
     }
 
     for env_name, fallback_path in cache_targets.items():

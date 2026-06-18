@@ -57,7 +57,7 @@ az webapp config appsettings set --resource-group $RG --name $APP --settings `
   DB_PATH=/home/site/data/bot_config.db `
   VECTORSTORE_DIR=/home/site/vectorstore `
   API_LOG_PATH=/home/LogFiles/api.log `
-  HF_HOME=/home/site/hf-cache `
+  HF_HOME=/home/data/hf-cache `
   CORS_ALLOW_ORIGINS=https://$APP.azurewebsites.net `
   LLM_PROVIDER_ORDER=groq `
   GROQ_API_BASE_URL=https://api.groq.com/openai/v1 `
@@ -122,7 +122,7 @@ az webapp config appsettings set --resource-group $RG --name $APP --settings `
   DB_PATH=/home/site/data/bot_config.db `
   VECTORSTORE_DIR=/home/site/vectorstore `
   API_LOG_PATH=/home/LogFiles/api.log `
-  HF_HOME=/home/site/hf-cache `
+  HF_HOME=/home/data/hf-cache `
   CORS_ALLOW_ORIGINS=https://$APP.azurewebsites.net `
   LLM_PROVIDER_ORDER=groq `
   GROQ_API_BASE_URL=https://api.groq.com/openai/v1 `

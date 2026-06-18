@@ -30,7 +30,7 @@ from config.rag_tools import (  # noqa: E402
     get_tool_upload_dir,
 )
 from repositories.upload_repository import record_uploaded_file  # noqa: E402
-from repositories.vector_repository import delete_vector_source, get_vector_collection  # noqa: E402
+from repositories.vector_repository import count_vector_chunks, delete_vector_source  # noqa: E402
 from services.content.web_search import web_search_configured  # noqa: E402
 from services.rag.rag_corpus import clear_rag_corpus_cache  # noqa: E402
 from services.rag.rag_service import (  # noqa: E402
@@ -228,7 +228,7 @@ def _summarize(
         "use_llm_router": use_llm_router,
         "live_web_enabled": live_web,
         "embedding_backend_ready": embedding_backend_ready(),
-        "vectorstore_chunks": get_vector_collection().count(),
+        "vectorstore_chunks": count_vector_chunks(),
         "group_distribution": dict(Counter(case["group"] for case in cases)),
         "predicted_tool_distribution": dict(Counter(case["predicted_tool"] for case in cases)),
         "flow_source_distribution": dict(Counter(case["flow_source"] for case in cases)),

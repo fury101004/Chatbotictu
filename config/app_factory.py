@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import logging
 
 from fastapi import FastAPI
@@ -18,8 +19,12 @@ from services.runtime_config_manager import apply_runtime_config
 logger = logging.getLogger(__name__)
 
 
+def _is_hosted_azure_app() -> bool:
+    return bool(os.getenv("WEBSITE_SITE_NAME") or os.getenv("WEBSITE_INSTANCE_ID"))
+
+
 def _sync_seed_corpus_on_startup() -> None:
-    if not settings.is_production:
+    if not (settings.is_production or _is_hosted_azure_app()):
         return
 
     try:
