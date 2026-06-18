@@ -1,5 +1,5 @@
 #!/bin/sh
-set -eu
+set -u
 
 PORT="${PORT:-8000}"
 WEB_CONCURRENCY="${WEB_CONCURRENCY:-1}"
@@ -76,10 +76,13 @@ _bootstrap_vectorstore_from_image() {
 
   if [ "$should_copy" = "1" ]; then
     echo "[BOOTSTRAP] Seed vectorstore ${src} -> ${dest} (src=${src_size}B dest=${dest_size}B)"
-    mkdir -p "$dest"
-    rm -rf "${dest:?}/"*
-    cp -a "$src/." "$dest/"
-    echo "[BOOTSTRAP] Vectorstore seeded, new size=$(_file_size "$dest_db")B"
+    mkdir -p "$dest" || return 0
+    rm -rf "${dest:?}/"* 2>/dev/null || true
+    if cp -a "$src/." "$dest/"; then
+      echo "[BOOTSTRAP] Vectorstore seeded, new size=$(_file_size "$dest_db")B"
+    else
+      echo "[BOOTSTRAP] WARNING: vectorstore copy failed; continuing with existing data"
+    fi
   else
     echo "[BOOTSTRAP] Keep existing vectorstore at ${dest} (${dest_size}B)"
   fi
