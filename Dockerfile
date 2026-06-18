@@ -13,11 +13,17 @@ WORKDIR /app
 RUN chown appuser:appuser /app
 
 # Tao thu muc persistent data truoc khi switch user
-RUN mkdir -p /home/data/chroma && chown -R appuser:appuser /home/data
+RUN mkdir -p /home/data/chroma /home/data/hf-cache /home/data/transformers /home/data/sentence-transformers /home/data/.cache && chown -R appuser:appuser /home/data
 
 USER appuser
 
 ENV PATH="/home/appuser/.local/bin:${PATH}"
+ENV HF_HOME=/home/data/hf-cache
+ENV HUGGINGFACE_HUB_CACHE=/home/data/hf-cache/hub
+ENV TRANSFORMERS_CACHE=/home/data/transformers
+ENV SENTENCE_TRANSFORMERS_HOME=/home/data/sentence-transformers
+ENV TORCH_HOME=/home/data/.cache/torch
+ENV XDG_CACHE_HOME=/home/data/.cache
 ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 # Copy requirements va cai dat

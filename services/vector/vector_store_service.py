@@ -115,10 +115,24 @@ def _resolve_chroma_path() -> str:
         azure_chroma_dir = Path("/home/data/chroma")
         try:
             azure_chroma_dir.mkdir(parents=True, exist_ok=True)
+            sqlite_file = azure_chroma_dir / "chroma.sqlite3"
+            if sqlite_file.exists():
+                size_mb = sqlite_file.stat().st_size / (1024 * 1024)
+                print(f"[CHROMA] Azure: Tìm thấy DB có sẵn tại {azure_chroma_dir} ({size_mb:.1f} MB)")
+            else:
+                print(f"[CHROMA] Azure: CẢNH BÁO - Không tìm thấy chroma.sqlite3 tại {azure_chroma_dir}")
+                print(f"[CHROMA] Azure: Sẽ tạo DB mới (trống). Cần ingest dữ liệu hoặc upload vectorstore.")
             return str(azure_chroma_dir)
         except OSError as exc:
-            print(f"[CHROMA] Cannot create {azure_chroma_dir}: {exc}, falling back to local path")
-    return str(settings.VECTORSTORE_DIR)
+            print(f"[CHROMA] Không thể tạo {azure_chroma_dir}: {exc}, fallback về local path")
+    chroma_path = str(settings.VECTORSTORE_DIR)
+    sqlite_file = Path(chroma_path) / "chroma.sqlite3"
+    if sqlite_file.exists():
+        size_mb = sqlite_file.stat().st_size / (1024 * 1024)
+        print(f"[CHROMA] Local: Dùng DB tại {chroma_path} ({size_mb:.1f} MB)")
+    else:
+        print(f"[CHROMA] Local: Chưa có DB tại {chroma_path}, sẽ tạo mới.")
+    return chroma_path
 
 
 def get_client():
@@ -147,13 +161,27 @@ def get_embedding_function():
 def _local_embedding_model_candidates() -> list[Path]:
     model_slug = EMBEDDING_MODEL_NAME.replace("/", "--")
     home = Path.home()
-    candidates = [
-        home / ".cache" / "huggingface" / "hub" / f"models--sentence-transformers--{model_slug}",
-        home / ".cache" / "torch" / "sentence_transformers" / EMBEDDING_MODEL_NAME,
-    ]
+    candidates: list[Path] = []
+
+    # Ưu tiên kiểm tra các biến môi trường TRƯỚC (quan trọng trên Azure
+    # vì ~/.cache có thể trỏ tới /home/site – read-only)
     hf_home = os.getenv("HF_HOME", "").strip()
     if hf_home:
         candidates.append(Path(hf_home) / "hub" / f"models--sentence-transformers--{model_slug}")
+
+    st_home = os.getenv("SENTENCE_TRANSFORMERS_HOME", "").strip()
+    if st_home:
+        candidates.append(Path(st_home) / EMBEDDING_MODEL_NAME)
+
+    torch_home = os.getenv("TORCH_HOME", "").strip()
+    if torch_home:
+        candidates.append(Path(torch_home) / "sentence_transformers" / EMBEDDING_MODEL_NAME)
+
+    # Fallback: đường dẫn mặc định (chỉ dùng khi không có biến env)
+    candidates.extend([
+        home / ".cache" / "huggingface" / "hub" / f"models--sentence-transformers--{model_slug}",
+        home / ".cache" / "torch" / "sentence_transformers" / EMBEDDING_MODEL_NAME,
+    ])
     return candidates
 
 
@@ -202,11 +230,21 @@ def get_collection():
     Tạo hoặc lấy collection tên markdown_docs_v2
     Dùng cosine distance (phù hợp với sentence transformer)
     """
-    return get_client().get_or_create_collection(
+    chroma_client = get_client()
+    existing_collections = [c.name for c in chroma_client.list_collections()]
+    is_existing = COLLECTION_NAME in existing_collections
+
+    coll = chroma_client.get_or_create_collection(
         name=COLLECTION_NAME,
         embedding_function=get_embedding_function(),
         metadata=COLLECTION_METADATA  # HNSW index dùng cosine
     )
+    count = coll.count()
+    if is_existing:
+        print(f"[CHROMA] Đã tải collection '{COLLECTION_NAME}' có sẵn với {count} chunks")
+    else:
+        print(f"[CHROMA] Đã tạo collection MỚI '{COLLECTION_NAME}' (hiện có {count} chunks)")
+    return coll
 
 
 def get_collection_readonly():
@@ -398,15 +436,34 @@ def get_stats():
 
 # KHỞI TẠO AN TOÀN KHI CẦN
 def initialize_vectorstore():
+    is_azure = bool(os.getenv("WEBSITE_SITE_NAME"))
+    env_label = "Azure" if is_azure else "Local"
+    print(f"[VECTORSTORE] Đang khởi tạo trên môi trường: {env_label}")
+    print(f"[VECTORSTORE] Chroma path: {_resolve_chroma_path()}")
+
+    # Log các đường dẫn cache embedding để dễ debug
+    for var in ("HF_HOME", "TRANSFORMERS_CACHE", "SENTENCE_TRANSFORMERS_HOME", "TORCH_HOME", "XDG_CACHE_HOME"):
+        print(f"[VECTORSTORE] {var}={os.getenv(var, '(chưa đặt)')}")
+
     coll = get_collection()
     # Đảm bảo load bot rule
     inject_bot_rule()
     print("Bot-rule đã được inject - luôn dùng top 1")
-    if coll.count() > 0:
+    chunk_count = coll.count()
+    if chunk_count > 0:
         _rebuild_bm25()
-        print(f"Warm-up BM25 thành công với {coll.count()} chunks")
+        print(f"Warm-up BM25 thành công với {chunk_count} chunks")
     else:
-        print("Vector store hiện đang trống - chờ add tài liệu đầu tiên")
+        print("="*70)
+        print("CẢNH BÁO: Vector store hiện đang TRỐNG (0 chunks)!")
+        if is_azure:
+            print("Trên Azure, điều này có thể do:")
+            print("  1. vectorstore/ bị .gitignore loại → chưa được deploy")
+            print("  2. Cần upload vectorstore lên /home/data/chroma")
+            print("  3. Hoặc chờ sync_seed_corpus_index() tự ingest từ data/primary_corpus/")
+        else:
+            print("Chờ add tài liệu đầu tiên.")
+        print("="*70)
     print("="*70)
     print("VECTOR STORE v2.0 ĐÃ KHỞI ĐỘNG HOÀN TOÀN")
     print("- Hybrid search đã chuẩn hóa - Bot-rule bất tử - Session memory - Logging")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from pydantic import AliasChoices, Field
@@ -214,10 +215,69 @@ def _validate_production_security_config(settings_obj: Settings) -> None:
         )
 
 
+def _is_azure_app_service() -> bool:
+    return bool(os.getenv("WEBSITE_SITE_NAME") or os.getenv("WEBSITE_INSTANCE_ID"))
+
+
+def _is_path_writable(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return False
+    return os.access(path, os.W_OK)
+
+
+def _is_under_home_site(path: Path) -> bool:
+    normalized = path.as_posix().rstrip("/")
+    return normalized == "/home/site" or normalized.startswith("/home/site/")
+
+
+def _bootstrap_azure_cache_dirs() -> None:
+    if not _is_azure_app_service():
+        return
+
+    cache_root = Path(os.getenv("AZURE_CACHE_ROOT", "/home/data"))
+    try:
+        cache_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"[CACHE] Cannot prepare Azure cache root {cache_root}: {exc}")
+        return
+
+    cache_targets = {
+        "HF_HOME": cache_root / "hf-cache",
+        "HUGGINGFACE_HUB_CACHE": cache_root / "hf-cache" / "hub",
+        "TRANSFORMERS_CACHE": cache_root / "transformers",
+        "SENTENCE_TRANSFORMERS_HOME": cache_root / "sentence-transformers",
+        "TORCH_HOME": cache_root / ".cache" / "torch",
+        "XDG_CACHE_HOME": cache_root / ".cache",
+    }
+
+    for env_name, fallback_path in cache_targets.items():
+        current_value = os.getenv(env_name, "").strip()
+        current_path = Path(current_value) if current_value else None
+        should_override = current_path is None
+        if current_path is not None:
+            should_override = _is_under_home_site(current_path) or not _is_path_writable(current_path)
+        if not should_override:
+            continue
+
+        try:
+            fallback_path.mkdir(parents=True, exist_ok=True)
+            os.environ[env_name] = str(fallback_path)
+        except OSError as exc:
+            print(f"[CACHE] Cannot prepare {env_name} at {fallback_path}: {exc}")
+
+
 settings = Settings()
 _validate_production_security_config(settings)
 if not settings.SESSION_SECRET:
     settings.SESSION_SECRET = settings.JWT_SECRET
+
+# Bootstrap Azure cache dirs TRƯỚC khi tạo thư mục khác,
+# để các biến HF_HOME, TRANSFORMERS_CACHE, v.v. được set sớm
+# cho tất cả code phía sau (embedding pipeline, vector store, ...)
+_bootstrap_azure_cache_dirs()
+
 settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 settings.RAG_UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)

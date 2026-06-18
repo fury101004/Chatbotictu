@@ -16,6 +16,12 @@ services:
       - ./views/frontend/assets:/app/views/frontend/assets
     environment:
       - PYTHONUNBUFFERED=1
+      - HF_HOME=/home/data/hf-cache
+      - HUGGINGFACE_HUB_CACHE=/home/data/hf-cache/hub
+      - TRANSFORMERS_CACHE=/home/data/transformers
+      - SENTENCE_TRANSFORMERS_HOME=/home/data/sentence-transformers
+      - TORCH_HOME=/home/data/.cache/torch
+      - XDG_CACHE_HOME=/home/data/.cache
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
