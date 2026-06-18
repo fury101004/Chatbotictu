@@ -21,6 +21,25 @@ _EMPTY_CONTEXT_SENTINELS = (DEFAULT_CONTEXT_TEXT, "")
 _NORMALIZED_EMPTY_CONTEXT_SENTINELS = tuple(normalize_scope_text(marker) for marker in _EMPTY_CONTEXT_SENTINELS)
 
 
+def _prefer_exact_query_documents(query: str, documents: list[Document]) -> list[Document]:
+    normalized_query = normalize_scope_text(query)
+    if len(normalized_query.split()) < 4:
+        return documents
+
+    rule_documents = [
+        document
+        for document in documents
+        if str(document.metadata.get("source", "")) == "BOT_RULE"
+    ]
+    exact_documents = [
+        document
+        for document in documents
+        if str(document.metadata.get("source", "")) != "BOT_RULE"
+        and normalized_query in normalize_scope_text(document.page_content)
+    ]
+    return [*rule_documents, *exact_documents] if exact_documents else documents
+
+
 def _documents_to_chunks(documents: list[Document]) -> list[RetrievedChunk]:
     return [
         RetrievedChunk(
@@ -43,6 +62,7 @@ def _build_result_from_documents(
 ) -> RAGResult:
     if query:
         documents = rerank_langchain_documents(query, documents)
+        documents = _prefer_exact_query_documents(query, documents)
     chunks = _documents_to_chunks(documents)
     limited_chunks = chunks[:context_max_chunks] if context_max_chunks is not None else chunks
 

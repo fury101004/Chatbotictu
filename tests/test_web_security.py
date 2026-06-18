@@ -196,6 +196,18 @@ class WebCsrfSecurityTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 303)
                 self.assertEqual(response.headers["location"], "/chat")
 
+    def test_admin_history_page_does_not_show_uploaded_file_panel(self) -> None:
+        client = TestClient(main.app)
+        _login_as_admin(client)
+
+        with patch("services.content.document_service.get_uploaded_files") as uploaded_files_mock:
+            response = client.get("/history")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("File .md đã nạp", response.text)
+        self.assertNotIn('id="files-container"', response.text)
+        uploaded_files_mock.assert_not_called()
+
     def test_register_user_then_login_and_block_admin_pages(self) -> None:
         client = TestClient(main.app)
         username = _unique_username()

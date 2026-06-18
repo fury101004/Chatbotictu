@@ -174,6 +174,36 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["llm_model"], "local:knowledge_base_fallback")
         self.assertIn("Knowledge Base", result["response"])
 
+    async def test_process_chat_message_hides_sources_when_model_returns_no_info(self) -> None:
+        rag_result = RAGResult(
+            context_text="Nội dung truy xuất không khớp câu hỏi.",
+            chunks=[
+                RetrievedChunk(
+                    document="Nội dung truy xuất không khớp câu hỏi.",
+                    metadata={"source": "student_handbooks/2025.md"},
+                )
+            ],
+            mode="student_handbook_rag",
+            sources=["student_handbooks/2025.md"],
+            chunks_used=1,
+            rag_tool="student_handbook_rag",
+            rag_route="router_handbook",
+        )
+
+        with (
+            patch("services.chat.chat_service.route_rag_tool", return_value=("student_handbook_rag", "router_handbook")),
+            patch("services.chat.chat_service.retrieve_tool_context", return_value=rag_result),
+            patch(
+                "services.chat.chat_service.chat_multilingual",
+                return_value=("Thông tin này hiện chưa có trong tài liệu của em.", "local:test"),
+            ),
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
+        ):
+            result = await process_chat_message("Câu hỏi chưa có dữ liệu?", session_id="no-info-sources-1")
+
+        self.assertEqual(result["sources"], [])
+        self.assertEqual(result["chunks_used"], 0)
+
     async def test_process_chat_message_reports_web_search_unavailable_without_local_sources(self) -> None:
         empty_web_result = RAGResult(
             context_text="Thông tin đang được cập nhật.",
@@ -287,6 +317,30 @@ class ChatServicePipelineTests(unittest.IsolatedAsyncioTestCase):
         context_text = chat_mock.call_args.kwargs["context_text"]
         self.assertIn("được phép đăng ký học lại để cải thiện điểm", context_text)
         self.assertIn("điểm C hoặc D", context_text)
+
+    async def test_process_chat_message_retrieves_study_preservation_answer_from_latest_handbook(self) -> None:
+        question = "Sinh viên muốn bảo lưu cần làm gì?"
+        eval_tracker = SimpleNamespace(log_response=AsyncMock())
+
+        with (
+            patch("services.rag.rag_service._route_retrieval_flow_by_llm", return_value=None),
+            patch("services.rag.rag_service.embedding_backend_ready", return_value=False),
+            patch(
+                "services.chat.chat_service.chat_multilingual",
+                return_value=("Sinh viên cần làm thủ tục xin nghỉ học tạm thời.", "local:test"),
+            ) as chat_mock,
+            patch("services.chat.chat_service.save_message", side_effect=[1, 2]),
+            patch("services.chat.chat_service.append_retrieval_memory"),
+            patch("services.content.knowledge_base_service.mark_chat_entry_pending"),
+            patch("services.chat.chat_service.get_eval_tracker", return_value=eval_tracker),
+        ):
+            result = await process_chat_message(question, session_id="study-preservation-1")
+
+        self.assertEqual(result["rag_tool"], "student_handbook_rag")
+        self.assertEqual(result["sources"], ["student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"])
+        context_text = chat_mock.call_args.kwargs["context_text"]
+        self.assertIn("điểm trung bình tích lũy từ 2,0 trở lên", context_text)
+        self.assertIn("ít nhất 01 tuần trước khi bắt đầu học kỳ mới", context_text)
 
 
     async def test_process_chat_message_queues_source_grounded_answer_for_review(self) -> None:

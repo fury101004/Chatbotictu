@@ -162,6 +162,16 @@ class RagRouterTests(unittest.TestCase):
         self.assertTrue(route_name.startswith("router_keyword_score:"))
         llm_router.assert_not_called()
 
+    def test_keyword_router_prefers_handbook_for_study_preservation_question(self) -> None:
+        question = "Sinh viên muốn bảo lưu cần làm gì?"
+
+        with patch("services.rag.rag_service._route_rag_tool_by_llm") as llm_router:
+            tool_name, route_name = route_rag_tool(question)
+
+        self.assertEqual(tool_name, "student_handbook_rag")
+        self.assertTrue(route_name.startswith("router_keyword_score:"))
+        llm_router.assert_not_called()
+
     def test_keyword_router_prefers_handbook_for_year_specific_graduation_conditions(self) -> None:
         questions = (
             "Về năm 2022-2023, điều kiện tốt nghiệp là gì?",

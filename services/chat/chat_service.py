@@ -34,6 +34,13 @@ _MISSING_CONTEXT_TEXTS = (
     "Thông tin này hiện chưa có trong tài liệu của em.",
 )
 _NORMALIZED_MISSING_CONTEXT_TEXTS = tuple(normalize_scope_text(marker) for marker in _MISSING_CONTEXT_TEXTS)
+_NO_INFO_RESPONSES = (
+    "Thông tin này hiện chưa có trong tài liệu của em.",
+    "Không tìm thấy thông tin này trong sổ tay sinh viên.",
+    "This information is not currently available in my documents.",
+    "I could not find this information in the student handbook.",
+)
+_NORMALIZED_NO_INFO_RESPONSES = tuple(normalize_scope_text(marker) for marker in _NO_INFO_RESPONSES)
 _AMBIGUOUS_YEAR_RE = re.compile(r"\b20\d{2}(?:[-/]\d{4})?\b")
 _AMBIGUOUS_COHORT_RE = re.compile(r"\b(?:k|khoa)\s*0*\d{2}\b", flags=re.IGNORECASE)
 _AMBIGUOUS_SEMESTER_RE = re.compile(r"\b(?:hoc ky|hk)\s*[12]\b", flags=re.IGNORECASE)
@@ -352,6 +359,15 @@ def _context_is_missing(state: ChatGraphState) -> bool:
     )
 
 
+def _clear_unconsumed_sources(state: ChatGraphState) -> None:
+    state["sources"] = []
+    state["chunks_used"] = 0
+
+
+def _response_is_no_info(response: str) -> bool:
+    return normalize_scope_text(response) in _NORMALIZED_NO_INFO_RESPONSES
+
+
 def _build_clarification_question(message: str) -> str | None:
     normalized = normalize_scope_text(message)
 
@@ -479,6 +495,7 @@ def _generate_answer(state: ChatGraphState) -> ChatGraphState:
         state["response"] = _fallback_kb_reply(state)
         state["llm_model"] = "local:clarification"
         state["language"] = get_current_language(state["session_id"])
+        _clear_unconsumed_sources(state)
         _log_step("generate_answer", state, mode="clarification")
         return state
 
@@ -509,6 +526,8 @@ def _generate_answer(state: ChatGraphState) -> ChatGraphState:
         memory_messages=state.get("persistent_memory", []),
     )
     response = _append_source_citations(response, state)
+    if _response_is_no_info(response):
+        _clear_unconsumed_sources(state)
     state["response"] = response
     state["llm_model"] = llm_model
     state["language"] = get_current_language(state["session_id"])

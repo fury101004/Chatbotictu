@@ -761,7 +761,7 @@ table td {
 }
 
 .history-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px) !important;
+    grid-template-columns: minmax(0, 1fr) !important;
 }
 
 .history-page .page-header {
@@ -769,14 +769,12 @@ table td {
     margin-bottom: 1.5rem !important;
 }
 
-.history-page .messages-container,
-.history-page .files-container {
+.history-page .messages-container {
     background: transparent !important;
     height: min(66vh, 720px) !important;
 }
 
-.history-page .message-content,
-.history-page .file-item {
+.history-page .message-content {
     background: var(--bg-secondary) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: var(--radius-card) !important;
@@ -789,8 +787,7 @@ table td {
     border-left: 3px solid var(--accent-color) !important;
 }
 
-.history-page .message-body,
-.history-page .filename {
+.history-page .message-body {
     color: var(--text-primary) !important;
 }
 
@@ -1272,9 +1269,6 @@ table td {
         grid-template-columns: 1fr !important;
     }
 
-    .files-panel {
-        max-width: none !important;
-    }
 }
 
 @media (max-width: 760px) {
@@ -1354,8 +1348,7 @@ table td {
         align-items: stretch !important;
     }
 
-    .history-page .messages-container,
-    .history-page .files-container {
+    .history-page .messages-container {
         height: auto !important;
         max-height: none !important;
     }

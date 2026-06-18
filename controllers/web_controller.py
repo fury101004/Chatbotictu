@@ -875,7 +875,7 @@ async def history_page(request: Request, page: int = 1):
         page=page,
         per_page=50,
         owner_username=None if is_admin else current_username,
-        include_uploaded_files=is_admin,
+        include_uploaded_files=False,
     )
     payload["csrf_token"] = ensure_csrf_token(request)
     payload["history_scope_label"] = "Tất cả người dùng" if is_admin else "Lịch sử của bạn"
