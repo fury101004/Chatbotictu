@@ -113,8 +113,11 @@ def _resolve_chroma_path() -> str:
     """
     if os.getenv("WEBSITE_SITE_NAME"):
         azure_chroma_dir = Path("/home/data/chroma")
-        azure_chroma_dir.mkdir(parents=True, exist_ok=True)
-        return str(azure_chroma_dir)
+        try:
+            azure_chroma_dir.mkdir(parents=True, exist_ok=True)
+            return str(azure_chroma_dir)
+        except OSError as exc:
+            print(f"[CHROMA] Cannot create {azure_chroma_dir}: {exc}, falling back to local path")
     return str(settings.VECTORSTORE_DIR)
 
 
