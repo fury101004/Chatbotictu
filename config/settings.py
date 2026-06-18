@@ -306,6 +306,28 @@ def _bootstrap_azure_cache_dirs() -> None:
     else:
         print(f"[CACHE] Keeping VECTORSTORE_DIR={current_vectorstore}")
 
+    app_data_target = selected_root / "app"
+    current_data_dir = settings.DATA_DIR
+    should_override_app_data = (
+        _is_under_home_site(current_data_dir)
+        or not _is_path_writable(current_data_dir)
+        or current_data_dir.as_posix().startswith("/app/")
+    )
+    if should_override_app_data:
+        try:
+            app_data_target.mkdir(parents=True, exist_ok=True)
+            settings.DATA_DIR = app_data_target.resolve()
+            os.environ["DATA_DIR"] = str(settings.DATA_DIR)
+            settings.DB_PATH = (app_data_target / "bot_config.db").resolve()
+            os.environ["DB_PATH"] = str(settings.DB_PATH)
+            settings.RAG_UPLOAD_ROOT = (app_data_target / "rag_uploads").resolve()
+            os.environ["RAG_UPLOAD_ROOT"] = str(settings.RAG_UPLOAD_ROOT)
+            print(f"[CACHE] DATA_DIR -> {settings.DATA_DIR}")
+            print(f"[CACHE] DB_PATH -> {settings.DB_PATH}")
+            print(f"[CACHE] RAG_UPLOAD_ROOT -> {settings.RAG_UPLOAD_ROOT}")
+        except OSError as exc:
+            print(f"[CACHE] Cannot prepare app data dir at {app_data_target}: {exc}")
+
     print("[CACHE] Azure bootstrap complete. Final cache paths:")
     for env_name in cache_targets:
         print(f"[CACHE]   {env_name}={os.getenv(env_name, '(unset)')}")

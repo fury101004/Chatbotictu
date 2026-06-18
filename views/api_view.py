@@ -83,6 +83,14 @@ def build_deployment_status_response() -> dict:
     log_dir = Path(settings.LOG_DIR)
     configured_model = get_model()
 
+    vectorstore_status: dict = {}
+    try:
+        from services.vector.vectorstore_boot import get_vectorstore_status
+
+        vectorstore_status = get_vectorstore_status()
+    except Exception as exc:
+        vectorstore_status = {"error": str(exc)}
+
     checks = {
         "data_dir_exists": _directory_exists(data_dir),
         "data_dir_writable": _directory_writable(data_dir),
@@ -92,6 +100,8 @@ def build_deployment_status_response() -> dict:
         "log_dir_writable": _directory_writable(log_dir),
         "llm_configured": configured_model is not None,
         "embedding_backend_ready": embedding_backend_ready(),
+        "vectorstore_sqlite_exists": bool(vectorstore_status.get("sqlite_exists")),
+        "vectorstore_chunks_gt_zero": int(vectorstore_status.get("chunks") or 0) > 0,
     }
 
     return {
@@ -100,7 +110,19 @@ def build_deployment_status_response() -> dict:
         "port": os.getenv("PORT", "8000"),
         "data_dir": str(data_dir),
         "vectorstore_dir": str(vectorstore_dir),
+        "db_path": str(settings.DB_PATH),
+        "rag_upload_root": str(settings.RAG_UPLOAD_ROOT),
         "log_dir": str(log_dir),
+        "vectorstore": {
+            "path": vectorstore_status.get("vectorstore_path", str(vectorstore_dir)),
+            "exists": vectorstore_status.get("exists", False),
+            "sqlite_exists": vectorstore_status.get("sqlite_exists", False),
+            "collections": vectorstore_status.get("collections", 0),
+            "chunks": vectorstore_status.get("chunks", 0),
+            "file_count": vectorstore_status.get("file_count", 0),
+            "bundled_sqlite_exists": vectorstore_status.get("bundled_sqlite_exists", False),
+            "error": vectorstore_status.get("error"),
+        },
         "checks": checks,
         "status": "ready" if all(checks.values()) else "degraded",
         "timestamp": datetime.now().isoformat(),
