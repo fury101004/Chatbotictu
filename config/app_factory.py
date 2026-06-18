@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
+import threading
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -34,13 +35,19 @@ def _sync_seed_corpus_on_startup() -> None:
     except Exception:
         logger.exception("Vector store boot logging failed during app startup")
 
-    try:
-        from services.content.document_service import sync_seed_corpus_index
+    def _background_sync() -> None:
+        try:
+            from services.content.document_service import sync_seed_corpus_index
 
-        result = sync_seed_corpus_index()
-        logger.info("Seed corpus sync: %s", result.get("msg", "done"))
-    except Exception:
-        logger.exception("Seed corpus sync failed during app startup")
+            logger.info("Seed corpus sync starting in background...")
+            result = sync_seed_corpus_index()
+            logger.info("Seed corpus sync: %s", result.get("msg", "done"))
+        except Exception:
+            logger.exception("Seed corpus sync failed during app startup")
+
+    t = threading.Thread(target=_background_sync, daemon=True, name="seed-corpus-sync")
+    t.start()
+    logger.info("Seed corpus sync dispatched to background thread")
 
 
 def create_app() -> FastAPI:
