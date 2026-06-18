@@ -35,6 +35,7 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 
 # Copy bundled app + knowledge artifacts
 COPY . .
+RUN python scripts/reindex_vectorstore_linux.py
 RUN chown -R appuser:appuser /app /home/data
 
 USER appuser
