@@ -403,7 +403,7 @@ class ApiEndpointTests(unittest.TestCase):
 
         self.assertEqual(root_response.status_code, 200)
         self.assertEqual(api_response.status_code, 200)
-        self.assertEqual(root_response.json()["status"], "healthy")
+        self.assertEqual(root_response.json()["status"], "ok")
         self.assertIn("llm_configured", api_response.json())
 
     def test_deployment_status_routes_are_available(self) -> None:
