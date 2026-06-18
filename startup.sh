@@ -179,7 +179,31 @@ if [ -n "${WEBSITE_SITE_NAME:-}" ]; then
   _bootstrap_file_if_missing /app/data/bot_config.db "${DB_PATH}" 1024
 fi
 
-exec python -m uvicorn config.asgi:app \
+PYTHON_BIN=""
+for candidate in /home/appuser/.local/bin/python python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -m uvicorn --version >/dev/null 2>&1; then
+    PYTHON_BIN="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PYTHON_BIN" ] && [ -x /home/appuser/.local/bin/uvicorn ]; then
+  echo "[startup] Using /home/appuser/.local/bin/uvicorn"
+  exec /home/appuser/.local/bin/uvicorn config.asgi:app \
+    --host 0.0.0.0 \
+    --port "${PORT}" \
+    --workers "${WEB_CONCURRENCY}"
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo "[startup] ERROR: uvicorn is not installed for any Python interpreter"
+  command -v python || true
+  python -m pip show uvicorn || true
+  exit 1
+fi
+
+echo "[startup] Using Python: $PYTHON_BIN"
+exec "$PYTHON_BIN" -m uvicorn config.asgi:app \
   --host 0.0.0.0 \
   --port "${PORT}" \
   --workers "${WEB_CONCURRENCY}"
