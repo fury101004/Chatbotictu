@@ -20,10 +20,12 @@ from services.chat.moderation_service import contains_swear, get_swear_response
 from services.chat.multilingual_service import chat_multilingual, get_current_language
 from services.chat.quick_reply_service import get_quick_response
 from services.content.knowledge_base_service import clear_knowledge_base_cache
+from services.content.web_search import should_use_web_search
 from services.content.web_knowledge_service import save_web_search_answer
 from services.eval_tracker import get_eval_tracker
 from services.llm.graph_service import RAGChatGraph
 from services.memory_store import get_default_memory_store, stable_session_id
+from services.rag.context_builder import DEFAULT_CONTEXT_TEXT
 
 
 logger = logging.getLogger("chat_agent")
@@ -369,6 +371,15 @@ def _response_is_no_info(response: str) -> bool:
     return normalize_scope_text(response) in _NORMALIZED_NO_INFO_RESPONSES
 
 
+def _has_web_backed_chunks(state: ChatGraphState) -> bool:
+    for chunk in state.get("chunks", []):
+        metadata = dict(getattr(chunk, "metadata", {}) or {})
+        source_type = str(metadata.get("source_type") or "").strip().casefold()
+        if source_type in {"web_search", "web_knowledge"}:
+            return True
+    return False
+
+
 def _build_clarification_question(message: str) -> str | None:
     normalized = normalize_scope_text(message)
 
@@ -508,7 +519,26 @@ def _generate_answer(state: ChatGraphState) -> ChatGraphState:
         )
         state["llm_model"] = "local:web_search_empty"
         state["language"] = current_language
+        state["context_text"] = DEFAULT_CONTEXT_TEXT
+        state["chunks"] = []
+        _clear_unconsumed_sources(state)
         _log_step("generate_answer", state, mode="web_search_empty")
+        return state
+
+    original_question = str(state.get("original_question") or state.get("message") or "")
+    if should_use_web_search(original_question) and not _has_web_backed_chunks(state):
+        current_language = get_current_language(state["session_id"])
+        state["response"] = _WEB_SEARCH_NO_INFO_REPLY.get(
+            current_language,
+            _WEB_SEARCH_NO_INFO_REPLY["vi"],
+        )
+        state["llm_model"] = "local:web_search_empty"
+        state["language"] = current_language
+        state["mode"] = "web_search_empty"
+        state["context_text"] = DEFAULT_CONTEXT_TEXT
+        state["chunks"] = []
+        _clear_unconsumed_sources(state)
+        _log_step("generate_answer", state, mode="web_search_empty_forced")
         return state
 
     if _context_is_missing(state):
