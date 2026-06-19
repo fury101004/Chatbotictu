@@ -178,6 +178,18 @@ async def reset_rate_limit_metrics(request: Request):
     return {"status": "ok"}
 
 
+@router_root.get("/debug/news")
+async def debug_news():
+    """Diagnostic endpoint: test entire web search pipeline.
+
+    Returns structured JSON with configuration status, DNS resolution,
+    HTTP connectivity, sample search results, timing, and errors.
+    """
+    from services.content.web_search import diagnose_web_search
+
+    return diagnose_web_search()
+
+
 def register_api_routes(app) -> None:
     app.include_router(router_v1)
     app.include_router(router_api)

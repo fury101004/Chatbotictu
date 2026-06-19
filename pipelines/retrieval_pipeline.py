@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +10,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
 
 from models.chat import RAGResult
+
+logger = logging.getLogger("retrieval_pipeline")
 from services.rag.ictu_scope_service import normalize_scope_text
 from services.rag.rag_types import (
     RETRIEVAL_HYBRID,
@@ -346,6 +350,12 @@ def _plan_is_web_first(plan: RetrievalFlowPlan) -> bool:
 
 
 def _build_empty_web_search_result(*, route_name: str, tool_name: Optional[str]) -> RAGResult:
+    logger.warning(
+        "[retrieval_pipeline] web_search_empty triggered: "
+        "route_name=%s tool_name=%s reason='build_planned_web_result returned None — "
+        "SEARXNG_URL may be missing or the search service is unreachable'",
+        route_name, tool_name,
+    )
     return RAGResult(
         context_text="Thông tin đang được cập nhật.",
         chunks=[],

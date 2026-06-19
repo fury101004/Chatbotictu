@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Optional
 
 from config.rag_tools import (
@@ -10,6 +12,8 @@ from config.rag_tools import (
     get_tool_metadata_filter,
 )
 from models.chat import RAGResult
+
+logger = logging.getLogger("rag_service")
 from pipelines.retrieval_pipeline import (
     RetrievalRuntime,
     build_retrieval_query as _build_retrieval_query_impl,
@@ -193,16 +197,37 @@ def route_retrieval_flow(message: str, rag_tool: Optional[str] = None) -> Retrie
 
 def _build_planned_web_result(message: str, route_name: str, tool_name: Optional[str]) -> Optional[RAGResult]:
     if should_use_web_search(message):
-        return _build_web_search_result(
+        result = _build_web_search_result(
             message,
             route_name=route_name,
             tool_name=tool_name,
         )
-    return _build_web_knowledge_result(message, route_name=route_name, tool_name=tool_name) or _build_web_search_result(
+        logger.info(
+            "[rag_service] _build_planned_web_result path=realtime_web_search "
+            "result=%s route=%s tool=%s query=%r",
+            "found" if result else "None", route_name, tool_name,
+            message[:80],
+        )
+        return result
+    wk_result = _build_web_knowledge_result(message, route_name=route_name, tool_name=tool_name)
+    if wk_result:
+        logger.info(
+            "[rag_service] _build_planned_web_result path=web_knowledge_base "
+            "result=found route=%s tool=%s",
+            route_name, tool_name,
+        )
+        return wk_result
+    ws_result = _build_web_search_result(
         message,
         route_name=route_name,
         tool_name=tool_name,
     )
+    logger.info(
+        "[rag_service] _build_planned_web_result path=fallback_web_search "
+        "result=%s route=%s tool=%s",
+        "found" if ws_result else "None", route_name, tool_name,
+    )
+    return ws_result
 
 
 def _build_retrieval_runtime() -> RetrievalRuntime:
