@@ -146,6 +146,7 @@ def get_chat_history_page(
     page: int,
     per_page: int = 50,
     owner_username: str | None = None,
+    include_legacy_unowned: bool = False,
 ) -> dict[str, Any]:
     offset = max(page - 1, 0) * per_page
     conn = get_conn()
@@ -158,7 +159,10 @@ def get_chat_history_page(
     where_clause = ""
     params: tuple[Any, ...] = ()
     if owner_filter is not None and has_owner:
-        where_clause = "WHERE owner_username = ?"
+        if include_legacy_unowned:
+            where_clause = "WHERE owner_username = ? OR COALESCE(owner_username, '') = ''"
+        else:
+            where_clause = "WHERE owner_username = ?"
         params = (owner_filter,)
 
     cursor.execute(f"SELECT COUNT(*) FROM chat_history {where_clause}", params)

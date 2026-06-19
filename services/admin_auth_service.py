@@ -9,7 +9,14 @@ import bcrypt
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
-from config.db import add_web_user, get_web_user_by_username
+from config.db import (
+    add_web_user,
+    delete_web_user,
+    get_web_user_by_id,
+    get_web_user_by_username,
+    list_web_users,
+    update_web_user,
+)
 from config.settings import settings
 
 
@@ -28,6 +35,13 @@ MIN_REGISTER_PASSWORD_LENGTH = 6
 
 @dataclass(frozen=True)
 class RegistrationResult:
+    ok: bool
+    message: str
+    code: str = "ok"
+
+
+@dataclass(frozen=True)
+class UserManagementResult:
     ok: bool
     message: str
     code: str = "ok"
@@ -148,6 +162,158 @@ def register_web_user(full_name: str, username: str, password: str, confirm_pass
         return RegistrationResult(False, "Mật khẩu không hợp lệ.", "invalid_password")
 
     return RegistrationResult(True, "Đăng ký thành công. Vui lòng đăng nhập.")
+
+
+def _validate_managed_user_fields(
+    *,
+    full_name: str,
+    username: str,
+    role: str,
+    password: str | None = None,
+    password_required: bool = False,
+) -> tuple[UserManagementResult | None, dict[str, str]]:
+    cleaned_full_name = str(full_name or "").strip()
+    cleaned_username = _normalize_username(username)
+    normalized_role = normalize_role(role)
+    raw_password = "" if password is None else str(password or "")
+
+    if not cleaned_full_name or not cleaned_username:
+        return UserManagementResult(False, "Vui lòng nhập đầy đủ họ tên và tài khoản.", "missing_fields"), {}
+    if normalized_role not in USER_ROLES:
+        return UserManagementResult(False, "Quyền user không hợp lệ.", "invalid_role"), {}
+    if password_required and not raw_password:
+        return UserManagementResult(False, "Vui lòng nhập mật khẩu.", "missing_password"), {}
+    if raw_password and len(raw_password) < MIN_REGISTER_PASSWORD_LENGTH:
+        return UserManagementResult(
+            False,
+            f"Mật khẩu phải có ít nhất {MIN_REGISTER_PASSWORD_LENGTH} ký tự.",
+            "weak_password",
+        ), {}
+    return None, {
+        "full_name": cleaned_full_name,
+        "username": cleaned_username,
+        "role": normalized_role,
+        "password": raw_password,
+    }
+
+
+def get_user_management_payload() -> dict[str, list[dict[str, str | bool]]]:
+    configured_accounts: list[dict[str, str | bool]] = [
+        {
+            "id": "configured-admin",
+            "full_name": "Administrator",
+            "username": settings.ADMIN_USERNAME,
+            "role": ADMIN_ROLE,
+            "created_at": "",
+            "source": "config",
+            "source_label": "Hệ thống",
+            "can_edit": False,
+            "can_delete": False,
+        },
+        {
+            "id": "configured-user",
+            "full_name": "Default user",
+            "username": settings.USER_USERNAME,
+            "role": normalize_role(settings.USER_ROLE),
+            "created_at": "",
+            "source": "config",
+            "source_label": "Hệ thống",
+            "can_edit": False,
+            "can_delete": False,
+        },
+    ]
+    stored_accounts: list[dict[str, str | bool]] = [
+        {
+            **user,
+            "source": "database",
+            "source_label": "Đăng ký",
+            "can_edit": True,
+            "can_delete": True,
+        }
+        for user in list_web_users()
+    ]
+    return {"users": [*configured_accounts, *stored_accounts]}
+
+
+def create_managed_user(
+    full_name: str,
+    username: str,
+    password: str,
+    role: str = DEFAULT_REGISTERED_ROLE,
+) -> UserManagementResult:
+    error, fields = _validate_managed_user_fields(
+        full_name=full_name,
+        username=username,
+        role=role,
+        password=password,
+        password_required=True,
+    )
+    if error:
+        return error
+    if _configured_account_exists(fields["username"]) or get_web_user_by_username(fields["username"]):
+        return UserManagementResult(False, "Tài khoản đã tồn tại.", "duplicate")
+    try:
+        add_web_user(
+            full_name=fields["full_name"],
+            username=fields["username"],
+            password_hash=_hash_password(fields["password"]),
+            role=fields["role"],
+        )
+    except sqlite3.IntegrityError:
+        return UserManagementResult(False, "Tài khoản đã tồn tại.", "duplicate")
+    except ValueError:
+        return UserManagementResult(False, "Dữ liệu user không hợp lệ.", "invalid")
+    return UserManagementResult(True, "Đã tạo user mới.")
+
+
+def update_managed_user(
+    user_id: int,
+    *,
+    full_name: str,
+    username: str,
+    role: str,
+    password: str = "",
+) -> UserManagementResult:
+    existing = get_web_user_by_id(user_id)
+    if not existing:
+        return UserManagementResult(False, "Không tìm thấy user.", "not_found")
+    error, fields = _validate_managed_user_fields(
+        full_name=full_name,
+        username=username,
+        role=role,
+        password=password,
+        password_required=False,
+    )
+    if error:
+        return error
+
+    if _configured_account_exists(fields["username"]):
+        return UserManagementResult(False, "Tài khoản này trùng với tài khoản hệ thống.", "duplicate")
+    duplicate = get_web_user_by_username(fields["username"])
+    if duplicate and str(duplicate.get("id")) != str(existing["id"]):
+        return UserManagementResult(False, "Tài khoản đã tồn tại.", "duplicate")
+
+    try:
+        changed = update_web_user(
+            user_id,
+            full_name=fields["full_name"],
+            username=fields["username"],
+            role=fields["role"],
+            password_hash=_hash_password(fields["password"]) if fields["password"] else None,
+        )
+    except sqlite3.IntegrityError:
+        return UserManagementResult(False, "Tài khoản đã tồn tại.", "duplicate")
+    if not changed:
+        return UserManagementResult(False, "Không tìm thấy user.", "not_found")
+    return UserManagementResult(True, "Đã cập nhật user.")
+
+
+def delete_managed_user(user_id: int) -> UserManagementResult:
+    if not get_web_user_by_id(user_id):
+        return UserManagementResult(False, "Không tìm thấy user.", "not_found")
+    if not delete_web_user(user_id):
+        return UserManagementResult(False, "Không tìm thấy user.", "not_found")
+    return UserManagementResult(True, "Đã xóa user.")
 
 
 def login_with_role(request: Request, username: str, role: str) -> None:

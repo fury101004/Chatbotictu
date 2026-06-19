@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 import config.db as db
 import config.middleware as middleware
+from repositories.conversation_repository import get_chat_history_page
 
 
 class ChatHistorySchemaTests(unittest.TestCase):
@@ -101,6 +102,40 @@ class ChatHistorySchemaTests(unittest.TestCase):
                 "Khóa 2025-2026 cần bao nhiêu tín chỉ để tốt nghiệp cử nhân?",
             ),
         )
+
+    def test_history_page_can_include_legacy_unowned_rows_for_backups(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            db_path = temp_root / "bot_config.db"
+            prompt_path = temp_root / "systemprompt.md"
+
+            with (
+                patch("config.db.DB_PATH", db_path),
+                patch("config.system_prompt.SYSTEM_PROMPT_PATH", prompt_path),
+            ):
+                db.init_db()
+                db.save_message("user", "Legacy backup question", session_id="legacy-chat")
+                db.save_message(
+                    "user",
+                    "Owned user question",
+                    session_id="owned-chat",
+                    owner_username="student",
+                    owner_role="user",
+                )
+
+                strict_payload = get_chat_history_page(page=1, per_page=10, owner_username="student")
+                compatible_payload = get_chat_history_page(
+                    page=1,
+                    per_page=10,
+                    owner_username="student",
+                    include_legacy_unowned=True,
+                )
+
+        strict_contents = {item["content"] for item in strict_payload["history"]}
+        compatible_contents = {item["content"] for item in compatible_payload["history"]}
+
+        self.assertEqual(strict_contents, {"Owned user question"})
+        self.assertEqual(compatible_contents, {"Legacy backup question", "Owned user question"})
 
 
 class MiddlewareConfigTests(unittest.TestCase):

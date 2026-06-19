@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 import main
 from config.settings import settings
 from config.rag_tools import get_tool_upload_dir, resolve_upload_source_path
+from services.admin_auth_service import UserManagementResult
 
 
 def _csrf_from_login_page(client: TestClient, path: str = "/login") -> str:
@@ -74,6 +75,14 @@ def _csrf_from_chat_page(client: TestClient) -> str:
     chat_page = client.get("/chat")
     assert chat_page.status_code == 200
     return _csrf_from_chat_page_text(chat_page.text)
+
+
+def _csrf_from_user_management_page(client: TestClient) -> str:
+    page = client.get("/users")
+    assert page.status_code == 200
+    csrf_match = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
+    assert csrf_match is not None
+    return csrf_match.group(1)
 
 
 def _nav_html(page_text: str) -> str:
@@ -152,6 +161,7 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertNotIn("Kho vector", nav_html)
         self.assertNotIn("Kho tri thức", nav_html)
         self.assertNotIn("Cấu hình", nav_html)
+        self.assertNotIn("Quản lý user", nav_html)
         self.assertNotIn("Đánh giá", nav_html)
         self.assertNotIn("Đăng xuất admin", nav_html)
 
@@ -162,8 +172,8 @@ class WebCsrfSecurityTests(unittest.TestCase):
         history_page = client.get("/history")
         self.assertEqual(history_page.status_code, 200)
         self.assertIn("Lịch sử của bạn", history_page.text)
-        self.assertNotIn("Vector Store", history_page.text)
-        self.assertNotIn("Knowledge Base", history_page.text)
+        self.assertNotIn('href="/vector-manager"', history_page.text)
+        self.assertNotIn('href="/knowledge-base"', history_page.text)
 
         login_redirect = client.get("/login", follow_redirects=False)
         self.assertEqual(login_redirect.status_code, 303)
@@ -186,6 +196,7 @@ class WebCsrfSecurityTests(unittest.TestCase):
             "/knowledge",
             "/config",
             "/settings",
+            "/users",
             "/evaluation-dashboard",
             "/admin",
         ):
@@ -371,11 +382,90 @@ class WebCsrfSecurityTests(unittest.TestCase):
             "Kho vector",
             "Kho tri thức",
             "Cấu hình",
+            "Quản lý user",
             "Đánh giá",
             "Lịch sử chat",
             "Đăng xuất admin",
         ):
             self.assertIn(label, nav_html)
+
+    def test_user_management_is_admin_only(self) -> None:
+        anonymous = TestClient(main.app)
+        anonymous_response = anonymous.get("/users", follow_redirects=False)
+        self.assertEqual(anonymous_response.status_code, 303)
+        self.assertIn("/login", anonymous_response.headers["location"])
+
+        user_client = TestClient(main.app)
+        _login_as_user(user_client)
+        user_response = user_client.get("/users", follow_redirects=False)
+        self.assertEqual(user_response.status_code, 303)
+        self.assertEqual(user_response.headers["location"], "/chat")
+
+        admin_client = TestClient(main.app)
+        _login_as_admin(admin_client)
+        admin_response = admin_client.get("/users")
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertIn("Quản lý user", admin_response.text)
+        self.assertIn('action="/users/create"', admin_response.text)
+        self.assertIn("Quản lý trong cấu hình", admin_response.text)
+
+    def test_user_management_create_requires_csrf_and_redirects_on_success(self) -> None:
+        client = TestClient(main.app)
+        _login_as_admin(client)
+
+        with patch("controllers.web_controller.create_managed_user") as create_mock:
+            invalid_response = client.post(
+                "/users/create",
+                data={
+                    "full_name": "Managed User",
+                    "username": "managed-user",
+                    "password": "secret123",
+                    "role": "user",
+                    "csrf_token": "invalid",
+                },
+            )
+            self.assertEqual(invalid_response.status_code, 200)
+            self.assertIn("CSRF không hợp lệ.", invalid_response.text)
+            create_mock.assert_not_called()
+
+            create_mock.return_value = UserManagementResult(True, "Đã tạo user mới.")
+            csrf_token = _csrf_from_user_management_page(client)
+            success_response = client.post(
+                "/users/create",
+                data={
+                    "full_name": "Managed User",
+                    "username": "managed-user",
+                    "password": "secret123",
+                    "role": "student",
+                    "csrf_token": csrf_token,
+                },
+                follow_redirects=False,
+            )
+
+        self.assertEqual(success_response.status_code, 303)
+        self.assertEqual(success_response.headers["location"], "/users?status=created")
+        create_mock.assert_called_once_with("Managed User", "managed-user", "secret123", "student")
+
+    def test_login_reissues_csrf_token_after_invalid_submission(self) -> None:
+        client = TestClient(main.app)
+        original_token = _csrf_from_login_page(client)
+
+        response = client.post(
+            "/login",
+            data={
+                "username": settings.ADMIN_USERNAME,
+                "password": settings.ADMIN_PASSWORD,
+                "next_path": "/",
+                "csrf_token": "invalid",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("CSRF không hợp lệ.", response.text)
+        replacement_match = re.search(r'name="csrf_token" value="([^"]+)"', response.text)
+        self.assertIsNotNone(replacement_match)
+        self.assertNotEqual(original_token, replacement_match.group(1))
+        self.assertIn("no-store", response.headers["cache-control"])
 
     def test_evaluation_dashboard_is_admin_only(self) -> None:
         anonymous = TestClient(main.app)
@@ -575,7 +665,7 @@ class WebCsrfSecurityTests(unittest.TestCase):
             comment="",
         )
 
-    def test_chat_citations_are_clean_for_user_and_detailed_for_admin(self) -> None:
+    def test_web_chat_returns_only_response_content(self) -> None:
         chat_result = {
             "response": "Can du dieu kien tot nghiep.",
             "sources": ["student_handbooks/2025.md"],
@@ -593,6 +683,9 @@ class WebCsrfSecurityTests(unittest.TestCase):
                     "metadata": {"chunk_id": "chunk-1"},
                 }
             ],
+            "language": "vi",
+            "intent": "rag",
+            "response_time_ms": 12,
         }
 
         with patch("controllers.web_controller.process_chat_message", AsyncMock(return_value=chat_result)):
@@ -618,11 +711,8 @@ class WebCsrfSecurityTests(unittest.TestCase):
                 },
             )
 
-        self.assertNotIn("sources", user_response.json())
-        self.assertNotIn("source", user_response.json()["source_details"][0])
-        self.assertEqual(user_response.json()["source_details"][0]["title"], "Dieu kien tot nghiep")
-        self.assertEqual(admin_response.json()["sources"], ["student_handbooks/2025.md"])
-        self.assertEqual(admin_response.json()["source_details"], chat_result["_admin_source_details"])
+        self.assertEqual(user_response.json(), {"response": "Can du dieu kien tot nghiep."})
+        self.assertEqual(admin_response.json(), {"response": "Can du dieu kien tot nghiep."})
 
     def test_source_preview_requires_login_and_renders_vector_chunks(self) -> None:
         anonymous = TestClient(main.app)
@@ -697,20 +787,21 @@ class WebCsrfSecurityTests(unittest.TestCase):
         self.assertIn("const CAN_PREVIEW_INTERNAL_SOURCES = true", response.text)
         self.assertIn("function renderSourceItem", response.text)
         self.assertIn("function formatSourceLabel", response.text)
-        self.assertIn("source_details: data.source_details", response.text)
+        self.assertNotIn("source_details: data.source_details", response.text)
         self.assertIn("/source-preview?source=", response.text)
         self.assertNotIn("sourceInfo?.excerpt", response.text)
 
-    def test_chat_page_starts_clean_and_shows_suggestions(self) -> None:
+    def test_chat_page_restores_saved_sessions_and_shows_suggestions(self) -> None:
         client = TestClient(main.app)
         _login_as_user(client)
 
         response = client.get("/chat")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("resetChatOnPageLoad", response.text)
-        self.assertNotIn("localStorage.setItem(LEGACY_CHAT_STATE_KEY", response.text)
-        self.assertNotIn("localStorage.setItem(LEGACY_CHAT_ACTIVE_KEY", response.text)
+        self.assertIn("restoreChatOnPageLoad", response.text)
+        self.assertIn("persistCurrentChatSession", response.text)
+        self.assertIn("localStorage.setItem(CHAT_STORAGE_KEY", response.text)
+        self.assertIn("localStorage.setItem(CHAT_ACTIVE_KEY", response.text)
         self.assertIn("Điều kiện tốt nghiệp là gì?", response.text)
         self.assertIn("Học lại có được cải thiện điểm không?", response.text)
         self.assertIn("Cuộc trò chuyện mới", response.text)

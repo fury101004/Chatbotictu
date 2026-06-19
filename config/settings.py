@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     CHAT_MEMORY_TTL_SECONDS: int = 30 * 24 * 60 * 60
     CHAT_MEMORY_MAX_MESSAGES: int = 40
     CHAT_MEMORY_MAX_SESSIONS: int = 4096
+    SHOW_LEGACY_UNOWNED_CHAT_HISTORY_TO_USERS: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SHOW_LEGACY_UNOWNED_CHAT_HISTORY_TO_USERS"),
+    )
     MAX_UPLOAD_FILES: int = 20
     MAX_UPLOAD_FILE_SIZE_BYTES: int = 10 * 1024 * 1024
     MAX_UPLOAD_BATCH_SIZE_BYTES: int = 50 * 1024 * 1024

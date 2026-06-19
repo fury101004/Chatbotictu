@@ -103,8 +103,10 @@
 const MAX_CHAT_MESSAGE_CHARS = Number("{{ max_chat_message_chars|default(2000) }}");
 const CAN_VIEW_CHAT_SOURCES = {{ "true" if is_authenticated else "false" }};
 const CAN_PREVIEW_INTERNAL_SOURCES = {{ "true" if current_role == "admin" else "false" }};
-const LEGACY_CHAT_STATE_KEY = `ictu-dashboard-chat-state:{{ chat_storage_scope }}`;
-const LEGACY_CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:{{ chat_storage_scope }}`;
+const CHAT_STORAGE_KEY = `ictu-dashboard-chat-state:{{ chat_storage_scope }}`;
+const CHAT_ACTIVE_KEY = `ictu-dashboard-active-chat:{{ chat_storage_scope }}`;
+const LEGACY_CHAT_STATE_KEY = CHAT_STORAGE_KEY;
+const LEGACY_CHAT_ACTIVE_KEY = CHAT_ACTIVE_KEY;
 
 let activeChatSessionId = "";
 let runtimeMessages = [];
@@ -114,18 +116,135 @@ function createChatSessionId() {
     return `chat-${Date.now().toString(36)}-${randomPart}`;
 }
 
-function resetChatOnPageLoad() {
-    activeChatSessionId = createChatSessionId();
-    runtimeMessages = [];
+function emptyChatStore() {
+    return { version: 1, activeSessionId: "", sessions: {} };
+}
+
+function readChatStore() {
     try {
-        localStorage.removeItem(LEGACY_CHAT_STATE_KEY);
-        localStorage.removeItem(LEGACY_CHAT_ACTIVE_KEY);
-        sessionStorage.removeItem(LEGACY_CHAT_STATE_KEY);
-        sessionStorage.removeItem(LEGACY_CHAT_ACTIVE_KEY);
-    } catch {
-        // Storage can be unavailable in private or restricted browser modes.
+        const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === "object" && parsed.sessions && typeof parsed.sessions === "object") {
+            return {
+                version: Number(parsed.version || 1),
+                activeSessionId: String(parsed.activeSessionId || ""),
+                sessions: parsed.sessions,
+            };
+        }
+    } catch (err) {
+        console.warn("Cannot read saved chat sessions", err);
     }
+    return emptyChatStore();
+}
+
+function writeChatStore(store) {
+    try {
+        const safeStore = store && typeof store === "object" ? store : emptyChatStore();
+        safeStore.version = 1;
+        safeStore.sessions = safeStore.sessions && typeof safeStore.sessions === "object" ? safeStore.sessions : {};
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(safeStore));
+        if (safeStore.activeSessionId) {
+            localStorage.setItem(CHAT_ACTIVE_KEY, safeStore.activeSessionId);
+        } else {
+            localStorage.removeItem(CHAT_ACTIVE_KEY);
+        }
+    } catch (err) {
+        // Storage can be unavailable in private or restricted browser modes.
+        console.warn("Cannot save chat sessions", err);
+    }
+}
+
+function getStoredActiveSessionId(store) {
+    try {
+        const activeId = String(localStorage.getItem(CHAT_ACTIVE_KEY) || "").trim();
+        if (activeId) return activeId;
+    } catch {
+        // Ignore storage read errors and fall back to the store payload.
+    }
+    return String(store?.activeSessionId || "").trim();
+}
+
+function normalizeStoredMessage(message) {
+    const sender = ["user", "bot", "system"].includes(message?.sender) ? message.sender : "bot";
+    return {
+        id: String(message?.id || `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`),
+        sender,
+        text: String(message?.text || ""),
+        name: String(message?.name || (sender === "user" ? "Bạn" : sender === "system" ? "Hệ thống" : "ICTU AI")),
+        meta: message?.meta || null,
+        feedback: message?.feedback || null,
+        timestamp: message?.timestamp || new Date().toISOString(),
+    };
+}
+
+function createSessionTitle(messages) {
+    const firstUserMessage = messages.find(item => item.sender === "user" && String(item.text || "").trim());
+    const rawTitle = String(firstUserMessage?.text || messages[0]?.text || "Cuộc trò chuyện mới").trim();
+    return rawTitle.length > 72 ? `${rawTitle.slice(0, 69)}...` : rawTitle;
+}
+
+function persistCurrentChatSession() {
+    if (!activeChatSessionId) return;
+    const messages = runtimeMessages.map(normalizeStoredMessage);
+    const store = readChatStore();
+    store.activeSessionId = activeChatSessionId;
+
+    if (messages.length > 0) {
+        const existing = store.sessions[activeChatSessionId] || {};
+        const firstMessage = messages[0];
+        const lastMessage = messages[messages.length - 1];
+        store.sessions[activeChatSessionId] = {
+            ...existing,
+            id: activeChatSessionId,
+            title: createSessionTitle(messages),
+            createdAt: existing.createdAt || firstMessage.timestamp || new Date().toISOString(),
+            updatedAt: lastMessage.timestamp || new Date().toISOString(),
+            messages,
+        };
+    }
+
+    writeChatStore(store);
+}
+
+function renameStoredChatSession(previousSessionId, nextSessionId) {
+    if (!previousSessionId || !nextSessionId || previousSessionId === nextSessionId) return;
+    const store = readChatStore();
+    if (store.sessions[previousSessionId]) {
+        store.sessions[nextSessionId] = {
+            ...store.sessions[previousSessionId],
+            id: nextSessionId,
+        };
+        delete store.sessions[previousSessionId];
+    }
+    store.activeSessionId = nextSessionId;
+    writeChatStore(store);
+}
+
+function restoreChatOnPageLoad() {
+    const store = readChatStore();
+    const storedActiveSessionId = getStoredActiveSessionId(store);
+    const storedSession = storedActiveSessionId ? store.sessions[storedActiveSessionId] : null;
+    activeChatSessionId = storedActiveSessionId || createChatSessionId();
+    runtimeMessages = [];
     clearRenderedMessages();
+
+    if (storedSession && Array.isArray(storedSession.messages) && storedSession.messages.length > 0) {
+        storedSession.messages
+            .map(normalizeStoredMessage)
+            .forEach(message => addMessage(message.sender, message.text, message.name, message.meta, {
+                id: message.id,
+                timestamp: message.timestamp,
+                feedback: message.feedback,
+                persist: false,
+            }));
+        setWelcomeVisibility();
+        const container = document.getElementById("messages");
+        if (container) container.scrollTop = container.scrollHeight;
+        return;
+    }
+
+    store.activeSessionId = activeChatSessionId;
+    writeChatStore(store);
 }
 
 function clearRenderedMessages() {
@@ -140,9 +259,13 @@ function setWelcomeVisibility() {
 }
 
 function createNewChatSession() {
+    persistCurrentChatSession();
     activeChatSessionId = createChatSessionId();
     runtimeMessages = [];
     clearRenderedMessages();
+    const store = readChatStore();
+    store.activeSessionId = activeChatSessionId;
+    writeChatStore(store);
     const input = document.getElementById("userInput");
     if (input) {
         input.value = "";
@@ -261,6 +384,7 @@ function markFeedbackSubmitted(messageId, feedbackId) {
     if (!message || !message.feedback) return;
     message.feedback.submitted = true;
     message.feedback.feedback_id = feedbackId || message.feedback.feedback_id || null;
+    persistCurrentChatSession();
 }
 
 async function submitFeedback(wrapper, messageId, feedback, thumbsUp) {
@@ -384,6 +508,7 @@ function addMessage(sender, text, name = "ICTU AI", meta = null, options = {}) {
         feedback: feedbackPayload,
         timestamp: timestampIso,
     });
+    if (options.persist !== false) persistCurrentChatSession();
     setWelcomeVisibility();
     container.scrollTop = container.scrollHeight;
     return msgElement;
@@ -434,21 +559,22 @@ async function submitQuestion(rawQuestion) {
         });
         const data = await res.json();
         thinking.remove();
-        if (data.session_id) activeChatSessionId = data.session_id;
+        if (data.session_id && data.session_id !== activeChatSessionId) {
+            const previousSessionId = activeChatSessionId;
+            activeChatSessionId = data.session_id;
+            renameStoredChatSession(previousSessionId, activeChatSessionId);
+        } else if (data.session_id) {
+            activeChatSessionId = data.session_id;
+        }
 
         if (!res.ok || !data.response) {
             addMessage("system", data.detail || "Không nhận được câu trả lời. Vui lòng thử lại.", "Hệ thống");
             return;
         }
 
-        addMessage("bot", data.response, "ICTU AI", {
-            llm_model: data.llm_model,
-            sources: data.sources,
-            source_details: data.source_details,
-            response_time_ms: data.response_time_ms,
-        }, {
+        addMessage("bot", data.response, "ICTU AI", null, {
             feedback: {
-                session_id: activeChatSessionId || data.session_id || "default",
+                session_id: activeChatSessionId || "default",
                 question,
                 answer: data.response,
             },
@@ -488,7 +614,7 @@ function filterVisibleMessages(query) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    resetChatOnPageLoad();
+    restoreChatOnPageLoad();
 
     const input = document.getElementById("userInput");
     const sendBtn = document.getElementById("sendBtn");

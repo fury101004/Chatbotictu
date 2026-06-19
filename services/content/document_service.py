@@ -503,7 +503,13 @@ def get_history_page_data(
     per_page: int = 50,
     owner_username: str | None = None,
     include_uploaded_files: bool = True,
+    include_legacy_unowned: bool = False,
 ) -> dict:
-    payload = get_chat_history_page(page=page, per_page=per_page, owner_username=owner_username)
+    payload = get_chat_history_page(
+        page=page,
+        per_page=per_page,
+        owner_username=owner_username,
+        include_legacy_unowned=include_legacy_unowned,
+    )
     payload["uploaded_files"] = get_uploaded_files() if include_uploaded_files else []
     return payload

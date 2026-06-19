@@ -16,14 +16,18 @@ from services.chat.chat_service import process_chat_message
 from services.admin_auth_service import (
     admin_login_redirect,
     authenticate_web_user,
+    create_managed_user,
     default_route_for_role,
+    delete_managed_user,
     get_current_role,
     get_current_username,
+    get_user_management_payload,
     is_admin_authenticated,
     is_web_authenticated,
     login_with_role,
     logout_web_user,
     register_web_user,
+    update_managed_user,
 )
 from services.config_service import get_config_page_payload, update_runtime_config
 from services.content.document_service import (
@@ -39,7 +43,6 @@ from services.content.knowledge_base_service import approve_chat_entry, get_know
 from services.ingestion_queue import get_ingestion_queue
 from services.llm.llm_service import get_chat_model_options
 from services.rag.source_display_service import format_source_label
-from services.rag.citation_serializer import ADMIN_AUDIENCE, USER_AUDIENCE, serialize_chat_payload
 from services.user_feedback_service import save_user_feedback
 from services.vector.vector_admin_service import delete_chunk_by_id
 from repositories.vector_repository import fetch_documents_by_source
@@ -57,6 +60,7 @@ CONFIG_TEMPLATE = "pages/config.html"
 HISTORY_TEMPLATE = "pages/history.html"
 ADMIN_LOGIN_TEMPLATE = "pages/admin_login.html"
 REGISTER_TEMPLATE = "pages/register.html"
+USER_MANAGEMENT_TEMPLATE = "pages/user_management.html"
 EVALUATION_DASHBOARD_HTML = settings.PROJECT_ROOT / "views" / "frontend" / "evaluation_dashboard.html"
 
 
@@ -130,6 +134,41 @@ def _register_page_context(
     }
 
 
+def _no_store_response(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+def _user_management_context(
+    request: Request,
+    *,
+    notice: str = "",
+    error: str = "",
+) -> dict:
+    payload = get_user_management_payload()
+    payload["csrf_token"] = ensure_csrf_token(request)
+    payload["notice"] = notice
+    payload["error"] = error
+    return payload
+
+
+def _render_user_management_page(
+    request: Request,
+    *,
+    notice: str = "",
+    error: str = "",
+):
+    return _no_store_response(
+        render_page(
+            request,
+            USER_MANAGEMENT_TEMPLATE,
+            context=_user_management_context(request, notice=notice, error=error),
+        )
+    )
+
+
 def _chat_payload_error(message: str, session_id: str, llm_model: str):
     if not str(message or "").strip():
         return JSONResponse({"status": "error", "detail": "Message is required."}, status_code=422)
@@ -160,11 +199,6 @@ def _chat_payload_error(message: str, session_id: str, llm_model: str):
     return None
 
 
-def _filter_chat_sources_for_role(result: dict, role: str) -> dict:
-    audience = ADMIN_AUDIENCE if role == "admin" else USER_AUDIENCE
-    return serialize_chat_payload(result, audience=audience)
-
-
 async def _submit_login(
     request: Request,
     username: str,
@@ -174,20 +208,21 @@ async def _submit_login(
 ):
     next_target = _safe_next_path(next_path)
     if not validate_csrf_token(request, csrf_token):
-        return render_page(
+        rotate_csrf_token(request)
+        return _no_store_response(render_page(
             request,
             ADMIN_LOGIN_TEMPLATE,
             context=_login_page_context(request, next_target, "CSRF không hợp lệ."),
-        )
+        ))
 
     role = authenticate_web_user(username, password)
     if role is None:
         rotate_csrf_token(request)
-        return render_page(
+        return _no_store_response(render_page(
             request,
             ADMIN_LOGIN_TEMPLATE,
             context=_login_page_context(request, next_target, "Sai tài khoản hoặc mật khẩu."),
-        )
+        ))
 
     login_with_role(request, username, role)
     rotate_csrf_token(request)
@@ -209,33 +244,33 @@ async def login_page(request: Request, next: str = "/", registered: str = ""):
     if is_web_authenticated(request):
         return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
     success = "Đăng ký thành công. Vui lòng đăng nhập." if registered == "1" else ""
-    return render_page(
+    return _no_store_response(render_page(
         request,
         ADMIN_LOGIN_TEMPLATE,
         context=_login_page_context(request, next, success=success),
-    )
+    ))
 
 
 @router.get("/admin/login")
 async def admin_login_page(request: Request, next: str = "/"):
     if is_web_authenticated(request):
         return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
-    return render_page(
+    return _no_store_response(render_page(
         request,
         ADMIN_LOGIN_TEMPLATE,
         context=_login_page_context(request, next),
-    )
+    ))
 
 
 @router.get("/register")
 async def register_page(request: Request):
     if is_web_authenticated(request):
         return RedirectResponse(default_route_for_role(get_current_role(request)), status_code=303)
-    return render_page(
+    return _no_store_response(render_page(
         request,
         REGISTER_TEMPLATE,
         context=_register_page_context(request),
-    )
+    ))
 
 
 @router.post("/login")
@@ -265,23 +300,114 @@ async def register_submit(
 
     form_values = {"full_name": full_name, "username": username}
     if not validate_csrf_token(request, csrf_token):
-        return render_page(
+        rotate_csrf_token(request)
+        return _no_store_response(render_page(
             request,
             REGISTER_TEMPLATE,
             context=_register_page_context(request, "CSRF không hợp lệ.", form_values),
-        )
+        ))
 
     result = register_web_user(full_name, username, password, confirm_password)
     if not result.ok:
         rotate_csrf_token(request)
-        return render_page(
+        return _no_store_response(render_page(
             request,
             REGISTER_TEMPLATE,
             context=_register_page_context(request, result.message, form_values),
-        )
+        ))
 
     rotate_csrf_token(request)
     return RedirectResponse("/login?registered=1", status_code=303)
+
+
+@router.get("/users")
+async def user_management_page(request: Request, status: str = ""):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+
+    notices = {
+        "created": "Đã tạo user mới.",
+        "updated": "Đã cập nhật user.",
+        "deleted": "Đã xóa user.",
+    }
+    return _render_user_management_page(request, notice=notices.get(status, ""))
+
+
+@router.post("/users/create")
+@limiter.limit(settings.API_RATE_ADMIN)
+async def user_management_create(
+    request: Request,
+    full_name: str = Form(""),
+    username: str = Form(""),
+    password: str = Form(""),
+    role: str = Form("user"),
+    csrf_token: str = Form(""),
+):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    if not validate_csrf_token(request, csrf_token):
+        rotate_csrf_token(request)
+        return _render_user_management_page(request, error="CSRF không hợp lệ.")
+
+    result = create_managed_user(full_name, username, password, role)
+    rotate_csrf_token(request)
+    if not result.ok:
+        return _render_user_management_page(request, error=result.message)
+    return RedirectResponse("/users?status=created", status_code=303)
+
+
+@router.post("/users/update")
+@limiter.limit(settings.API_RATE_ADMIN)
+async def user_management_update(
+    request: Request,
+    user_id: int = Form(...),
+    full_name: str = Form(""),
+    username: str = Form(""),
+    password: str = Form(""),
+    role: str = Form("user"),
+    csrf_token: str = Form(""),
+):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    if not validate_csrf_token(request, csrf_token):
+        rotate_csrf_token(request)
+        return _render_user_management_page(request, error="CSRF không hợp lệ.")
+
+    result = update_managed_user(
+        user_id,
+        full_name=full_name,
+        username=username,
+        password=password,
+        role=role,
+    )
+    rotate_csrf_token(request)
+    if not result.ok:
+        return _render_user_management_page(request, error=result.message)
+    return RedirectResponse("/users?status=updated", status_code=303)
+
+
+@router.post("/users/delete")
+@limiter.limit(settings.API_RATE_ADMIN)
+async def user_management_delete(
+    request: Request,
+    user_id: int = Form(...),
+    csrf_token: str = Form(""),
+):
+    admin_response = _admin_required(request)
+    if admin_response is not None:
+        return admin_response
+    if not validate_csrf_token(request, csrf_token):
+        rotate_csrf_token(request)
+        return _render_user_management_page(request, error="CSRF không hợp lệ.")
+
+    result = delete_managed_user(user_id)
+    rotate_csrf_token(request)
+    if not result.ok:
+        return _render_user_management_page(request, error=result.message)
+    return RedirectResponse("/users?status=deleted", status_code=303)
 
 
 @router.post("/admin/login")
@@ -353,9 +479,7 @@ async def chat_web(
         owner_username=current_username,
         owner_role=current_role,
     )
-    result = _filter_chat_sources_for_role(result, current_role)
-    result["session_id"] = current_session_id
-    return result
+    return {"response": str(result.get("response") or "")}
 
 
 @router.post("/chat/feedback")
@@ -911,6 +1035,7 @@ async def history_page(request: Request, page: int = 1):
         page=page,
         per_page=50,
         owner_username=None if is_admin else current_username,
+        include_legacy_unowned=not is_admin and settings.SHOW_LEGACY_UNOWNED_CHAT_HISTORY_TO_USERS,
         include_uploaded_files=False,
     )
     payload["csrf_token"] = ensure_csrf_token(request)
@@ -929,4 +1054,3 @@ async def evaluation_dashboard_page(request: Request):
 
 def register_web_routes(app) -> None:
     app.include_router(router)
-

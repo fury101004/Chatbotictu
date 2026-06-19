@@ -279,6 +279,57 @@ def get_web_user_by_username(username: str) -> Dict[str, str] | None:
     }
 
 
+def get_web_user_by_id(user_id: int) -> Dict[str, str] | None:
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, full_name, username, password_hash, role, created_at
+        FROM web_users
+        WHERE id = ?
+        LIMIT 1
+        """,
+        (int(user_id),),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    row_id, full_name, stored_username, password_hash, role, created_at = row
+    return {
+        "id": str(row_id),
+        "full_name": str(full_name or ""),
+        "username": str(stored_username or ""),
+        "password_hash": str(password_hash or ""),
+        "role": str(role or "user"),
+        "created_at": str(created_at or ""),
+    }
+
+
+def list_web_users() -> List[Dict[str, str]]:
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, full_name, username, role, created_at
+        FROM web_users
+        ORDER BY created_at DESC, id DESC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {
+            "id": str(user_id),
+            "full_name": str(full_name or ""),
+            "username": str(username or ""),
+            "role": str(role or "user"),
+            "created_at": str(created_at or ""),
+        }
+        for user_id, full_name, username, role, created_at in rows
+    ]
+
+
 def add_web_user(full_name: str, username: str, password_hash: str, role: str = "user") -> int:
     conn = get_conn()
     cursor = conn.cursor()
@@ -300,6 +351,61 @@ def add_web_user(full_name: str, username: str, password_hash: str, role: str = 
         return int(row_id)
     finally:
         conn.close()
+
+
+def update_web_user(
+    user_id: int,
+    *,
+    full_name: str,
+    username: str,
+    role: str,
+    password_hash: str | None = None,
+) -> bool:
+    conn = get_conn()
+    cursor = conn.cursor()
+    if password_hash:
+        cursor.execute(
+            """
+            UPDATE web_users
+            SET full_name = ?, username = ?, role = ?, password_hash = ?
+            WHERE id = ?
+            """,
+            (
+                str(full_name or "").strip(),
+                str(username or "").strip(),
+                str(role or "user").strip().lower() or "user",
+                str(password_hash or ""),
+                int(user_id),
+            ),
+        )
+    else:
+        cursor.execute(
+            """
+            UPDATE web_users
+            SET full_name = ?, username = ?, role = ?
+            WHERE id = ?
+            """,
+            (
+                str(full_name or "").strip(),
+                str(username or "").strip(),
+                str(role or "user").strip().lower() or "user",
+                int(user_id),
+            ),
+        )
+    changed = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return changed
+
+
+def delete_web_user(user_id: int) -> bool:
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM web_users WHERE id = ?", (int(user_id),))
+    changed = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return changed
 
 
 def _chat_history_columns(cursor: sqlite3.Cursor) -> list[str]:

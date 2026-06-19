@@ -322,6 +322,24 @@ main,
     appearance: none;
 }
 
+@media (max-width: 1500px) and (min-width: 761px) {
+    .navbar {
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        flex-wrap: wrap !important;
+    }
+
+    .nav-menu {
+        order: 3;
+        flex: 1 1 100% !important;
+        overflow-x: auto !important;
+    }
+
+    .nav-actions {
+        margin-left: auto !important;
+    }
+}
+
 .nav-item-icon,
 .theme-toggle-icon {
     align-items: center;

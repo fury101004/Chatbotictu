@@ -1,0 +1,366 @@
+{% extends "layouts/base.html" %}
+{% block title %}Quản lý user{% endblock %}
+
+{% block content %}
+<div class="user-management-page">
+    <header class="user-management-header">
+        <div>
+            <p class="user-management-kicker">Quản trị hệ thống</p>
+            <h1>Quản lý user</h1>
+        </div>
+        <span class="user-count">{{ users|length }} tài khoản</span>
+    </header>
+
+    {% if notice %}
+    <div class="user-alert user-alert-success" role="status">{{ notice }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="user-alert user-alert-error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <section class="user-create-section" aria-labelledby="create-user-title">
+        <div class="section-title-row">
+            <h2 id="create-user-title">Tạo user mới</h2>
+        </div>
+        <form class="user-create-form" method="post" action="/users/create">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>
+                <span>Họ tên</span>
+                <input name="full_name" type="text" autocomplete="name" required>
+            </label>
+            <label>
+                <span>Tài khoản</span>
+                <input name="username" type="text" autocomplete="username" required>
+            </label>
+            <label>
+                <span>Mật khẩu</span>
+                <input name="password" type="password" autocomplete="new-password" minlength="6" required>
+            </label>
+            <label>
+                <span>Vai trò</span>
+                <select name="role">
+                    <option value="user">User</option>
+                    <option value="student">Student</option>
+                </select>
+            </label>
+            <button class="user-button user-button-primary" type="submit">Tạo user</button>
+        </form>
+    </section>
+
+    <section class="user-list-section" aria-labelledby="user-list-title">
+        <div class="section-title-row">
+            <h2 id="user-list-title">Danh sách tài khoản</h2>
+        </div>
+        <div class="user-table-scroll">
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Họ tên</th>
+                        <th scope="col">Tài khoản</th>
+                        <th scope="col">Vai trò</th>
+                        <th scope="col">Nguồn</th>
+                        <th scope="col">Tạo lúc</th>
+                        <th scope="col" class="user-actions-heading">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    {% set form_id = "user-update-" ~ user.id %}
+                    <tr>
+                        <td>
+                            {% if user.can_edit %}
+                            <input form="{{ form_id }}" name="full_name" type="text" value="{{ user.full_name }}" required>
+                            {% else %}
+                            <span class="user-readonly-text">{{ user.full_name }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.can_edit %}
+                            <input form="{{ form_id }}" name="username" type="text" value="{{ user.username }}" required>
+                            {% else %}
+                            <span class="user-readonly-text user-mono">{{ user.username }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.can_edit %}
+                            <select form="{{ form_id }}" name="role">
+                                <option value="user" {% if user.role == "user" %}selected{% endif %}>User</option>
+                                <option value="student" {% if user.role == "student" %}selected{% endif %}>Student</option>
+                            </select>
+                            {% else %}
+                            <span class="user-role user-role-{{ user.role }}">{{ user.role }}</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="user-source user-source-{{ user.source }}">{{ user.source_label }}</span></td>
+                        <td class="user-date">{{ user.created_at or "-" }}</td>
+                        <td class="user-actions">
+                            {% if user.can_edit %}
+                            <form id="{{ form_id }}" method="post" action="/users/update" class="user-inline-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="user_id" value="{{ user.id }}">
+                                <input class="user-password-input" name="password" type="password" autocomplete="new-password" minlength="6" placeholder="Mật khẩu mới">
+                                <button class="user-button user-button-primary" type="submit">Lưu</button>
+                            </form>
+                            <form method="post" action="/users/delete" class="user-inline-form" onsubmit="return confirm('Xóa user này?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="user_id" value="{{ user.id }}">
+                                <button class="user-button user-button-danger" type="submit">Xóa</button>
+                            </form>
+                            {% else %}
+                            <span class="user-system-note">Quản lý trong cấu hình</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="user-empty-state" colspan="6">Chưa có user nào trong cơ sở dữ liệu.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block page_head %}
+<style>
+.user-management-page {
+    width: min(1360px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 30px 0 48px;
+    color: var(--text-primary, #e7edf9);
+}
+
+.user-management-header,
+.section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.user-management-header {
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-color, #2c3b54);
+}
+
+.user-management-kicker {
+    margin: 0 0 5px;
+    color: #45c5f6;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.user-management-header h1,
+.section-title-row h2 {
+    margin: 0;
+    letter-spacing: 0;
+}
+
+.user-management-header h1 {
+    font-size: 30px;
+    line-height: 1.2;
+}
+
+.section-title-row h2 {
+    font-size: 20px;
+    line-height: 1.3;
+}
+
+.user-count,
+.user-source,
+.user-role {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid #33455f;
+    border-radius: 999px;
+    color: #bed0e9;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.user-count {
+    color: #76d8f6;
+    border-color: #1d6881;
+    background: rgba(29, 142, 177, 0.12);
+}
+
+.user-alert {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border: 1px solid;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.user-alert-success {
+    color: #a6ecd8;
+    border-color: #25745e;
+    background: rgba(27, 111, 83, 0.22);
+}
+
+.user-alert-error {
+    color: #ffc0c6;
+    border-color: #9c4654;
+    background: rgba(128, 39, 55, 0.25);
+}
+
+.user-create-section,
+.user-list-section {
+    margin-top: 24px;
+    padding: 20px;
+    border: 1px solid var(--border-color, #2c3b54);
+    border-radius: 6px;
+    background: var(--panel-bg, #101b2d);
+}
+
+.user-create-form {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.25fr) minmax(160px, 1.25fr) minmax(150px, 1fr) minmax(120px, 0.65fr) auto;
+    gap: 12px;
+    align-items: end;
+    margin-top: 16px;
+}
+
+.user-create-form label {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+    color: #b5c4da;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.user-management-page input,
+.user-management-page select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid #34445d;
+    border-radius: 5px;
+    background: #17243a;
+    color: #edf4ff;
+    font: inherit;
+}
+
+.user-management-page input:focus,
+.user-management-page select:focus {
+    outline: 2px solid #37bce9;
+    outline-offset: 1px;
+    border-color: #37bce9;
+}
+
+.user-button {
+    min-height: 38px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.user-button-primary {
+    color: #f7fbff;
+    border-color: #287fca;
+    background: #176bb2;
+}
+
+.user-button-primary:hover { background: #2181d0; }
+
+.user-button-danger {
+    color: #ffc9cf;
+    border-color: #844450;
+    background: #3c2631;
+}
+
+.user-button-danger:hover { background: #5b303c; }
+
+.user-table-scroll {
+    overflow-x: auto;
+    margin: 16px -20px -20px;
+    border-top: 1px solid var(--border-color, #2c3b54);
+}
+
+.user-table {
+    width: 100%;
+    min-width: 1080px;
+    border-collapse: collapse;
+}
+
+.user-table th,
+.user-table td {
+    padding: 13px 12px;
+    border-bottom: 1px solid #2b3a52;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.user-table th {
+    color: #9eb2ce;
+    background: #132036;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.user-table tbody tr:last-child td { border-bottom: 0; }
+.user-table tbody tr:hover { background: rgba(62, 137, 198, 0.07); }
+.user-table td:nth-child(1), .user-table td:nth-child(2) { min-width: 170px; }
+.user-table td:nth-child(3) { min-width: 118px; }
+.user-table td:nth-child(4) { min-width: 102px; }
+.user-table td:nth-child(5) { min-width: 145px; }
+
+.user-readonly-text {
+    color: #d6e0ef;
+    font-weight: 600;
+}
+
+.user-mono,
+.user-date {
+    color: #b4c2d6;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+}
+
+.user-source-config { color: #f4d18a; border-color: #846831; background: rgba(143, 106, 33, 0.15); }
+.user-source-database { color: #9ee3d1; border-color: #297661; background: rgba(32, 121, 96, 0.15); }
+.user-role-admin { color: #d7c1ff; border-color: #7255a9; background: rgba(99, 65, 150, 0.16); }
+.user-role-user, .user-role-student { color: #a7d8ff; border-color: #326b96; background: rgba(43, 105, 149, 0.16); }
+
+.user-actions-heading { min-width: 270px; }
+.user-actions { min-width: 270px; }
+.user-inline-form { display: inline-flex; gap: 8px; align-items: center; }
+.user-inline-form + .user-inline-form { margin-left: 8px; }
+.user-password-input { width: 128px !important; }
+.user-system-note { color: #8393aa; font-size: 13px; white-space: nowrap; }
+.user-empty-state { padding: 24px !important; color: #9baac0; text-align: center !important; }
+
+@media (max-width: 980px) {
+    .user-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .user-create-form .user-button { width: max-content; }
+}
+
+@media (max-width: 600px) {
+    .user-management-page { width: min(100% - 24px, 1360px); padding-top: 20px; }
+    .user-management-header { align-items: flex-start; }
+    .user-management-header h1 { font-size: 26px; }
+    .user-count { font-size: 12px; }
+    .user-create-section, .user-list-section { padding: 16px; }
+    .user-create-form { grid-template-columns: 1fr; }
+    .user-create-form .user-button { width: 100%; }
+    .user-table-scroll { margin: 16px -16px -16px; }
+}
+</style>
+{% endblock %}
