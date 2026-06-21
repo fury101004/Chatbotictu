@@ -35,6 +35,14 @@
             {% endif %}
         </nav>
 
+        <section class="sidebar-conversations" aria-labelledby="conversationListTitle">
+            <div class="conversation-list-heading">
+                <h2 id="conversationListTitle">Cuộc trò chuyện</h2>
+                <span id="chatSessionCount" aria-live="polite"></span>
+            </div>
+            <div id="chatSessionList" class="chat-session-list" aria-live="polite"></div>
+        </section>
+
         <div class="sidebar-footer">
             <div class="mini-status-dot"></div>
             <span>Đang hoạt động</span>
@@ -110,6 +118,7 @@ const LEGACY_CHAT_ACTIVE_KEY = CHAT_ACTIVE_KEY;
 
 let activeChatSessionId = "";
 let runtimeMessages = [];
+let activeConversationSearch = "";
 
 function createChatSessionId() {
     const randomPart = Math.random().toString(36).slice(2, 10);
@@ -204,6 +213,7 @@ function persistCurrentChatSession() {
     }
 
     writeChatStore(store);
+    renderChatSessionList();
 }
 
 function renameStoredChatSession(previousSessionId, nextSessionId) {
@@ -218,6 +228,7 @@ function renameStoredChatSession(previousSessionId, nextSessionId) {
     }
     store.activeSessionId = nextSessionId;
     writeChatStore(store);
+    renderChatSessionList();
 }
 
 function restoreChatOnPageLoad() {
@@ -240,11 +251,13 @@ function restoreChatOnPageLoad() {
         setWelcomeVisibility();
         const container = document.getElementById("messages");
         if (container) container.scrollTop = container.scrollHeight;
+        renderChatSessionList();
         return;
     }
 
     store.activeSessionId = activeChatSessionId;
     writeChatStore(store);
+    renderChatSessionList();
 }
 
 function clearRenderedMessages() {
@@ -266,6 +279,7 @@ function createNewChatSession() {
     const store = readChatStore();
     store.activeSessionId = activeChatSessionId;
     writeChatStore(store);
+    renderChatSessionList();
     const input = document.getElementById("userInput");
     if (input) {
         input.value = "";
@@ -274,6 +288,139 @@ function createNewChatSession() {
     }
     updateCharCount(0);
     updateSendButton();
+}
+
+function formatSessionUpdatedAt(value) {
+    const date = new Date(value || "");
+    if (Number.isNaN(date.getTime())) return "Vừa xong";
+
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    if (isToday) {
+        return date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    }
+    return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+}
+
+function getStoredChatSessions() {
+    const store = readChatStore();
+    const query = activeConversationSearch.trim().toLocaleLowerCase("vi-VN");
+    const sessions = Object.values(store.sessions || {})
+        .filter(session => Array.isArray(session?.messages) && session.messages.length > 0)
+        .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
+
+    if (!query) return sessions;
+    return sessions.filter(session => {
+        const title = String(session.title || "").toLocaleLowerCase("vi-VN");
+        const messages = (session.messages || [])
+            .map(message => String(message?.text || ""))
+            .join(" ")
+            .toLocaleLowerCase("vi-VN");
+        return title.includes(query) || messages.includes(query);
+    });
+}
+
+function renderChatSessionList() {
+    const list = document.getElementById("chatSessionList");
+    const count = document.getElementById("chatSessionCount");
+    if (!list || !count) return;
+
+    const allSessions = Object.values(readChatStore().sessions || {})
+        .filter(session => Array.isArray(session?.messages) && session.messages.length > 0);
+    const sessions = getStoredChatSessions();
+    count.textContent = allSessions.length ? String(allSessions.length) : "";
+
+    if (sessions.length === 0) {
+        const hasSearch = Boolean(activeConversationSearch.trim());
+        list.innerHTML = `
+            <p class="chat-session-empty">
+                ${hasSearch ? "Không tìm thấy cuộc trò chuyện phù hợp." : "Các cuộc trò chuyện của bạn sẽ hiện ở đây."}
+            </p>
+        `;
+        return;
+    }
+
+    list.innerHTML = sessions.map(session => {
+        const sessionId = String(session.id || "");
+        const title = escapeHtml(session.title || "Cuộc trò chuyện mới");
+        const updatedAt = escapeHtml(formatSessionUpdatedAt(session.updatedAt));
+        const isActive = sessionId === activeChatSessionId;
+        return `
+            <article class="chat-session-item${isActive ? " is-active" : ""}">
+                <button
+                    type="button"
+                    class="chat-session-open"
+                    data-open-chat-session="${escapeHtml(sessionId)}"
+                    aria-current="${isActive ? "page" : "false"}"
+                    title="${title}"
+                >
+                    <span class="chat-session-icon" aria-hidden="true">◌</span>
+                    <span class="chat-session-copy">
+                        <strong>${title}</strong>
+                        <small>${updatedAt}</small>
+                    </span>
+                </button>
+                <button
+                    type="button"
+                    class="chat-session-delete"
+                    data-delete-chat-session="${escapeHtml(sessionId)}"
+                    aria-label="Xóa cuộc trò chuyện: ${title}"
+                    title="Xóa cuộc trò chuyện"
+                >×</button>
+            </article>
+        `;
+    }).join("");
+}
+
+function openStoredChatSession(sessionId) {
+    const nextSessionId = String(sessionId || "").trim();
+    if (!nextSessionId || nextSessionId === activeChatSessionId) return;
+
+    persistCurrentChatSession();
+    const store = readChatStore();
+    const session = store.sessions?.[nextSessionId];
+    if (!session || !Array.isArray(session.messages)) return;
+
+    activeChatSessionId = nextSessionId;
+    runtimeMessages = [];
+    clearRenderedMessages();
+    session.messages.map(normalizeStoredMessage).forEach(message => {
+        addMessage(message.sender, message.text, message.name, message.meta, {
+            id: message.id,
+            timestamp: message.timestamp,
+            feedback: message.feedback,
+            persist: false,
+        });
+    });
+    store.activeSessionId = nextSessionId;
+    writeChatStore(store);
+    setWelcomeVisibility();
+    renderChatSessionList();
+
+    const container = document.getElementById("messages");
+    if (container) container.scrollTop = container.scrollHeight;
+}
+
+function deleteStoredChatSession(sessionId) {
+    const targetSessionId = String(sessionId || "").trim();
+    const store = readChatStore();
+    const session = store.sessions?.[targetSessionId];
+    if (!session) return;
+
+    const title = String(session.title || "cuộc trò chuyện này");
+    if (!window.confirm(`Xóa “${title}”? Hành động này chỉ xóa lịch sử đã lưu trên trình duyệt này.`)) return;
+
+    delete store.sessions[targetSessionId];
+    if (targetSessionId === activeChatSessionId) {
+        activeChatSessionId = createChatSessionId();
+        runtimeMessages = [];
+        clearRenderedMessages();
+        store.activeSessionId = activeChatSessionId;
+        const input = document.getElementById("userInput");
+        if (input) input.focus();
+    }
+    writeChatStore(store);
+    renderChatSessionList();
 }
 
 function escapeHtml(value) {
@@ -630,6 +777,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.getElementById("chatNewButton")?.addEventListener("click", createNewChatSession);
+    document.getElementById("chatSessionList")?.addEventListener("click", (event) => {
+        const deleteButton = event.target.closest("[data-delete-chat-session]");
+        if (deleteButton) {
+            deleteStoredChatSession(deleteButton.dataset.deleteChatSession);
+            return;
+        }
+        const openButton = event.target.closest("[data-open-chat-session]");
+        if (openButton) openStoredChatSession(openButton.dataset.openChatSession);
+    });
     input.addEventListener("input", () => {
         resizeTextarea(input);
         updateCharCount(input.value.length);
@@ -641,7 +797,11 @@ document.addEventListener("DOMContentLoaded", () => {
             submitQuestion();
         }
     });
-    search?.addEventListener("input", () => filterVisibleMessages(search.value));
+    search?.addEventListener("input", () => {
+        activeConversationSearch = search.value || "";
+        filterVisibleMessages(search.value);
+        renderChatSessionList();
+    });
 
     updateCharCount(0);
     updateSendButton();
@@ -770,6 +930,164 @@ document.addEventListener("DOMContentLoaded", () => {
 .sidebar-nav {
     display: grid;
     gap: 0.55rem;
+}
+
+.sidebar-conversations {
+    min-height: 0;
+    flex: 1 1 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.conversation-list-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.25rem 0.2rem 0;
+}
+
+.conversation-list-heading h2 {
+    margin: 0;
+    color: var(--chat-muted);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+#chatSessionCount {
+    min-width: 1.35rem;
+    padding: 0.1rem 0.38rem;
+    border-radius: 999px;
+    background: var(--chat-line);
+    color: var(--chat-muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-align: center;
+}
+
+#chatSessionCount:empty {
+    display: none;
+}
+
+.chat-session-list {
+    min-height: 0;
+    display: grid;
+    align-content: start;
+    gap: 0.35rem;
+    overflow-y: auto;
+    padding: 0.1rem 0.1rem 0.3rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--chat-line) transparent;
+}
+
+.chat-session-item {
+    position: relative;
+    min-width: 0;
+}
+
+.chat-session-open {
+    width: 100%;
+    min-height: 52px;
+    padding: 0.58rem 2.25rem 0.58rem 0.62rem;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--chat-ink);
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.chat-session-open:hover,
+.chat-session-open:focus-visible,
+.chat-session-item.is-active .chat-session-open {
+    background: var(--chat-hover-bg, #eef5ff);
+    border-color: var(--chat-line);
+    outline: none;
+}
+
+.chat-session-item.is-active .chat-session-open {
+    color: var(--accent-color, var(--chat-primary-dark));
+}
+
+.chat-session-icon {
+    width: 25px;
+    height: 25px;
+    flex: 0 0 25px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--accent-soft, #edf4fb);
+    color: var(--accent-color, var(--chat-primary));
+    font-weight: 900;
+}
+
+.chat-session-copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.14rem;
+}
+
+.chat-session-copy strong,
+.chat-session-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-session-copy strong {
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+.chat-session-copy small {
+    color: var(--chat-muted);
+    font-size: 0.7rem;
+}
+
+.chat-session-delete {
+    position: absolute;
+    top: 50%;
+    right: 0.38rem;
+    width: 25px;
+    height: 25px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--chat-muted);
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(-50%);
+}
+
+.chat-session-item:hover .chat-session-delete,
+.chat-session-delete:focus-visible {
+    opacity: 1;
+}
+
+.chat-session-delete:hover,
+.chat-session-delete:focus-visible {
+    background: #fee8e8;
+    color: #b42318;
+    outline: none;
+}
+
+.chat-session-empty {
+    margin: 0;
+    padding: 0.8rem 0.65rem;
+    border: 1px dashed var(--chat-line);
+    border-radius: 12px;
+    color: var(--chat-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
 }
 
 .sidebar-link {
@@ -1182,6 +1500,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     .sidebar-nav {
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+
+    .sidebar-conversations {
+        flex-basis: auto;
+        max-height: 260px;
     }
 
     .chat-main {

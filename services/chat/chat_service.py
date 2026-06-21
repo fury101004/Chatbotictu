@@ -13,7 +13,12 @@ from models.chat import ChatGraphState, RAGResult
 from repositories.conversation_repository import load_chat_history, save_conversation_message
 from shared.prompt_loader import render_prompt
 from services.chat.intent_service import detect_intent, get_intent_response
-from services.chat.contextual_query_service import is_source_year_follow_up, rewrite_contextual_question
+from services.chat.contextual_query_service import (
+    find_pending_timeframe_question,
+    is_source_year_follow_up,
+    looks_like_invalid_timeframe_clarification_reply,
+    rewrite_contextual_question,
+)
 from services.rag.ictu_scope_service import normalize_scope_text
 from services.chat.memory_service import append_retrieval_memory, get_last_retrieval_years
 from services.chat.moderation_service import contains_swear, get_swear_response
@@ -170,6 +175,7 @@ def _normalize_input(state: ChatGraphState) -> ChatGraphState:
         except Exception as exc:
             logger.warning("[chat_agent] contextual_history_load_failed session=%s error=%s", session_id, exc)
 
+    pending_timeframe_question = find_pending_timeframe_question(history)
     rewritten_question = rewrite_contextual_question(original_question, history)
     message = rewritten_question or original_question
 
@@ -197,6 +203,16 @@ def _normalize_input(state: ChatGraphState) -> ChatGraphState:
         state["response"] = "Bạn hãy nhập câu hỏi để mình hỗ trợ nhé."
         state["llm_model"] = "local:empty_input"
         state["intent"] = "empty_input"
+        state["handled"] = True
+        state["stop_graph"] = True
+    elif pending_timeframe_question and looks_like_invalid_timeframe_clarification_reply(original_question):
+        state["response"] = (
+            f"Mình chưa nhận ra năm học “{original_question}”. "
+            "Bạn hãy nhập theo dạng 2025-2026 để mình tiếp tục tra đúng tài liệu."
+        )
+        state["llm_model"] = "local:invalid_timeframe_clarification"
+        state["mode"] = "clarification"
+        state["intent"] = "invalid_timeframe_clarification"
         state["handled"] = True
         state["stop_graph"] = True
 

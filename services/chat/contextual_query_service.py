@@ -7,6 +7,7 @@ from services.rag.ictu_scope_service import normalize_scope_text
 
 
 _YEAR_RANGE_RE = re.compile(r"\b(20\d{2})\s*[-/]\s*(20\d{2})\b")
+_TIMEFRAME_ONLY_INPUT_RE = re.compile(r"[\d\s\-/]+$")
 _FOLLOW_UP_PREFIXES = (
     "còn",
     "thế còn",
@@ -87,6 +88,69 @@ def _last_user_question(history: Iterable[dict[str, str]]) -> str:
         if content:
             return content
     return ""
+
+
+def _last_user_question_before(history: list[dict[str, str]], before_index: int) -> str:
+    for item in reversed(history[:before_index]):
+        if str(item.get("role") or "").strip().casefold() != "user":
+            continue
+        content = str(item.get("rewritten_question") or item.get("content") or "").strip()
+        if content:
+            return content
+    return ""
+
+
+def _is_timeframe_clarification_response(text: str) -> bool:
+    normalized = normalize_scope_text(text)
+    asks_for_timeframe = any(marker in normalized for marker in ("nam hoc", "hoc ky", "dot", "khoa"))
+    asks_for_input = any(marker in normalized for marker in ("ban muon", "ban hay nhap", "ban vui long nhap"))
+    return asks_for_timeframe and asks_for_input
+
+
+def _is_invalid_timeframe_response(text: str) -> bool:
+    normalized = normalize_scope_text(text)
+    return "chua nhan ra nam hoc" in normalized and "theo dang" in normalized
+
+
+def _is_scope_rejection_response(text: str) -> bool:
+    return "ngoai pham vi ictu" in normalize_scope_text(text)
+
+
+def find_pending_timeframe_question(history: Iterable[dict[str, str]]) -> str:
+    """Return the original question behind the latest unresolved timeframe prompt.
+
+    A typo such as ``2-25-2-26`` may be rejected by the scope guard.  That
+    rejection must not replace the question that the user was answering.
+    """
+    entries = list(history)
+    for index in range(len(entries) - 1, -1, -1):
+        item = entries[index]
+        role = str(item.get("role") or "").strip().casefold()
+        if role not in {"assistant", "bot", "model"}:
+            continue
+
+        content = str(item.get("content") or "").strip()
+        if _is_invalid_timeframe_response(content) or _is_scope_rejection_response(content):
+            continue
+        if _is_timeframe_clarification_response(content):
+            return _last_user_question_before(entries, index)
+
+        # A normal assistant reply after the prompt means that prompt has
+        # already been resolved; do not attach a later year to an old topic.
+        if content:
+            return ""
+    return ""
+
+
+def is_valid_timeframe_clarification_reply(question: str) -> bool:
+    """Accept an explicit academic-year range (for example ``2025-2026``)."""
+    return bool(_YEAR_RANGE_RE.search(str(question or "")))
+
+
+def looks_like_invalid_timeframe_clarification_reply(question: str) -> bool:
+    """Identify a malformed numeric reply without treating a new question as one."""
+    cleaned = str(question or "").strip()
+    return bool(cleaned and _TIMEFRAME_ONLY_INPUT_RE.fullmatch(cleaned)) and not is_valid_timeframe_clarification_reply(cleaned)
 
 
 def is_contextual_follow_up(question: str) -> bool:
@@ -193,5 +257,10 @@ def rewrite_follow_up_question(previous_question: str, current_question: str) ->
 
 
 def rewrite_contextual_question(question: str, history: Iterable[dict[str, str]]) -> str:
-    previous_question = _last_user_question(history)
+    entries = list(history)
+    pending_question = find_pending_timeframe_question(entries)
+    if pending_question and is_valid_timeframe_clarification_reply(question):
+        return rewrite_follow_up_question(pending_question, question)
+
+    previous_question = _last_user_question(entries)
     return rewrite_follow_up_question(previous_question, question)

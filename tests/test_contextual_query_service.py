@@ -3,7 +3,9 @@ from __future__ import annotations
 import unittest
 
 from services.chat.contextual_query_service import (
+    find_pending_timeframe_question,
     is_source_year_follow_up,
+    looks_like_invalid_timeframe_clarification_reply,
     rewrite_contextual_question,
     rewrite_follow_up_question,
 )
@@ -102,6 +104,27 @@ class ContextualQueryRewriteTests(unittest.TestCase):
         self.assertEqual(
             rewrite_follow_up_question("Khi nào sinh viên bị cảnh báo học tập?", current),
             "Nội dung trả lời cho câu hỏi 'khi nào sinh viên bị cảnh báo học tập' thuộc tài liệu năm học nào?",
+        )
+
+    def test_keeps_clarification_context_after_a_malformed_year_reply(self) -> None:
+        history = [
+            {"role": "user", "content": "Muốn xét học bổng cần điều kiện gì?"},
+            {
+                "role": "assistant",
+                "content": "Bạn muốn hỏi cho năm học hoặc đợt nào để mình tra đúng tài liệu?",
+            },
+            {"role": "user", "content": "2-25-2-26"},
+            {
+                "role": "assistant",
+                "content": "Câu hỏi này nằm ngoài phạm vi ICTU. Hệ thống chỉ tìm kiếm nội dung liên quan đến ICTU.",
+            },
+        ]
+
+        self.assertEqual(find_pending_timeframe_question(history), "Muốn xét học bổng cần điều kiện gì?")
+        self.assertTrue(looks_like_invalid_timeframe_clarification_reply("2-25-2-26"))
+        self.assertEqual(
+            rewrite_contextual_question("2025-2026", history),
+            "Về 2025-2026, muốn xét học bổng cần điều kiện gì?",
         )
 
 

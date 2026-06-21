@@ -5,10 +5,47 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from models.chat import RAGResult, RetrievedChunk
-from services.chat.chat_service import process_chat_message
+from services.chat.chat_service import _normalize_input, process_chat_message
 
 
 class ChatClarificationTests(unittest.IsolatedAsyncioTestCase):
+    def test_malformed_timeframe_reply_keeps_the_pending_question(self) -> None:
+        history = [
+            {"role": "user", "content": "Muốn xét học bổng cần điều kiện gì?"},
+            {
+                "role": "assistant",
+                "content": "Bạn muốn hỏi cho năm học hoặc đợt nào để mình tra đúng tài liệu?",
+            },
+        ]
+
+        invalid = _normalize_input(
+            {
+                "message": "2-25-2-26",
+                "session_id": "clarify-invalid-year",
+                "persistent_memory": history,
+            }
+        )
+        self.assertTrue(invalid["handled"])
+        self.assertEqual(invalid["llm_model"], "local:invalid_timeframe_clarification")
+        self.assertIn("2025-2026", invalid["response"])
+
+        corrected = _normalize_input(
+            {
+                "message": "2025-2026",
+                "session_id": "clarify-invalid-year",
+                "persistent_memory": [
+                    *history,
+                    {"role": "user", "content": "2-25-2-26"},
+                    {"role": "model", "content": invalid["response"]},
+                ],
+            }
+        )
+        self.assertFalse(corrected["handled"])
+        self.assertEqual(
+            corrected["message"],
+            "Về 2025-2026, muốn xét học bổng cần điều kiện gì?",
+        )
+
     async def test_process_chat_message_does_not_force_clarification_when_sources_exist(self) -> None:
         rich_result = RAGResult(
             context_text="Sinh vien phai dap ung du dieu kien ve tin chi va hoc phan.",
