@@ -11,15 +11,22 @@ from config.settings import settings
 
 
 TERMINAL_INGESTION_STATUSES = {"completed", "failed", "interrupted"}
+RECOVERABLE_INGESTION_STATUSES = {
+    "queued",
+    "resuming",
+    "validating",
+    "extracting",
+    "chunking",
+    "embedding",
+    "indexing",
+}
 
 
 class IngestionJobRepository:
-    def __init__(self, db_path: str | Path | None = None, *, interrupt_existing: bool = True) -> None:
+    def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path or settings.DB_PATH)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_schema()
-        if interrupt_existing:
-            self.interrupt_unfinished()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path, timeout=30)
@@ -40,6 +47,8 @@ class IngestionJobRepository:
                     total_size INTEGER NOT NULL DEFAULT 0,
                     result_json TEXT,
                     error TEXT,
+                    checkpoint_path TEXT,
+                    resume_count INTEGER NOT NULL DEFAULT 0,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 )
@@ -49,6 +58,16 @@ class IngestionJobRepository:
                 "CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_status_updated "
                 "ON ingestion_jobs(status, updated_at)"
             )
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(ingestion_jobs)").fetchall()
+            }
+            if "checkpoint_path" not in columns:
+                connection.execute("ALTER TABLE ingestion_jobs ADD COLUMN checkpoint_path TEXT")
+            if "resume_count" not in columns:
+                connection.execute(
+                    "ALTER TABLE ingestion_jobs ADD COLUMN resume_count INTEGER NOT NULL DEFAULT 0"
+                )
             connection.commit()
 
     def create(self, job: dict[str, Any]) -> None:
@@ -57,9 +76,9 @@ class IngestionJobRepository:
                 """
                 INSERT INTO ingestion_jobs (
                     job_id, status, progress, tool_name, file_count, total_size,
-                    result_json, error, created_at, updated_at
+                    result_json, error, checkpoint_path, resume_count, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job["job_id"],
@@ -70,6 +89,8 @@ class IngestionJobRepository:
                     int(job.get("total_size", 0)),
                     json.dumps(job.get("result"), ensure_ascii=False) if job.get("result") is not None else None,
                     job.get("error"),
+                    str(job.get("checkpoint_path") or "") or None,
+                    int(job.get("resume_count", 0)),
                     float(job["created_at"]),
                     float(job["updated_at"]),
                 ),
@@ -77,7 +98,7 @@ class IngestionJobRepository:
             connection.commit()
 
     def update(self, job_id: str, **changes: Any) -> None:
-        current = self.get(job_id)
+        current = self._get(job_id, include_checkpoint=True)
         if current is None:
             return
         current.update(changes)
@@ -86,7 +107,8 @@ class IngestionJobRepository:
             connection.execute(
                 """
                 UPDATE ingestion_jobs
-                SET status = ?, progress = ?, result_json = ?, error = ?, updated_at = ?
+                SET status = ?, progress = ?, result_json = ?, error = ?, checkpoint_path = ?,
+                    resume_count = ?, updated_at = ?
                 WHERE job_id = ?
                 """,
                 (
@@ -94,6 +116,8 @@ class IngestionJobRepository:
                     int(current.get("progress", 0)),
                     json.dumps(current.get("result"), ensure_ascii=False) if current.get("result") is not None else None,
                     current.get("error"),
+                    str(current.get("checkpoint_path") or "") or None,
+                    int(current.get("resume_count", 0)),
                     current["updated_at"],
                     job_id,
                 ),
@@ -101,11 +125,14 @@ class IngestionJobRepository:
             connection.commit()
 
     def get(self, job_id: str) -> dict[str, Any] | None:
+        return self._get(job_id, include_checkpoint=False)
+
+    def _get(self, job_id: str, *, include_checkpoint: bool) -> dict[str, Any] | None:
         with closing(self._connect()) as connection:
             row = connection.execute(
                 """
                 SELECT job_id, status, progress, tool_name, file_count, total_size,
-                       result_json, error, created_at, updated_at
+                       result_json, error, checkpoint_path, resume_count, created_at, updated_at
                 FROM ingestion_jobs
                 WHERE job_id = ?
                 """,
@@ -113,7 +140,7 @@ class IngestionJobRepository:
             ).fetchone()
         if row is None:
             return None
-        return {
+        job = {
             "job_id": str(row["job_id"]),
             "status": str(row["status"]),
             "progress": int(row["progress"]),
@@ -122,32 +149,59 @@ class IngestionJobRepository:
             "total_size": int(row["total_size"]),
             "result": json.loads(row["result_json"]) if row["result_json"] else None,
             "error": str(row["error"]) if row["error"] else None,
+            "resume_count": int(row["resume_count"] or 0),
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
         }
+        if include_checkpoint:
+            job["checkpoint_path"] = str(row["checkpoint_path"] or "")
+        return job
 
-    def interrupt_unfinished(self) -> int:
-        placeholders = ", ".join("?" for _ in TERMINAL_INGESTION_STATUSES)
+    def list_recoverable(self) -> list[dict[str, Any]]:
+        placeholders = ", ".join("?" for _ in RECOVERABLE_INGESTION_STATUSES)
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT job_id FROM ingestion_jobs
+                WHERE status IN ({placeholders})
+                ORDER BY created_at ASC
+                """,
+                tuple(sorted(RECOVERABLE_INGESTION_STATUSES)),
+            ).fetchall()
+        return [
+            job
+            for row in rows
+            if (job := self._get(str(row["job_id"]), include_checkpoint=True)) is not None
+        ]
+
+    def claim_for_resume(self, job_id: str) -> bool:
         now = time.time()
         with closing(self._connect()) as connection:
             cursor = connection.execute(
-                f"""
+                """
                 UPDATE ingestion_jobs
-                SET status = 'interrupted',
-                    error = COALESCE(error, 'Process restarted before ingestion completed.'),
-                    updated_at = ?
-                WHERE status NOT IN ({placeholders})
+                SET status = 'resuming', error = 'Resuming from durable checkpoint after restart.',
+                    resume_count = resume_count + 1, updated_at = ?
+                WHERE job_id = ? AND status = 'queued'
                 """,
-                (now, *sorted(TERMINAL_INGESTION_STATUSES)),
+                (now, job_id),
             )
             connection.commit()
-            return int(cursor.rowcount or 0)
+            return bool(cursor.rowcount)
 
-    def delete_stale_terminal(self, cutoff: float) -> None:
+    def delete_stale_terminal(self, cutoff: float) -> list[str]:
         placeholders = ", ".join("?" for _ in TERMINAL_INGESTION_STATUSES)
         with closing(self._connect()) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT checkpoint_path FROM ingestion_jobs
+                WHERE updated_at < ? AND status IN ({placeholders})
+                """,
+                (cutoff, *sorted(TERMINAL_INGESTION_STATUSES)),
+            ).fetchall()
             connection.execute(
                 f"DELETE FROM ingestion_jobs WHERE updated_at < ? AND status IN ({placeholders})",
                 (cutoff, *sorted(TERMINAL_INGESTION_STATUSES)),
             )
             connection.commit()
+        return [str(row["checkpoint_path"] or "") for row in rows]

@@ -37,7 +37,7 @@ GRADUATION_ACCEPTANCE_NODEIDS = frozenset(
         "tests/test_ingestion_queue.py::IngestionQueueTests::test_failed_job_records_error",
         "tests/test_ingestion_queue.py::IngestionQueueTests::test_job_creation_and_completion_status",
         "tests/test_ingestion_queue.py::IngestionQueueTests::test_status_polling_returns_not_found_for_unknown_job",
-        "tests/test_ingestion_queue.py::IngestionQueueTests::test_unfinished_job_becomes_interrupted_after_restart",
+        "tests/test_ingestion_queue.py::IngestionQueueTests::test_unfinished_job_resumes_after_restart_from_durable_checkpoint",
         "tests/test_web_security.py::WebCsrfSecurityTests::test_evaluation_dashboard_is_admin_only",
         "tests/test_web_security.py::WebCsrfSecurityTests::test_legacy_dashboard_and_all_dashboard_data_routes_are_admin_only",
         "tests/test_web_security.py::WebCsrfSecurityTests::test_chat_citations_are_clean_for_user_and_detailed_for_admin",

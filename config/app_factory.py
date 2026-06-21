@@ -50,6 +50,21 @@ def _sync_seed_corpus_on_startup() -> None:
     logger.info("Seed corpus sync dispatched to background thread")
 
 
+async def _resume_ingestion_jobs_on_startup() -> None:
+    """Resume uploads whose durable checkpoints survived a process restart."""
+    try:
+        from services.content.document_service import upload_markdown_files
+        from services.ingestion_queue import get_ingestion_queue
+
+        resumed = await get_ingestion_queue().resume_pending_uploads(
+            processor=upload_markdown_files,
+        )
+        if resumed:
+            logger.info("Resumed %s ingestion job(s) from durable checkpoints.", resumed)
+    except Exception:
+        logger.exception("Ingestion resume scan failed during app startup")
+
+
 def create_app() -> FastAPI:
     configure_logging()
     apply_runtime_config()
@@ -71,6 +86,7 @@ def create_app() -> FastAPI:
     register_web_routes(app)
     register_api_routes(app)
     register_dashboard_routes(app)
+    app.add_event_handler("startup", _resume_ingestion_jobs_on_startup)
     _sync_seed_corpus_on_startup()
 
     return app
