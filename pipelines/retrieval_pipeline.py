@@ -74,6 +74,26 @@ _SELF_CONTAINED_QUERY_MARKERS = tuple(
         "hồ sơ",
     )
 )
+_SCHOLARSHIP_FALLBACK_MARKERS = tuple(
+    normalize_scope_text(marker)
+    for marker in (
+        "há»c bá»•ng",
+        "xĂ©t há»c bá»•ng",
+        "khuyáº¿n khĂ­ch há»c táº­p",
+        "Ä‘iá»u kiá»‡n há»c bá»•ng",
+        "Ä‘iá»ƒm rĂ¨n luyá»‡n",
+    )
+)
+_SCHOLARSHIP_FALLBACK_TERMS = (
+    "hoc bong",
+    "xet hoc bong",
+    "khuyen khich hoc tap",
+    "dieu kien hoc bong",
+    "diem ren luyen",
+)
+_SCHOLARSHIP_FALLBACK_MARKERS = tuple(
+    normalize_scope_text(marker) for marker in _SCHOLARSHIP_FALLBACK_TERMS
+)
 
 
 @dataclass(slots=True)
@@ -418,6 +438,13 @@ def _should_expand_with_previous_query(previous_q: str, current_message: str) ->
     return False
 
 
+def _should_fallback_to_student_handbook(message: str) -> bool:
+    normalized_message = normalize_scope_text(message)
+    if not normalized_message:
+        return False
+    return any(marker in normalized_message for marker in _SCHOLARSHIP_FALLBACK_MARKERS)
+
+
 def _get_previous_user_message_from_db(runtime: RetrievalRuntime, session_id: str, current_message: str) -> str:
     try:
         history = runtime.history_loader(session_id)
@@ -598,6 +625,15 @@ def retrieve_tool_context(
         ).invoke(message)
 
     if not documents:
+        fallback_result = _try_student_handbook_fallback(
+            runtime,
+            message=message,
+            session_id=session_id,
+            route_name=planned_route_name,
+            retrieval_plan=flow_plan,
+        )
+        if fallback_result is not None:
+            return fallback_result
         if web_result is not None:
             return web_result
         if _plan_allows_web(flow_plan):
@@ -634,6 +670,30 @@ def retrieve_tool_context(
         )
 
     return result
+
+
+def _try_student_handbook_fallback(
+    runtime: RetrievalRuntime,
+    *,
+    message: str,
+    session_id: str,
+    route_name: str,
+    retrieval_plan: Optional[RetrievalFlowPlan],
+) -> Optional[RAGResult]:
+    if not _should_fallback_to_student_handbook(message):
+        return None
+
+    handbook_result = retrieve_tool_context(
+        runtime,
+        message=message,
+        session_id=session_id,
+        tool_name="student_handbook_rag",
+        route_name=f"{route_name}|student_handbook_fallback",
+        retrieval_plan=retrieval_plan,
+    )
+    if handbook_result.sources or handbook_result.chunks_used:
+        return handbook_result
+    return None
 
 
 def retrieve_fallback_context(
@@ -727,6 +787,17 @@ def retrieve_general_context(
         context_max_chunks=25,
     )
     unique_sources = result.sources
+
+    if not unique_sources:
+        fallback_result = _try_student_handbook_fallback(
+            runtime,
+            message=message,
+            session_id=session_id,
+            route_name=planned_route_name,
+            retrieval_plan=flow_plan,
+        )
+        if fallback_result is not None:
+            return fallback_result
 
     if flow_plan.source == RETRIEVAL_WEB_SEARCH:
         web_result = web_result or runtime.build_planned_web_result(query_for_retrieval, planned_route_name, selected_tool)

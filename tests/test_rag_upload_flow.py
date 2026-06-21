@@ -325,6 +325,87 @@ class RetrievalFlowPlannerTests(unittest.TestCase):
         embedding_ready.assert_not_called()
         load_corpus_mock.assert_not_called()
 
+    def test_scholarship_queries_fall_back_to_student_handbook_when_policy_corpus_is_empty(self) -> None:
+        handbook_source = "student_handbooks/8. SO TAY SINH VIEN 2025-2026.questions.md"
+        handbook_doc = SimpleNamespace(metadata={"source": handbook_source})
+
+        class FakeLexicalRetriever:
+            def __init__(self, *, document_supplier, search_fn, snippet_fn, tool_name, limit):
+                self.document_supplier = document_supplier
+                self.tool_name = tool_name
+
+            def invoke(self, message):
+                if self.tool_name == "student_handbook_rag":
+                    return list(self.document_supplier())
+                return []
+
+        def load_tool_corpus(tool_name):
+            return [handbook_doc] if tool_name == "student_handbook_rag" else []
+
+        def build_result_from_documents(*, documents, tool_name, route_name, mode, query, **kwargs):
+            return RAGResult(
+                context_text=f"{tool_name} context for {query}",
+                chunks=list(documents),
+                mode=tool_name,
+                sources=[str(doc.metadata.get("source", "")) for doc in documents],
+                chunks_used=len(documents),
+                rag_tool=tool_name,
+                rag_route=route_name,
+            )
+
+        runtime = SimpleNamespace(
+            is_ictu_related_query=lambda _query: True,
+            route_retrieval_flow=lambda _query, _tool: RetrievalFlowPlan(
+                source=RETRIEVAL_LOCAL_DATA,
+                priority=RETRIEVAL_LOCAL_FIRST,
+                reason="local",
+                confidence=1.0,
+                route="flow_local",
+            ),
+            build_scope_guard_result=lambda *, route_name, tool_name: RAGResult(
+                context_text="Khong thuoc ICTU.",
+                chunks=[],
+                mode="scope_guard",
+                sources=[],
+                chunks_used=0,
+                rag_tool=tool_name,
+                rag_route=route_name,
+            ),
+            build_planned_web_result=lambda *args, **kwargs: None,
+            merge_web_search_result=lambda result, *args, **kwargs: result,
+            build_result_from_documents=build_result_from_documents,
+            corpus_lexical_retriever_cls=FakeLexicalRetriever,
+            vector_store_retriever_cls=FakeLexicalRetriever,
+            load_tool_corpus=load_tool_corpus,
+            load_all_tool_documents=lambda: [],
+            search_documents=lambda *args, **kwargs: [],
+            extract_relevant_snippet=lambda *args, **kwargs: "",
+            inject_bot_rule=lambda *args, **kwargs: None,
+            embedding_backend_ready=lambda: False,
+            session_memory={},
+            history_loader=lambda _sid: [],
+            list_vector_sources=lambda: set(),
+            fetch_documents_by_source=lambda _source: ([], []),
+            search_vector_documents=lambda *args, **kwargs: ([], [], {}),
+            get_tool_metadata_filter=lambda _tool: {},
+            default_rag_tool="general_ictu_rag",
+            fallback_rag_node="general_ictu_rag",
+            rag_tool_order=("student_handbook_rag", "academic_policy_rag", "student_faq_rag", "general_ictu_rag"),
+        )
+
+        with patch("services.rag.rag_service._build_retrieval_runtime", return_value=runtime):
+            result = retrieve_tool_context(
+                "Về 2025-2026, muốn xét học bổng cần điều kiện gì?",
+                "scholarship-fallback",
+                "academic_policy_rag",
+                "router_policy",
+            )
+
+        self.assertEqual(result.rag_tool, "student_handbook_rag")
+        self.assertEqual(result.sources, [handbook_source])
+        self.assertEqual(result.chunks_used, 1)
+        self.assertIn("2025-2026", result.context_text)
+
 
 class RetrievalQueryBuilderTests(unittest.TestCase):
     def test_build_retrieval_query_keeps_short_follow_up_context(self) -> None:
